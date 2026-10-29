@@ -23,6 +23,7 @@ pub fn run() {
       commands::system::greet,
       commands::system::get_settings,
       commands::system::save_settings,
+      commands::system::save_file,
       commands::connection::list_connections,
       commands::connection::save_connection,
       commands::connection::delete_connection,
@@ -31,6 +32,7 @@ pub fn run() {
       commands::connection::delete_folder,
       commands::connection::test_connection,
       commands::connection::connect,
+      commands::connection::disconnect_database,
       commands::query::execute_query,
       commands::query::list_databases,
       commands::query::list_tables,
@@ -48,6 +50,11 @@ pub fn run() {
       commands::query::save_saved_query,
       commands::query::rename_saved_query,
       commands::query::delete_saved_query,
+      commands::query::drop_database,
+      commands::query::list_database_users,
+      commands::query::create_database_user,
+      commands::query::update_database_user_roles,
+      commands::query::drop_database_user,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
