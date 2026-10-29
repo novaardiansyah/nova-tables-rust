@@ -30,6 +30,7 @@ pub fn run() {
       commands::connection::save_folder,
       commands::connection::delete_folder,
       commands::connection::test_connection,
+      commands::connection::connect,
       commands::query::execute_query,
       commands::query::list_databases,
       commands::query::list_tables,
