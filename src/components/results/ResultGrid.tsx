@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Icon from '@/components/common/Icon'
 import CellEditor, { CellEditorController } from '@/components/results/ResultGridCell'
+import { formatDateTime, isDateTimeString } from '@/resultFormats'
 
 const RENDER_LIMIT = 2000
 const DATE_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/
@@ -113,6 +114,7 @@ export interface ResultRelation {
 export interface ResultGridProps {
   columns: ResultColumn[]
   rows: unknown[][]
+  timezone?: string
   relations?: ResultRelation[] | null
   onRelationClick?: (relation: ResultRelation, value: unknown) => void
   selection?: GridSelection | null
@@ -134,6 +136,7 @@ export interface ResultGridProps {
 export default function ResultGrid({
   columns,
   rows,
+  timezone = 'UTC',
   relations,
   onRelationClick,
   selection = null,
@@ -599,7 +602,7 @@ export default function ResultGrid({
                     >
                       {active?.row === origIndex && active?.col === colIndex ? (
                         <CellEditor
-                          value={display}
+                          value={isDateTimeString(display) ? formatDateTime(display, timezone) : display}
                           onCommit={commitEdit}
                           onCancel={cancelEdit}
                           controllerRef={editorRef}
@@ -616,10 +619,10 @@ export default function ResultGrid({
                           title={`Navigate to ${columnRelations[colIndex]?.referencedTable} (${columnRelations[colIndex]?.referencedColumn} = ${String(display)})`}
                           className="cursor-pointer border-b border-dashed border-text-muted/50 hover:border-text-soft"
                         >
-                          {String(display)}
+                          {isDateTimeString(display) ? formatDateTime(display, timezone) : String(display)}
                         </button>
                       ) : (
-                        <Cell value={display} />
+                        <Cell value={display} timezone={timezone} />
                       )}
                     </td>
                   )
@@ -656,7 +659,7 @@ export default function ResultGrid({
   )
 }
 
-function Cell({ value }: { value: unknown }) {
+function Cell({ value, timezone }: { value: unknown; timezone?: string }) {
   if (value && typeof value === 'object' && 'special' in value) {
     return <span className="font-mono text-[length:calc(var(--grid-font-size)-1px)] text-warning">{String((value as { special: unknown }).special)}</span>
   }
@@ -669,8 +672,9 @@ function Cell({ value }: { value: unknown }) {
     return <span className="text-text">{String(value)}</span>
   }
 
-  const text = String(value)
-  const isDate = DATE_RE.test(text)
+  const rawText = String(value)
+  const isDate = isDateTimeString(rawText) || DATE_RE.test(rawText)
+  const text = isDate ? formatDateTime(rawText, timezone) : rawText
   const isLong = text.length > 64
 
   return (

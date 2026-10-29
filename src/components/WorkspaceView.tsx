@@ -273,6 +273,7 @@ export default function WorkspaceView({
               relations={activeTab?.relations || []}
               onRelationClick={handleOpenRelation}
               onCopyText={handleCopyText}
+              timezone={settings.timezone}
               editSource={activeTab?.editSource ?? null}
               edits={activeTab?.edits ?? {}}
               deletingRows={activeTab?.deletingRows ?? []}

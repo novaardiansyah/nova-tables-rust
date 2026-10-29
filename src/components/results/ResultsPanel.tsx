@@ -74,6 +74,7 @@ export interface ResultsPanelProps {
   relations?: ResultRelation[] | null
   onRelationClick?: (relation: ResultRelation, value: unknown) => void
   onCopyText?: (payload: string, message?: string) => void
+  timezone?: string
   editSource?: EditSource | null
   edits?: Record<string, { value: unknown; original?: unknown }>
   deletingRows?: number[]
@@ -98,6 +99,7 @@ export default function ResultsPanel({
   relations,
   onRelationClick,
   onCopyText,
+  timezone = 'UTC',
   editSource,
   edits = {},
   deletingRows = [],
@@ -380,14 +382,14 @@ export default function ResultsPanel({
         id: 'copy-text',
         label: 'Copy Text',
         onSelect: () =>
-          copy(cleanText(selectionMatrix), `Copied selected ${selectionLabel} as clean text.`),
+          copy(cleanText(selectionMatrix, timezone), `Copied selected ${selectionLabel} as clean text.`),
       },
       {
         id: 'copy-json',
         label: 'Copy JSON',
         onSelect: () =>
           copy(
-            jsonRecords(selectionColumnNames, selectionMatrix),
+            jsonRecords(selectionColumnNames, selectionMatrix, timezone),
             `Copied selected ${selectionLabel} as JSON.`,
           ),
       },
@@ -702,6 +704,7 @@ export default function ResultsPanel({
                   columns={activeResultSet.columns}
                   rows={activeResultSet.rows}
                   relations={relations}
+                  timezone={timezone}
                   onRelationClick={onRelationClick}
                   selection={selection}
                   onSelectionChange={setSelection}
@@ -782,6 +785,7 @@ export default function ResultsPanel({
       <ValueInspectorDialog
         open={Boolean(inspectTarget)}
         target={inspectTarget}
+        timezone={timezone}
         edits={edits}
         editable={
           editable &&
