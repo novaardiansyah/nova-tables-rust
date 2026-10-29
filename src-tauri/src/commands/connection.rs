@@ -1,5 +1,7 @@
 use crate::database::local_store::{DbConnectionItem, FolderItem, LocalStore};
+use crate::database::mssql;
 use crate::file_system::FileSystem;
+use rusqlite::params;
 use serde_json::{json, Value};
 
 #[tauri::command]
@@ -67,7 +69,7 @@ pub fn delete_folder(id: String) -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub fn test_connection(connection: Value) -> Result<Value, String> {
+pub async fn test_connection(connection: Value) -> Result<Value, String> {
   let db_path = FileSystem::get_database_path()?;
   let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
 
@@ -92,34 +94,109 @@ pub fn test_connection(connection: Value) -> Result<Value, String> {
     .or_else(|| stored.as_ref().map(|s| s.port))
     .unwrap_or(1433);
 
-  // Lightweight ping / socket connection test
-  use std::net::TcpStream;
+  let username = connection
+    .get("username")
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string())
+    .or_else(|| stored.as_ref().map(|s| s.username.clone()))
+    .unwrap_or_default();
+
+  let password = connection
+    .get("password")
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string())
+    .or_else(|| stored.as_ref().and_then(|s| s.password.clone()))
+    .or_else(|| stored.as_ref().and_then(|s| s.password_cipher.clone()))
+    .unwrap_or_default();
+
+  let database = connection
+    .get("database")
+    .or_else(|| connection.get("databaseName"))
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string())
+    .or_else(|| stored.as_ref().and_then(|s| s.database_name.clone()));
+
+  let encrypt = connection
+    .get("encrypt")
+    .and_then(|v| v.as_bool())
+    .or_else(|| stored.as_ref().map(|s| s.encrypt))
+    .unwrap_or(false);
+
+  let trust_cert = connection
+    .get("trustServerCertificate")
+    .and_then(|v| v.as_bool())
+    .or_else(|| stored.as_ref().map(|s| s.trust_server_certificate))
+    .unwrap_or(true);
+
+  let started = std::time::Instant::now();
+
+  // If username is provided, attempt full TDS handshake with SQL Server
+  if !username.is_empty() {
+    match mssql::create_client(
+      &host,
+      port,
+      &username,
+      &password,
+      database.as_deref(),
+      encrypt,
+      trust_cert,
+    )
+    .await
+    {
+      Ok(mut client) => {
+        let (server_name, version, edition) = mssql::read_server_info(&mut client).await;
+        return Ok(json!({
+          "ok": true,
+          "serverName": server_name,
+          "productVersion": version,
+          "edition": edition,
+          "elapsedMs": started.elapsed().as_millis(),
+          "message": "Connection successful"
+        }));
+      }
+      Err(err) => {
+        return Ok(json!({
+          "ok": false,
+          "error": {
+            "message": err
+          }
+        }));
+      }
+    }
+  }
+
+  // Socket connection test fallback
   use std::time::Duration;
+  use tokio::net::TcpStream;
+  use tokio::time::timeout;
 
   let addr = format!("{}:{}", host, port);
-  match TcpStream::connect_timeout(
-    &addr.parse().unwrap_or_else(|_| "127.0.0.1:1433".parse().unwrap()),
-    Duration::from_secs(4),
-  ) {
-    Ok(_) => Ok(json!({
+  match timeout(Duration::from_secs(4), TcpStream::connect(&addr)).await {
+    Ok(Ok(_)) => Ok(json!({
       "ok": true,
       "serverName": host,
       "productVersion": "2022",
       "edition": "Developer Edition",
-      "elapsedMs": 14,
+      "elapsedMs": started.elapsed().as_millis(),
       "message": "Connection successful"
     })),
-    Err(e) => Ok(json!({
+    Ok(Err(e)) => Ok(json!({
       "ok": false,
       "error": {
         "message": format!("Could not connect to {}: {}", addr, e)
+      }
+    })),
+    Err(_) => Ok(json!({
+      "ok": false,
+      "error": {
+        "message": format!("Connection to {} timed out", addr)
       }
     })),
   }
 }
 
 #[tauri::command]
-pub fn connect(input: Value) -> Result<Value, String> {
+pub async fn connect(input: Value) -> Result<Value, String> {
   let db_path = FileSystem::get_database_path()?;
   let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
 
@@ -156,6 +233,21 @@ pub fn connect(input: Value) -> Result<Value, String> {
     .or_else(|| stored.as_ref().map(|s| s.port))
     .unwrap_or(1433);
 
+  let username = input
+    .get("username")
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string())
+    .or_else(|| stored.as_ref().map(|s| s.username.clone()))
+    .unwrap_or_else(|| "sa".to_string());
+
+  let password = input
+    .get("password")
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string())
+    .or_else(|| stored.as_ref().and_then(|s| s.password.clone()))
+    .or_else(|| stored.as_ref().and_then(|s| s.password_cipher.clone()))
+    .unwrap_or_default();
+
   let database = input
     .get("database")
     .or_else(|| input.get("databaseName"))
@@ -164,21 +256,95 @@ pub fn connect(input: Value) -> Result<Value, String> {
     .or_else(|| stored.as_ref().and_then(|s| s.database_name.clone()))
     .unwrap_or_else(|| "master".to_string());
 
-  Ok(json!({
-    "ok": true,
-    "connectionId": id,
-    "name": name,
-    "host": host,
-    "port": port,
-    "database": database,
-    "databases": [
-      { "name": "master", "isSystem": true, "isOnline": true },
-      { "name": "model", "isSystem": true, "isOnline": true },
-      { "name": "msdb", "isSystem": true, "isOnline": true },
-      { "name": "tempdb", "isSystem": true, "isOnline": true }
-    ],
-    "serverVersion": "Microsoft SQL Server",
-    "serverName": host,
-    "edition": "Developer Edition"
-  }))
+  let encrypt = input
+    .get("encrypt")
+    .and_then(|v| v.as_bool())
+    .or_else(|| stored.as_ref().map(|s| s.encrypt))
+    .unwrap_or(false);
+
+  let trust_cert = input
+    .get("trustServerCertificate")
+    .and_then(|v| v.as_bool())
+    .or_else(|| stored.as_ref().map(|s| s.trust_server_certificate))
+    .unwrap_or(true);
+
+  // If password was provided in input and is non-empty, persist it
+  if let Some(pwd) = input.get("password").and_then(|v| v.as_str()) {
+    if !pwd.is_empty() {
+      let _ = conn.execute(
+        "UPDATE connections SET password_cipher = ?1 WHERE id = ?2",
+        params![pwd, id],
+      );
+    }
+  }
+
+  // Try real SQL Server connection via mssql
+  match mssql::create_client(
+    &host,
+    port,
+    &username,
+    &password,
+    Some(&database),
+    encrypt,
+    trust_cert,
+  )
+  .await
+  {
+    Ok(mut client) => {
+      let databases = mssql::list_databases(&mut client).await.unwrap_or_else(|_| {
+        vec![
+          json!({ "name": "master", "isSystem": true, "isOnline": true }),
+          json!({ "name": "model", "isSystem": true, "isOnline": true }),
+          json!({ "name": "msdb", "isSystem": true, "isOnline": true }),
+          json!({ "name": "tempdb", "isSystem": true, "isOnline": true }),
+        ]
+      });
+
+      let (server_name, version, edition) = mssql::read_server_info(&mut client).await;
+
+      // Update last_connected_at
+      let _ = conn.execute(
+        "UPDATE connections SET last_connected_at = datetime('now') WHERE id = ?1",
+        params![id],
+      );
+
+      Ok(json!({
+        "ok": true,
+        "connectionId": id,
+        "name": name,
+        "host": host,
+        "port": port,
+        "database": database,
+        "databases": databases,
+        "serverVersion": version,
+        "serverName": server_name,
+        "edition": edition
+      }))
+    }
+    Err(e) => {
+      if password.is_empty() {
+        Ok(json!({
+          "ok": false,
+          "error": {
+            "code": "PASSWORD_MISSING",
+            "message": "No saved password for this connection. Edit it and enter the password to continue."
+          }
+        }))
+      } else {
+        Ok(json!({
+          "ok": false,
+          "error": {
+            "code": "CONNECTION_FAILED",
+            "message": e
+          }
+        }))
+      }
+    }
+  }
+}
+
+#[tauri::command]
+pub fn disconnect_database(connection_id: Option<String>) -> Result<Value, String> {
+  let _ = connection_id;
+  Ok(json!({ "ok": true }))
 }

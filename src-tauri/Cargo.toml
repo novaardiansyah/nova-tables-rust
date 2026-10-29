@@ -22,3 +22,6 @@ dirs = "5.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 thiserror = "2.0"
+tiberius = { version = "0.13", default-features = false, features = ["tds80", "chrono", "rustls"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+futures-util = "0.3"
