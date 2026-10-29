@@ -3,6 +3,8 @@ NPM ?= npm
 CARGO ?= cargo
 VERSION := $(shell node -p "require('./package.json').version" 2>/dev/null)
 RELEASE_BIN := src-tauri/target/release/nova-tables
+WIN_TARGET := x86_64-pc-windows-msvc
+WIN_BUNDLE := src-tauri/target/$(WIN_TARGET)/release/bundle
 ARTIFACTS := build/v$(VERSION)
 APP_DIR := $(HOME)/.local/opt/nova-tables
 BIN_LINK := $(HOME)/.local/bin/nova-tables
@@ -28,7 +30,7 @@ help:
 		compile 'Build frontend assets with Vite only (fast)' \
 		build 'Build and package the Tauri app for Linux and Windows' \
 		build-linux 'Build and package the Linux AppImage and deb' \
-		build-win 'Build and package the Windows installer' \
+		build-win 'Cross-compile the Windows NSIS installer (cargo-xwin + makensis)' \
 		artifacts 'Copy the installers into build/<version>/' \
 		package 'Build release binary via Tauri' \
 		deploy 'Build, remove any previous install, then install for the current user' \
@@ -58,11 +60,14 @@ build-linux:
 	$(NPM) run tauri build -- --bundles appimage,deb
 
 build-win:
-	$(NPM) run tauri build -- --target x86_64-pc-windows-msvc
+	@command -v makensis >/dev/null 2>&1 || { echo "Missing makensis (NSIS) — install it before cross-compiling the Windows installer."; exit 1; }
+	$(NPM) run tauri build -- --runner cargo-xwin --target $(WIN_TARGET) --bundles nsis
 
 artifacts:
 	@mkdir -p "$(ARTIFACTS)"
-	@find src-tauri/target/release/bundle -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.exe' -o -name '*.msi' \) -exec cp -f {} "$(ARTIFACTS)/" \; 2>/dev/null || true
+	@for dir in src-tauri/target/release/bundle $(WIN_BUNDLE); do \
+		find "$$dir" -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.exe' -o -name '*.msi' \) -name "*$(VERSION)*" -exec cp -f {} "$(ARTIFACTS)/" \; 2>/dev/null || true; \
+	done
 	@ls -1 "$(ARTIFACTS)" 2>/dev/null || echo "No installers found in src-tauri/target/release/bundle — run 'make build' first."
 
 package:
