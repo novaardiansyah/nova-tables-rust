@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import Icon, { Spinner } from '../common/Icon'
-import { SavedQueryItem } from '../../hooks/useSavedQueries'
+import Icon, { Spinner } from '@/components/common/Icon'
+import { SavedQueryItem } from '@/hooks/useSavedQueries'
 
 function preview(sql?: string | null) {
   const line = String(sql || '').replace(/\s+/g, ' ').trim()

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, FormEvent } from 'react'
-import Icon, { Spinner } from '../common/Icon'
-import Select from '../common/Select'
+import Icon, { Spinner } from '@/components/common/Icon'
+import Select from '@/components/common/Select'
 import {
   APP_FONT_SIZE_MAX,
   DEFAULT_SETTINGS,
@@ -13,7 +13,7 @@ import {
   getResponsiveDefaultFontSize,
   normalizeSettings,
   Settings,
-} from '../../settings'
+} from '@/settings'
 
 const THEME_OPTIONS = THEMES.map((theme) => ({ value: theme.id, label: theme.label }))
 

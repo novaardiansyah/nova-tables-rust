@@ -1,8 +1,8 @@
 import React from 'react'
-import Icon, { Spinner } from './common/Icon'
-import QueryModeMenu from './QueryModeMenu'
-import Select, { SelectOption } from './common/Select'
-import { ExecutionModeId } from '../queryModes'
+import Icon, { Spinner } from '@/components/common/Icon'
+import QueryModeMenu from '@/components/QueryModeMenu'
+import Select, { SelectOption } from '@/components/common/Select'
+import { ExecutionModeId } from '@/queryModes'
 
 export interface WorkspaceHeaderDatabase {
   name: string

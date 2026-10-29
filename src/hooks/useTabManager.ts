@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
-import { SessionTab, SessionData, createTab, nextQueryTitle, queryTitle } from '../utils/sessionHelpers'
-import { EditSource } from '../edits'
-import { SavedQueryItem } from '../api'
+import { SessionTab, SessionData, createTab, nextQueryTitle, queryTitle } from '@/utils/sessionHelpers'
+import { EditSource } from '@/edits'
+import { SavedQueryItem } from '@/api'
 
 export interface UseTabManagerProps {
   activeSession: () => SessionData | null

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import Icon from '../common/Icon'
-import JsonView from './JsonView'
+import Icon from '@/components/common/Icon'
+import JsonView from '@/components/results/JsonView'
 
 export const JSON_PANEL_DEFAULT_WIDTH = 360
 const JSON_PANEL_MIN_WIDTH = 240

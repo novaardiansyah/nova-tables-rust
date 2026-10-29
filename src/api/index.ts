@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { encryptExportPayload, decryptImportPayload } from './crypto'
+import { encryptExportPayload, decryptImportPayload } from '@/api/crypto'
 
 export interface IpcErrorPayload {
   message?: string

@@ -1,2 +1,2 @@
-export { default as ConnectionsPage } from './ConnectionsPage'
-export { default as WorkspacePage } from './WorkspacePage'
+export { default as ConnectionsPage } from '@/pages/ConnectionsPage'
+export { default as WorkspacePage } from '@/pages/WorkspacePage'

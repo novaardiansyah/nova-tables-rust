@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import Icon from '../common/Icon'
+import Icon from '@/components/common/Icon'
 
 export interface ShortcutGroupItem {
   keys: string[]

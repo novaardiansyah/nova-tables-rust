@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
-import { api } from '../api'
-import { generateCreateTable } from '../designSql'
-import { quoteIdentifier } from '../resultFormats'
+import { api } from '@/api'
+import { generateCreateTable } from '@/designSql'
+import { quoteIdentifier } from '@/resultFormats'
 
 export interface TableItem {
   schema: string

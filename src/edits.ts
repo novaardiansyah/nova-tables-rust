@@ -1,4 +1,4 @@
-import { quoteIdentifier, rowCondition, sqlLiteral } from './resultFormats'
+import { quoteIdentifier, rowCondition, sqlLiteral } from '@/resultFormats'
 
 export interface EditTableTarget {
   schema: string

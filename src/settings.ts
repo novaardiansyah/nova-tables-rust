@@ -1,4 +1,4 @@
-import { EXECUTION_MODES, ExecutionModeId } from './queryModes'
+import { EXECUTION_MODES, ExecutionModeId } from '@/queryModes'
 
 export interface ThemeOption {
   id: string

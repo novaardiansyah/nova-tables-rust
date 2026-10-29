@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
-import Icon from './common/Icon'
-import { EXECUTION_MODES, ExecutionModeId, getModeById } from '../queryModes'
+import Icon from '@/components/common/Icon'
+import { EXECUTION_MODES, ExecutionModeId, getModeById } from '@/queryModes'
 
 const TONE_CLASS: Record<string, string> = {
   success: 'bg-success',

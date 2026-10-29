@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { api, DatabaseInfo } from '../api'
+import { api, DatabaseInfo } from '@/api'
 
 export interface DatabaseUserDetail {
   name: string

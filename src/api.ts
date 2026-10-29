@@ -1,4 +1,4 @@
-export { api, IpcError } from './api/index'
+export { api, IpcError } from '@/api/index'
 export type {
   ConnectionModel,
   FolderModel,
@@ -16,4 +16,4 @@ export type {
   SystemInfo,
   IpcErrorPayload,
   ImportFileDialogResult,
-} from './api/index'
+} from '@/api/index'

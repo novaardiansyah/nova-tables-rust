@@ -1,10 +1,10 @@
 import React, { useEffect, useRef } from 'react'
 import Editor, { Monaco } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
-import { editorThemeName } from '../monaco'
-import { CompletionCatalog, setCompletionCatalog } from '../completions'
-import { queryFontOptions, Settings, subscribeSettings } from '../settings'
-import { Spinner } from './common/Icon'
+import { editorThemeName } from '@/monaco'
+import { CompletionCatalog, setCompletionCatalog } from '@/completions'
+import { queryFontOptions, Settings, subscribeSettings } from '@/settings'
+import { Spinner } from '@/components/common/Icon'
 
 const EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   minimap: { enabled: false },

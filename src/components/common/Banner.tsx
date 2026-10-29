@@ -1,4 +1,4 @@
-import Icon from './Icon'
+import Icon from '@/components/common/Icon'
 
 export type BannerType = 'info' | 'success' | 'warn' | 'error'
 

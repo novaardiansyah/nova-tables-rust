@@ -1,4 +1,4 @@
-import { quoteIdentifier, sqlLiteral } from './resultFormats'
+import { quoteIdentifier, sqlLiteral } from '@/resultFormats'
 
 export type FilterOperatorId =
   | 'contains'

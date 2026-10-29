@@ -1,6 +1,6 @@
-import Icon, { Spinner } from './Icon'
-import { formatDuration, formatNumber } from '../../resultFormats'
-import { EditSource } from '../../edits'
+import Icon, { Spinner } from '@/components/common/Icon'
+import { formatDuration, formatNumber } from '@/resultFormats'
+import { EditSource } from '@/edits'
 
 export interface StatusBarResult {
   rowCount?: number | null

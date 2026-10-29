@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import Icon from '../common/Icon'
-import Select from '../common/Select'
+import Icon from '@/components/common/Icon'
+import Select from '@/components/common/Select'
 import {
   FILTER_LOGICS,
   FILTER_OPERATORS,
@@ -9,7 +9,7 @@ import {
   FilterOperatorId,
   buildFilterWhere,
   filterOperatorById,
-} from '../../filters'
+} from '@/filters'
 
 const LOGIC_OPTIONS = FILTER_LOGICS.map((item) => ({ value: item.id, label: item.label }))
 const OPERATOR_OPTIONS = FILTER_OPERATORS.map((item) => ({ value: item.id, label: item.label }))

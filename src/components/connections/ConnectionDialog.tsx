@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState, FormEvent, ChangeEvent } from 'react'
-import Icon, { Spinner } from '../common/Icon'
-import Select from '../common/Select'
-import { ENVIRONMENT_OPTIONS } from '../../environments'
-import { ConnectionItem } from './ConnectionTreeRow'
+import Icon, { Spinner } from '@/components/common/Icon'
+import Select from '@/components/common/Select'
+import { ENVIRONMENT_OPTIONS } from '@/environments'
+import { ConnectionItem } from '@/components/connections/ConnectionTreeRow'
 
 export interface ConnectionFormState {
   name: string

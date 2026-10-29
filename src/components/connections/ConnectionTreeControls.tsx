@@ -1,5 +1,5 @@
 import React, { DragEvent } from 'react'
-import Icon from '../common/Icon'
+import Icon from '@/components/common/Icon'
 
 export interface DragHandleProps {
   title: string

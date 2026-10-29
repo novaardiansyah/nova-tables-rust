@@ -1,5 +1,5 @@
 import { useEffect, useState, FormEvent } from 'react'
-import Icon from './Icon'
+import Icon from '@/components/common/Icon'
 
 export interface PromptDialogProps {
   open: boolean

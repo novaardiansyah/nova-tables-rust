@@ -1,5 +1,5 @@
 import React from 'react'
-import ConnectionsScreen, { ConnectionsScreenProps } from '../components/connections/ConnectionsScreen'
+import ConnectionsScreen, { ConnectionsScreenProps } from '@/components/connections/ConnectionsScreen'
 
 export default function ConnectionsPage(props: ConnectionsScreenProps) {
   return (

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { monaco } from '../../monaco'
-import Icon from '../common/Icon'
+import { monaco } from '@/monaco'
+import Icon from '@/components/common/Icon'
 
 export interface DeleteConfirmDialogProps {
   open: boolean

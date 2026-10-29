@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { api, QueryHistoryItem } from '../api'
+import { api, QueryHistoryItem } from '@/api'
 
 export type { QueryHistoryItem }
 

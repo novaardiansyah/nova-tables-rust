@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, MutableRefObject } from 'react'
-import { api, DatabaseInfo } from '../api'
-import { SessionData, SessionTab, createTab, createSession, pickDatabase, STARTER_SQL, queryTitle, EMPTY_TABLES, EMPTY_COLUMNS, EMPTY_MODULES } from '../utils/sessionHelpers'
-import { ConnectionDialogConnection, ConnectionDialogMode } from '../components/connections/ConnectionDialog'
-import { Settings, applySettings } from '../settings'
+import { api, DatabaseInfo } from '@/api'
+import { SessionData, SessionTab, createTab, createSession, pickDatabase, STARTER_SQL, queryTitle, EMPTY_TABLES, EMPTY_COLUMNS, EMPTY_MODULES } from '@/utils/sessionHelpers'
+import { ConnectionDialogConnection, ConnectionDialogMode } from '@/components/connections/ConnectionDialog'
+import { Settings, applySettings } from '@/settings'
 
 export interface UseSessionManagerProps {
   showBanner: (type: 'info' | 'warn' | 'error' | 'success', message: string) => void
