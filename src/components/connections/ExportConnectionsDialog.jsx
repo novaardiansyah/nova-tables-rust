@@ -39,8 +39,12 @@ export default function ExportConnectionsDialog({
   selectedIds = [],
   busy = false,
   onClose,
+  onCancel,
   onExport,
+  onConfirm,
 }) {
+  const handleClose = onClose || onCancel || (() => {})
+  const handleExport = onExport || onConfirm || (() => {})
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -57,11 +61,11 @@ export default function ExportConnectionsDialog({
   useEffect(() => {
     if (!open) return undefined
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') handleClose()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, onClose])
+  }, [open, handleClose])
 
   const targets = useMemo(() => {
     const ids = new Set(selectedIds)
@@ -98,7 +102,7 @@ export default function ExportConnectionsDialog({
       return
     }
     setError(null)
-    onExport(targets.map((connection) => connection.id), password)
+    handleExport(targets.map((connection) => connection.id), password)
   }
 
   const renderFolder = (folder, depth) => {
@@ -130,9 +134,15 @@ export default function ExportConnectionsDialog({
   const rootConnections = preview.grouped.get(null) ?? []
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !busy) handleClose()
+      }}
+    >
       <form
         onSubmit={handleSubmit}
+        onClick={(event) => event.stopPropagation()}
         className="animate-fade-in flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70"
       >
         <div className="flex items-start gap-3 p-5">
@@ -149,7 +159,7 @@ export default function ExportConnectionsDialog({
               password. Change the selection on the connections screen.
             </p>
           </div>
-          <button type="button" className="icon-btn h-6 w-6" onClick={onClose} disabled={busy}>
+          <button type="button" className="icon-btn h-6 w-6" onClick={handleClose} disabled={busy}>
             <Icon name="x" size={13} />
           </button>
         </div>
@@ -224,7 +234,7 @@ export default function ExportConnectionsDialog({
         </div>
 
         <div className="flex justify-end gap-2 border-t border-line px-5 py-3.5">
-          <button type="button" className="btn-soft" onClick={onClose} disabled={busy}>
+          <button type="button" className="btn-soft" onClick={handleClose} disabled={busy}>
             Cancel
           </button>
           <button type="submit" className="btn-primary" disabled={targets.length === 0 || !password || busy}>

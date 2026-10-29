@@ -72,6 +72,14 @@ export const api = {
 
   loadSettings: async () => {
     try {
+      const res = await callCommand('get_settings')
+      if (res?.settings) {
+        return res.settings
+      }
+    } catch {
+      // Ignore IPC errors and fall back to localStorage
+    }
+    try {
       const stored = localStorage.getItem('nova_tables_settings')
       if (stored) {
         return JSON.parse(stored)
@@ -79,8 +87,7 @@ export const api = {
     } catch {
       // Ignore localStorage errors
     }
-    const res = await callCommand('get_settings')
-    return res?.settings || null
+    return null
   },
 
   saveSettings: async (settings) => {
@@ -454,22 +461,50 @@ export const api = {
   },
 
   deleteTree: async (input) => {
-    const folderIds = input?.folderIds || []
-    const connectionIds = input?.connectionIds || []
-    for (const id of connectionIds) {
-      await callCommand('delete_connection', { id })
+    const payload = {
+      folderIds: input?.folderIds || [],
+      connectionIds: input?.connectionIds || [],
     }
-    for (const id of folderIds) {
-      await callCommand('delete_folder', { id })
+    const res = await callCommand('delete_tree', { input: payload })
+    let result
+    if (res && res.ok) {
+      result = {
+        folderIds: res.folderIds || payload.folderIds,
+        connectionIds: res.connectionIds || payload.connectionIds,
+        connections: res.connections || (await api.listConnections()),
+        folders: res.folders || (await api.listFolders()),
+      }
+    } else {
+      for (const id of payload.connectionIds) {
+        await callCommand('delete_connection', { id })
+      }
+      for (const id of payload.folderIds) {
+        await callCommand('delete_folder', { id })
+      }
+      result = {
+        folderIds: payload.folderIds,
+        connectionIds: payload.connectionIds,
+        connections: await api.listConnections(),
+        folders: await api.listFolders(),
+      }
     }
-    const connections = await api.listConnections()
-    const folders = await api.listFolders()
-    return {
-      folderIds,
-      connectionIds,
-      connections,
-      folders,
-    }
+
+    try {
+      const stored = localStorage.getItem('nova_tables_tree_order')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        const connSet = new Set(result.connectionIds)
+        const folderSet = new Set(result.folderIds)
+        const nextConnections = (parsed.connections || []).filter((id) => !connSet.has(id))
+        const nextFolders = (parsed.folders || []).filter((id) => !folderSet.has(id))
+        localStorage.setItem(
+          'nova_tables_tree_order',
+          JSON.stringify({ connections: nextConnections, folders: nextFolders }),
+        )
+      }
+    } catch {}
+
+    return result
   },
 
   testConnection: async (connection) => {

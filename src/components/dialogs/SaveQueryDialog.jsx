@@ -10,8 +10,10 @@ export default function SaveQueryDialog({
   error = null,
   busy = false,
   onCancel,
+  onClose,
   onSave,
 }) {
+  const handleCancel = onCancel || onClose || (() => {})
   const [name, setName] = useState('')
 
   useEffect(() => {
@@ -21,11 +23,11 @@ export default function SaveQueryDialog({
   useEffect(() => {
     if (!open) return undefined
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape' && !busy) onCancel()
+      if (event.key === 'Escape' && !busy) handleCancel()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, busy, onCancel])
+  }, [open, busy, handleCancel])
 
   if (!open) return null
 
@@ -40,9 +42,15 @@ export default function SaveQueryDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !busy) handleCancel()
+      }}
+    >
       <form
         onSubmit={submit}
+        onClick={(event) => event.stopPropagation()}
         className="animate-fade-in w-full max-w-md overflow-hidden rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70"
       >
         <div className="flex items-start gap-3 p-5">
@@ -55,7 +63,7 @@ export default function SaveQueryDialog({
               Keep the active tab as a reusable query.
             </p>
           </div>
-          <button type="button" className="icon-btn h-6 w-6" onClick={onCancel} disabled={busy} title="Close">
+          <button type="button" className="icon-btn h-6 w-6" onClick={handleCancel} disabled={busy} title="Close">
             <Icon name="x" size={13} />
           </button>
         </div>
@@ -101,7 +109,7 @@ export default function SaveQueryDialog({
         </div>
 
         <div className="flex justify-end gap-2 border-t border-line px-5 py-3.5">
-          <button type="button" className="btn-soft" onClick={onCancel} disabled={busy}>
+          <button type="button" className="btn-soft" onClick={handleCancel} disabled={busy}>
             Cancel
           </button>
           <button type="submit" className="btn-primary" disabled={!trimmed || busy}>

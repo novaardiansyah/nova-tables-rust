@@ -9,16 +9,19 @@ export default function UpdateConfirmDialog({
   onApply,
   onCopyQuery,
   onClose,
+  onCancel,
   onDiscard,
 }) {
+  const handleClose = onClose || onCancel || (() => {})
+
   useEffect(() => {
     if (!open) return
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') handleClose()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, onClose])
+  }, [open, handleClose])
 
   const [highlighted, setHighlighted] = useState({ text: '', html: null })
 
@@ -44,8 +47,16 @@ export default function UpdateConfirmDialog({
   const showSql = Boolean(sql)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]">
-      <div className="w-full max-w-2xl animate-fade-in rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) handleClose()
+      }}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        className="w-full max-w-2xl animate-fade-in rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70"
+      >
         <div className="flex items-start gap-3 p-5">
           <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
             <Icon name="pencil" size={15} />
@@ -76,7 +87,7 @@ export default function UpdateConfirmDialog({
           <button
             type="button"
             className="btn-soft"
-            onClick={onClose}
+            onClick={handleClose}
           >
             <Icon name="x" size={12} />
             Close

@@ -1,5 +1,6 @@
 use rusqlite::{params, Connection as SqliteConnection, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashSet, VecDeque};
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,7 +57,7 @@ impl LocalStore {
        CREATE TABLE IF NOT EXISTS folders (
          id TEXT PRIMARY KEY,
          name TEXT NOT NULL,
-         parent_id TEXT REFERENCES folders(id),
+         parent_id TEXT REFERENCES folders(id) ON DELETE CASCADE,
          created_at TEXT NOT NULL
        );
 
@@ -67,7 +68,7 @@ impl LocalStore {
          port INTEGER NOT NULL,
          username TEXT NOT NULL,
          database_name TEXT NOT NULL DEFAULT '',
-         folder_id TEXT REFERENCES folders(id),
+         folder_id TEXT REFERENCES folders(id) ON DELETE CASCADE,
          environment TEXT NOT NULL DEFAULT '',
          encrypt INTEGER NOT NULL DEFAULT 1,
          trust_server_certificate INTEGER NOT NULL DEFAULT 1,
@@ -233,8 +234,116 @@ impl LocalStore {
     Ok(())
   }
 
-  pub fn delete_folder(conn: &SqliteConnection, id: &str) -> Result<()> {
-    conn.execute("DELETE FROM folders WHERE id = ?1", params![id])?;
+  pub fn collect_subtree_folder_ids(
+    conn: &SqliteConnection,
+    root_ids: &[String],
+  ) -> Result<Vec<String>> {
+    let mut all_folder_ids: Vec<String> = Vec::new();
+    let mut queue: VecDeque<String> = VecDeque::new();
+    let mut visited: HashSet<String> = HashSet::new();
+
+    for id in root_ids {
+      if !id.is_empty() && visited.insert(id.clone()) {
+        queue.push_back(id.clone());
+        all_folder_ids.push(id.clone());
+      }
+    }
+
+    let mut stmt = conn.prepare("SELECT id FROM folders WHERE parent_id = ?1")?;
+
+    while let Some(current_id) = queue.pop_front() {
+      let child_rows = stmt.query_map(params![current_id], |row| row.get::<_, String>(0))?;
+      for child_id in child_rows {
+        let cid = child_id?;
+        if visited.insert(cid.clone()) {
+          queue.push_back(cid.clone());
+          all_folder_ids.push(cid);
+        }
+      }
+    }
+
+    Ok(all_folder_ids)
+  }
+
+  pub fn delete_tree(
+    conn: &mut SqliteConnection,
+    folder_ids: &[String],
+    connection_ids: &[String],
+  ) -> Result<(Vec<String>, Vec<String>)> {
+    let all_folder_ids = Self::collect_subtree_folder_ids(conn, folder_ids)?;
+
+    let mut all_connection_ids: Vec<String> = Vec::new();
+    let mut conn_visited: HashSet<String> = HashSet::new();
+
+    for cid in connection_ids {
+      if !cid.is_empty() && conn_visited.insert(cid.clone()) {
+        all_connection_ids.push(cid.clone());
+      }
+    }
+
+    let mut conn_stmt = conn.prepare("SELECT id FROM connections WHERE folder_id = ?1")?;
+    for fid in &all_folder_ids {
+      let rows = conn_stmt.query_map(params![fid], |row| row.get::<_, String>(0))?;
+      for row in rows {
+        let cid = row?;
+        if conn_visited.insert(cid.clone()) {
+          all_connection_ids.push(cid);
+        }
+      }
+    }
+    drop(conn_stmt);
+
+    let tx = conn.transaction()?;
+
+    // 1. Delete all gathered connections (cascades to saved_queries)
+    {
+      let mut del_conn_stmt = tx.prepare("DELETE FROM connections WHERE id = ?1")?;
+      for cid in &all_connection_ids {
+        del_conn_stmt.execute(params![cid])?;
+      }
+    }
+
+    // 2. Clear parent_id on folders to be deleted to avoid self-referential FK constraints
+    {
+      let mut clear_parent_stmt = tx.prepare("UPDATE folders SET parent_id = NULL WHERE id = ?1")?;
+      for fid in &all_folder_ids {
+        clear_parent_stmt.execute(params![fid])?;
+      }
+    }
+
+    // 3. Delete folders in reverse order (deepest subfolders first)
+    {
+      let mut del_folder_stmt = tx.prepare("DELETE FROM folders WHERE id = ?1")?;
+      for fid in all_folder_ids.iter().rev() {
+        del_folder_stmt.execute(params![fid])?;
+      }
+    }
+
+    tx.commit()?;
+
+    Ok((all_folder_ids, all_connection_ids))
+  }
+
+  pub fn delete_folder(conn: &mut SqliteConnection, id: &str) -> Result<(Vec<String>, Vec<String>)> {
+    Self::delete_tree(conn, &[id.to_string()], &[])
+  }
+
+  pub fn get_meta(conn: &SqliteConnection, key: &str) -> Result<Option<String>> {
+    let mut stmt = conn.prepare("SELECT value FROM meta WHERE key = ?1")?;
+    let mut rows = stmt.query_map(params![key], |row| row.get(0))?;
+    if let Some(val) = rows.next() {
+      Ok(Some(val?))
+    } else {
+      Ok(None)
+    }
+  }
+
+  pub fn set_meta(conn: &SqliteConnection, key: &str, value: &str) -> Result<()> {
+    conn.execute(
+      "INSERT INTO meta (key, value) VALUES (?1, ?2)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      params![key, value],
+    )?;
     Ok(())
   }
 }

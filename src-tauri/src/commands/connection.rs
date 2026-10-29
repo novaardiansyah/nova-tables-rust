@@ -61,10 +61,39 @@ pub fn save_folder(folder: FolderItem) -> Result<Value, String> {
 #[tauri::command]
 pub fn delete_folder(id: String) -> Result<Value, String> {
   let db_path = FileSystem::get_database_path()?;
-  let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
-  LocalStore::delete_folder(&conn, &id).map_err(|e| e.to_string())?;
+  let mut conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
+  let (deleted_folder_ids, deleted_connection_ids) =
+    LocalStore::delete_folder(&mut conn, &id).map_err(|e| e.to_string())?;
   Ok(json!({
-    "ok": true
+    "ok": true,
+    "folderIds": deleted_folder_ids,
+    "connectionIds": deleted_connection_ids
+  }))
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct DeleteTreeInput {
+  #[serde(rename = "folderIds", default)]
+  pub folder_ids: Vec<String>,
+  #[serde(rename = "connectionIds", default)]
+  pub connection_ids: Vec<String>,
+}
+
+#[tauri::command]
+pub fn delete_tree(input: DeleteTreeInput) -> Result<Value, String> {
+  let db_path = FileSystem::get_database_path()?;
+  let mut conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
+  let (deleted_folder_ids, deleted_connection_ids) =
+    LocalStore::delete_tree(&mut conn, &input.folder_ids, &input.connection_ids)
+      .map_err(|e| e.to_string())?;
+  let connections = LocalStore::list_connections(&conn).map_err(|e| e.to_string())?;
+  let folders = LocalStore::list_folders(&conn).map_err(|e| e.to_string())?;
+  Ok(json!({
+    "ok": true,
+    "folderIds": deleted_folder_ids,
+    "connectionIds": deleted_connection_ids,
+    "connections": connections,
+    "folders": folders
   }))
 }
 

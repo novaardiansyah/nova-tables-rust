@@ -1110,7 +1110,9 @@ export default function ConnectionsScreen({
           folders={folders}
           selectedIds={exportTarget}
           busy={exportBusy}
+          onClose={() => setExportTarget(null)}
           onCancel={() => setExportTarget(null)}
+          onExport={handleExportConfirm}
           onConfirm={handleExportConfirm}
         />
       ) : null}
@@ -1125,7 +1127,12 @@ export default function ConnectionsScreen({
             setImportFile(null)
             setImportError(null)
           }}
+          onCancel={() => {
+            setImportFile(null)
+            setImportError(null)
+          }}
           onImport={handleImportConfirm}
+          onConfirm={handleImportConfirm}
         />
       ) : null}
     </div>

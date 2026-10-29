@@ -9,8 +9,10 @@ export default function DropDatabaseDialog({
   error = null,
   busy = false,
   onCancel,
+  onClose,
   onConfirm,
 }) {
+  const handleCancel = onCancel || onClose || (() => {})
   const [typed, setTyped] = useState('')
   const [acknowledged, setAcknowledged] = useState(false)
 
@@ -23,11 +25,11 @@ export default function DropDatabaseDialog({
   useEffect(() => {
     if (!open) return undefined
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape' && !busy) onCancel()
+      if (event.key === 'Escape' && !busy) handleCancel()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, busy, onCancel])
+  }, [open, busy, handleCancel])
 
   if (!open) return null
 
@@ -40,9 +42,15 @@ export default function DropDatabaseDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !busy) handleCancel()
+      }}
+    >
       <form
         onSubmit={submit}
+        onClick={(event) => event.stopPropagation()}
         className="animate-fade-in w-full max-w-lg overflow-hidden rounded-xl border border-danger/40 bg-surface shadow-2xl shadow-black/70"
       >
         <div className="flex items-start gap-3 p-5">
@@ -60,7 +68,7 @@ export default function DropDatabaseDialog({
           <button
             type="button"
             className="icon-btn h-6 w-6"
-            onClick={onCancel}
+            onClick={handleCancel}
             disabled={busy}
             title="Close"
           >
@@ -142,7 +150,7 @@ export default function DropDatabaseDialog({
         </div>
 
         <div className="flex justify-end gap-2 border-t border-line px-5 py-3.5">
-          <button type="button" className="btn-soft" onClick={onCancel} disabled={busy}>
+          <button type="button" className="btn-soft" onClick={handleCancel} disabled={busy}>
             Cancel
           </button>
           <button type="submit" className="btn-danger" disabled={!ready}>

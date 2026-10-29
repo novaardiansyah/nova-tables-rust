@@ -39,11 +39,13 @@ export default function DatabaseUsersDialog({
   state = EMPTY_STATE,
   busy = false,
   onClose,
+  onCancel,
   onRefresh,
   onCreate,
   onUpdateRoles,
   onDrop,
 }) {
+  const handleClose = onClose || onCancel || (() => {})
   const [selectedName, setSelectedName] = useState('')
   const [draftRoles, setDraftRoles] = useState([])
   const [creating, setCreating] = useState(false)
@@ -96,11 +98,11 @@ export default function DatabaseUsersDialog({
         setCreating(false)
         return
       }
-      onClose()
+      handleClose()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [busy, confirmDrop, creating, onClose, open])
+  }, [busy, confirmDrop, creating, handleClose, open])
 
   if (!open) return null
 
@@ -158,8 +160,16 @@ export default function DatabaseUsersDialog({
     selectedUser?.reason === 'current' ? 'Current connection user' : 'System user'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]">
-      <div className="animate-fade-in flex h-[min(680px,86vh)] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !busy) handleClose()
+      }}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        className="animate-fade-in flex h-[min(680px,86vh)] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70"
+      >
         <div className="flex items-center gap-3 border-b border-line px-5 py-3.5">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
             <Icon name="users" size={16} />
@@ -186,7 +196,7 @@ export default function DatabaseUsersDialog({
           <button
             type="button"
             className="icon-btn h-7 w-7"
-            onClick={onClose}
+            onClick={handleClose}
             disabled={busy}
             title="Close"
             aria-label="Close users"
