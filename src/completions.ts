@@ -1,4 +1,4 @@
-import { monaco } from './monaco'
+import { monaco } from '@/monaco'
 
 const SQL_KEYWORDS =
   'select from where not like union all exists between case when then else having into values set inner outer full cross is null and or insert delete truncate commit rollback begin transaction if order group by using declare with distinct top join on as offset fetch next rows only asc desc primary key foreign references cascade constraint unique default check left right count sum min max avg'.split(

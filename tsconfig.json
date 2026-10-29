@@ -12,11 +12,15 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
 
     /* Strict */
     "strict": true,
     "noFallthroughCasesInSwitch": true,
-    "allowJs": true,
+    "noImplicitAny": true,
+    "allowJs": false,
     "checkJs": false
   },
   "include": ["src"],

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
-import Icon from '../common/Icon'
-import { ParsedPlan, PlanNode } from '../../planParser'
+import Icon from '@/components/common/Icon'
+import { ParsedPlan, PlanNode } from '@/planParser'
 
 export interface OperatorCardProps {
   node: PlanNode

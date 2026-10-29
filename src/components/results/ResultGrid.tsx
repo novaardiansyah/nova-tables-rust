@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import Icon from '../common/Icon'
-import CellEditor, { CellEditorController } from './ResultGridCell'
+import Icon from '@/components/common/Icon'
+import CellEditor, { CellEditorController } from '@/components/results/ResultGridCell'
 
 const RENDER_LIMIT = 2000
 const DATE_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/

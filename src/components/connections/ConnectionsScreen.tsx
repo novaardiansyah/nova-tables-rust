@@ -1,18 +1,18 @@
 import React, { useEffect, useMemo, useState, DragEvent, MouseEvent } from 'react'
-import ConfirmDialog from '../common/ConfirmDialog'
-import ContextMenu, { ContextMenuItem } from '../common/ContextMenu'
-import EnvironmentBadge from '../common/EnvironmentBadge'
-import ExportConnectionsDialog from './ExportConnectionsDialog'
-import Icon, { BrandMark, Spinner } from '../common/Icon'
-import ImportConnectionsDialog from './ImportConnectionsDialog'
-import PromptDialog from '../common/PromptDialog'
-import { api, ImportFileDialogResult } from '../../api'
+import ConfirmDialog from '@/components/common/ConfirmDialog'
+import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu'
+import EnvironmentBadge from '@/components/common/EnvironmentBadge'
+import ExportConnectionsDialog from '@/components/connections/ExportConnectionsDialog'
+import Icon, { BrandMark, Spinner } from '@/components/common/Icon'
+import ImportConnectionsDialog from '@/components/connections/ImportConnectionsDialog'
+import PromptDialog from '@/components/common/PromptDialog'
+import { api, ImportFileDialogResult } from '@/api'
 import {
   flattenRows,
   folderSubtree,
   folderTree,
   resolveTarget,
-} from './connectionTreeUtils'
+} from '@/components/connections/connectionTreeUtils'
 import {
   ConnectionRow,
   FolderRow,
@@ -21,7 +21,7 @@ import {
   DragKind,
   DragState,
   DropTargetState,
-} from './ConnectionTreeRow'
+} from '@/components/connections/ConnectionTreeRow'
 
 function formatRelativeTime(dateString?: string | null) {
   if (!dateString) return null

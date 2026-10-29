@@ -1,4 +1,4 @@
-import { environmentById, EnvironmentTone } from '../../environments'
+import { environmentById, EnvironmentTone } from '@/environments'
 
 const TONE_CLASSES: Record<EnvironmentTone, string> = {
   success: 'bg-success/10 text-success',

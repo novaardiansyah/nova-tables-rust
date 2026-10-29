@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import Icon, { Spinner } from '../common/Icon'
-import ColumnEditor, { DragOverState } from './ColumnEditor'
-import IndexConstraintEditor from './IndexConstraintEditor'
-import { Editor } from './DesignerControls'
-import { NEW_TABLE_TEMPLATE, DesignerColumn } from './designerConstants'
+import Icon, { Spinner } from '@/components/common/Icon'
+import ColumnEditor, { DragOverState } from '@/components/designer/ColumnEditor'
+import IndexConstraintEditor from '@/components/designer/IndexConstraintEditor'
+import { Editor } from '@/components/designer/DesignerControls'
+import { NEW_TABLE_TEMPLATE, DesignerColumn } from '@/components/designer/designerConstants'
 import {
   checkRequiresRecreation,
   generateAlterTable,
@@ -14,7 +14,7 @@ import {
   DesignForeignKey,
   DesignIndex,
   DesignForeignKeyColumn,
-} from '../../designSql'
+} from '@/designSql'
 
 export interface TableOptionItem {
   schema: string

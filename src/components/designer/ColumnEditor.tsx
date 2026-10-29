@@ -1,6 +1,6 @@
-import Icon from '../common/Icon'
-import Select from '../common/Select'
-import { DesignerColumn, TYPE_BY_NAME, TYPE_OPTIONS } from './designerConstants'
+import Icon from '@/components/common/Icon'
+import Select from '@/components/common/Select'
+import { DesignerColumn, TYPE_BY_NAME, TYPE_OPTIONS } from '@/components/designer/designerConstants'
 
 export interface DragOverState {
   index: number

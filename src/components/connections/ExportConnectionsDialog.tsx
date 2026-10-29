@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, FormEvent } from 'react'
-import EnvironmentBadge from '../common/EnvironmentBadge'
-import Icon from '../common/Icon'
-import { ConnectionItem, FolderItem } from './ConnectionTreeRow'
+import EnvironmentBadge from '@/components/common/EnvironmentBadge'
+import Icon from '@/components/common/Icon'
+import { ConnectionItem, FolderItem } from '@/components/connections/ConnectionTreeRow'
 
 function byName(left: { name?: string | null }, right: { name?: string | null }): number {
   return String(left.name ?? '').localeCompare(String(right.name ?? ''))

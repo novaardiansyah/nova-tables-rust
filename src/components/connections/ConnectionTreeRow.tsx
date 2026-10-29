@@ -1,7 +1,7 @@
 import React, { Fragment, DragEvent, MouseEvent } from 'react'
-import EnvironmentBadge from '../common/EnvironmentBadge'
-import Icon, { Spinner } from '../common/Icon'
-import { DragHandle, DropLine, SelectBox } from './ConnectionTreeControls'
+import EnvironmentBadge from '@/components/common/EnvironmentBadge'
+import Icon, { Spinner } from '@/components/common/Icon'
+import { DragHandle, DropLine, SelectBox } from '@/components/connections/ConnectionTreeControls'
 
 export interface ConnectionItem {
   id: string

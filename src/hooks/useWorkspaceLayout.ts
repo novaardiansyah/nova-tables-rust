@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { jsonRecords } from '../resultFormats'
-import { ActiveDataPayload } from '../components/results/ResultsPanel'
-import { EDITOR_DEFAULT_HEIGHT, STARTER_SQL } from '../utils/sessionHelpers'
-import { SIDEBAR_DEFAULT_WIDTH } from '../components/Sidebar'
-import { JSON_PANEL_DEFAULT_WIDTH } from '../components/results/JsonPanel'
+import { jsonRecords } from '@/resultFormats'
+import { ActiveDataPayload } from '@/components/results/ResultsPanel'
+import { EDITOR_DEFAULT_HEIGHT, STARTER_SQL } from '@/utils/sessionHelpers'
+import { SIDEBAR_DEFAULT_WIDTH } from '@/components/Sidebar'
+import { JSON_PANEL_DEFAULT_WIDTH } from '@/components/results/JsonPanel'
 
 export interface QueryState {
   id: number

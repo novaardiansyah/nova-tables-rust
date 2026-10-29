@@ -1,9 +1,9 @@
 import { useCallback, useRef, useState } from 'react'
-import { api } from '../api'
-import { SessionTab, SessionData } from '../utils/sessionHelpers'
-import { executionGuard, ExecutionModeId } from '../queryModes'
-import { parseShowPlanXml } from '../planParser'
-import { FilterCondition, buildFilterWhere, buildFilteredSql } from '../filters'
+import { api } from '@/api'
+import { SessionTab, SessionData } from '@/utils/sessionHelpers'
+import { executionGuard, ExecutionModeId } from '@/queryModes'
+import { parseShowPlanXml } from '@/planParser'
+import { FilterCondition, buildFilterWhere, buildFilteredSql } from '@/filters'
 import {
   buildDeleteStatementsForRows,
   buildEditSource,
@@ -12,8 +12,8 @@ import {
   editAllows,
   editSqlHeader,
   editTableFromSql,
-} from '../edits'
-import { csvRecords, jsonRecords } from '../resultFormats'
+} from '@/edits'
+import { csvRecords, jsonRecords } from '@/resultFormats'
 
 export interface UseQueryExecutionProps {
   activeSession: () => SessionData | null

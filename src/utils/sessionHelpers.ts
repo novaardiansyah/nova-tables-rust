@@ -1,9 +1,9 @@
-import { DatabaseInfo } from '../api'
-import { SidebarTable } from '../components/Sidebar'
-import { EditSource } from '../edits'
-import { SavedQueryItem } from '../api'
-import { TableDesign } from '../designSql'
-import { ResultsPanelState } from '../components/results/ResultsPanel'
+import { DatabaseInfo } from '@/api'
+import { SidebarTable } from '@/components/Sidebar'
+import { EditSource } from '@/edits'
+import { SavedQueryItem } from '@/api'
+import { TableDesign } from '@/designSql'
+import { ResultsPanelState } from '@/components/results/ResultsPanel'
 
 export const STARTER_SQL = `-- Nova Tables
 -- Pick a table in the sidebar or write a query, then press Ctrl+Enter to run it.
@@ -137,7 +137,7 @@ export function qualifiedName(table: SidebarTable): string {
   return `${quoteIdentifier(table.schema)}.${quoteIdentifier(table.name)}`
 }
 
-import { quoteIdentifier, sqlLiteral } from '../resultFormats'
+import { quoteIdentifier, sqlLiteral } from '@/resultFormats'
 
 export function browseSql(table: SidebarTable & { primaryKey?: string[] }): string {
   const pk = table.primaryKey || []

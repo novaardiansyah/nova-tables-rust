@@ -1,5 +1,5 @@
 import React from 'react'
-import Icon, { Spinner } from './common/Icon'
+import Icon, { Spinner } from '@/components/common/Icon'
 
 export interface TabItemState {
   status: 'idle' | 'running' | 'success' | 'error' | string

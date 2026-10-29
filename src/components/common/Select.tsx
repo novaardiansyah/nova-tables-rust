@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import Icon from './Icon'
+import Icon from '@/components/common/Icon'
 
 export interface SelectOption {
   value: any

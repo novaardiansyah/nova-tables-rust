@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, MutableRefObject } from 'react'
-import { api, SavedQueryItem } from '../api'
+import { api, SavedQueryItem } from '@/api'
 
 export type { SavedQueryItem }
 

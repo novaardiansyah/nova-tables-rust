@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, FormEvent } from 'react'
-import Icon, { Spinner } from '../common/Icon'
-import Select from '../common/Select'
-import { DatabaseUserDetail, DatabaseUserStateData } from '../../hooks/useDatabaseUsers'
+import Icon, { Spinner } from '@/components/common/Icon'
+import Select from '@/components/common/Select'
+import { DatabaseUserDetail, DatabaseUserStateData } from '@/hooks/useDatabaseUsers'
 
 const EMPTY_STATE: DatabaseUserStateData = { status: 'idle', users: [], roles: [], logins: [], error: null }
 

@@ -1,11 +1,11 @@
 import { useCallback } from 'react'
-import { api } from '../api'
-import { SessionData, SessionTab, createDesignTab, browseSql, relatedSql, sessionTableFor, NEW_FUNCTION_SQL } from '../utils/sessionHelpers'
-import { SidebarTable, SidebarModule } from '../components/Sidebar'
-import { buildEditSource } from '../edits'
-import { TableDesign } from '../designSql'
-import { quoteIdentifier, csvRecords, jsonRecords } from '../resultFormats'
-import { ExportDataPayload } from '../components/results/ResultsPanel'
+import { api } from '@/api'
+import { SessionData, SessionTab, createDesignTab, browseSql, relatedSql, sessionTableFor, NEW_FUNCTION_SQL } from '@/utils/sessionHelpers'
+import { SidebarTable, SidebarModule } from '@/components/Sidebar'
+import { buildEditSource } from '@/edits'
+import { TableDesign } from '@/designSql'
+import { quoteIdentifier, csvRecords, jsonRecords } from '@/resultFormats'
+import { ExportDataPayload } from '@/components/results/ResultsPanel'
 
 export interface UseTableBrowserProps {
   activeSession: () => SessionData | null

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { monaco } from '../../monaco'
-import ConfirmDialog from '../common/ConfirmDialog'
+import { monaco } from '@/monaco'
+import ConfirmDialog from '@/components/common/ConfirmDialog'
 
 export interface QueryGuardDialogProps {
   open: boolean

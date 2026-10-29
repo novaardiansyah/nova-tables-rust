@@ -1,2 +1,2 @@
-export { default } from '../components/WorkspaceView'
-export * from '../components/WorkspaceView'
+export { default } from '@/components/WorkspaceView'
+export * from '@/components/WorkspaceView'

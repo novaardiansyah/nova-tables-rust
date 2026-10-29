@@ -1,7 +1,7 @@
-import Icon from '../common/Icon'
-import Select from '../common/Select'
-import { Editor, Section } from './DesignerControls'
-import { DesignUniqueKey, DesignForeignKey, DesignIndex, DesignForeignKeyColumn } from '../../designSql'
+import Icon from '@/components/common/Icon'
+import Select from '@/components/common/Select'
+import { Editor, Section } from '@/components/designer/DesignerControls'
+import { DesignUniqueKey, DesignForeignKey, DesignIndex, DesignForeignKeyColumn } from '@/designSql'
 
 export interface ColumnOption {
   value: string

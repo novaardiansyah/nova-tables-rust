@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import Icon from '../common/Icon'
-import JsonView from './JsonView'
-import { cellText } from '../../resultFormats'
+import Icon from '@/components/common/Icon'
+import JsonView from '@/components/results/JsonView'
+import { cellText } from '@/resultFormats'
 
 function formatRaw(value: unknown): string {
   if (value === null || value === undefined) return ''
