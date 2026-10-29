@@ -42,6 +42,39 @@ pub struct FolderItem {
   pub created_at: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryHistoryItem {
+  pub id: String,
+  #[serde(rename = "connectionId")]
+  pub connection_id: String,
+  #[serde(rename = "databaseName")]
+  pub database: String,
+  pub sql: String,
+  pub status: String,
+  #[serde(rename = "durationMs")]
+  pub duration_ms: i64,
+  #[serde(rename = "rowCount")]
+  pub row_count: i64,
+  #[serde(rename = "errorMessage")]
+  pub error_message: Option<String>,
+  #[serde(rename = "createdAt")]
+  pub created_at: String,
+}
+
+fn map_query_history_row(row: &rusqlite::Row<'_>) -> Result<QueryHistoryItem> {
+  Ok(QueryHistoryItem {
+    id: row.get(0)?,
+    connection_id: row.get(1)?,
+    database: row.get(2)?,
+    sql: row.get(3)?,
+    status: row.get(4)?,
+    duration_ms: row.get(5)?,
+    row_count: row.get(6)?,
+    error_message: row.get(7)?,
+    created_at: row.get(8)?,
+  })
+}
+
 pub struct LocalStore;
 
 impl LocalStore {
@@ -89,7 +122,22 @@ impl LocalStore {
          sql TEXT NOT NULL,
          created_at TEXT NOT NULL,
          updated_at TEXT NOT NULL
-       );"
+       );
+
+       CREATE TABLE IF NOT EXISTS query_history (
+         id TEXT PRIMARY KEY,
+         connection_id TEXT NOT NULL REFERENCES connections(id) ON DELETE CASCADE,
+         database_name TEXT NOT NULL COLLATE NOCASE,
+         sql TEXT NOT NULL,
+         status TEXT NOT NULL DEFAULT 'success',
+         duration_ms INTEGER NOT NULL DEFAULT 0,
+         row_count INTEGER NOT NULL DEFAULT 0,
+         error_message TEXT,
+         created_at TEXT NOT NULL
+       );
+
+       CREATE INDEX IF NOT EXISTS query_history_scope
+         ON query_history (connection_id, database_name, created_at DESC);"
     )?;
     let _ = conn.execute("ALTER TABLE connections ADD COLUMN last_database_used TEXT", []);
     Ok(conn)
@@ -342,6 +390,92 @@ impl LocalStore {
 
   pub fn delete_folder(conn: &mut SqliteConnection, id: &str) -> Result<(Vec<String>, Vec<String>)> {
     Self::delete_tree(conn, &[id.to_string()], &[])
+  }
+
+  pub fn add_query_history(conn: &SqliteConnection, item: &QueryHistoryItem) -> Result<()> {
+    conn.execute(
+      "INSERT INTO query_history (id, connection_id, database_name, sql, status, duration_ms, row_count, error_message, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+      params![
+        item.id,
+        item.connection_id,
+        item.database,
+        item.sql,
+        item.status,
+        item.duration_ms,
+        item.row_count,
+        item.error_message,
+        item.created_at,
+      ],
+    )?;
+
+    conn.execute(
+      "DELETE FROM query_history
+       WHERE connection_id = ?1
+         AND id NOT IN (
+           SELECT id FROM query_history
+           WHERE connection_id = ?1
+           ORDER BY created_at DESC
+           LIMIT 500
+         )",
+      params![item.connection_id],
+    )?;
+    Ok(())
+  }
+
+  pub fn list_query_history(
+    conn: &SqliteConnection,
+    connection_id: &str,
+    database: Option<&str>,
+    limit: usize,
+  ) -> Result<Vec<QueryHistoryItem>> {
+    let max_rows = limit.clamp(1, 500) as i64;
+    let scope = database.map(|value| value.trim()).unwrap_or("");
+
+    let mut result = Vec::new();
+
+    if scope.is_empty() {
+      let mut stmt = conn.prepare(
+        "SELECT id, connection_id, database_name, sql, status, duration_ms, row_count, error_message, created_at
+         FROM query_history WHERE connection_id = ?1 ORDER BY created_at DESC LIMIT ?2",
+      )?;
+      let rows = stmt.query_map(params![connection_id, max_rows], map_query_history_row)?;
+      for row in rows {
+        result.push(row?);
+      }
+    } else {
+      let mut stmt = conn.prepare(
+        "SELECT id, connection_id, database_name, sql, status, duration_ms, row_count, error_message, created_at
+         FROM query_history WHERE connection_id = ?1 AND database_name = ?2 ORDER BY created_at DESC LIMIT ?3",
+      )?;
+      let rows = stmt.query_map(params![connection_id, scope, max_rows], map_query_history_row)?;
+      for row in rows {
+        result.push(row?);
+      }
+    }
+
+    Ok(result)
+  }
+
+  pub fn clear_query_history(
+    conn: &SqliteConnection,
+    connection_id: &str,
+    database: Option<&str>,
+  ) -> Result<usize> {
+    let scope = database.map(|value| value.trim()).unwrap_or("");
+
+    if scope.is_empty() {
+      conn.execute("DELETE FROM query_history WHERE connection_id = ?1", params![connection_id])
+    } else {
+      conn.execute(
+        "DELETE FROM query_history WHERE connection_id = ?1 AND database_name = ?2",
+        params![connection_id, scope],
+      )
+    }
+  }
+
+  pub fn delete_query_history(conn: &SqliteConnection, id: &str) -> Result<usize> {
+    conn.execute("DELETE FROM query_history WHERE id = ?1", params![id])
   }
 
   pub fn get_meta(conn: &SqliteConnection, key: &str) -> Result<Option<String>> {

@@ -1,13 +1,55 @@
+use crate::database::local_store::{LocalStore, QueryHistoryItem};
 use crate::database::mssql;
+use crate::file_system::FileSystem;
 use serde_json::{json, Value};
+
+fn record_query_history(
+  connection_id: Option<&str>,
+  database: Option<&str>,
+  sql: &str,
+  status: &str,
+  duration_ms: i64,
+  row_count: i64,
+  error_message: Option<&str>,
+) {
+  let (Some(connection_id), Some(database)) = (connection_id, database) else {
+    return;
+  };
+  if connection_id.is_empty() || database.is_empty() || sql.trim().is_empty() {
+    return;
+  }
+
+  let Ok(db_path) = FileSystem::get_database_path() else {
+    return;
+  };
+  let Ok(conn) = LocalStore::init(&db_path) else {
+    return;
+  };
+
+  let item = QueryHistoryItem {
+    id: uuid::Uuid::new_v4().to_string(),
+    connection_id: connection_id.to_string(),
+    database: database.to_string(),
+    sql: sql.trim().to_string(),
+    status: status.to_string(),
+    duration_ms,
+    row_count,
+    error_message: error_message.map(|message| message.to_string()),
+    created_at: chrono::Utc::now().to_rfc3339(),
+  };
+
+  let _ = LocalStore::add_query_history(&conn, &item);
+}
 
 #[tauri::command]
 pub async fn execute_query(
   sql: Option<String>,
   connection_id: Option<String>,
   database: Option<String>,
+  record_history: Option<bool>,
   input: Option<Value>,
 ) -> Result<Value, String> {
+  let started = std::time::Instant::now();
   let query = sql
     .or_else(|| input.as_ref().and_then(|i| i.get("sql")).and_then(|v| v.as_str()).map(|s| s.to_string()))
     .unwrap_or_default();
@@ -18,21 +60,52 @@ pub async fn execute_query(
   let db = database
     .or_else(|| input.as_ref().and_then(|i| i.get("database")).and_then(|v| v.as_str()).map(|s| s.to_string()));
 
-  if let Some(id) = conn_id.as_deref() {
-    let mut client = mssql::get_client_for_connection(id, db.as_deref()).await?;
-    return mssql::execute_sql(&mut client, &query).await;
+  let record_history = record_history
+    .or_else(|| input.as_ref().and_then(|i| i.get("recordHistory").or_else(|| i.get("record_history"))).and_then(|v| v.as_bool()))
+    .unwrap_or(false);
+
+  let outcome = if let Some(id) = conn_id.as_deref() {
+    match mssql::get_client_for_connection(id, db.as_deref()).await {
+      Ok(mut client) => mssql::execute_sql(&mut client, &query).await,
+      Err(error) => Err(error),
+    }
+  } else {
+    Ok(json!({
+      "ok": true,
+      "resultSets": [],
+      "rowCount": 0,
+      "rowsAffected": [0],
+      "messages": [],
+      "elapsedMs": 0,
+      "truncated": false,
+      "maxRows": 20000
+    }))
+  };
+
+  if record_history {
+    match &outcome {
+      Ok(result) => record_query_history(
+        conn_id.as_deref(),
+        db.as_deref(),
+        &query,
+        "success",
+        result.get("elapsedMs").and_then(|v| v.as_i64()).unwrap_or(0),
+        result.get("rowCount").and_then(|v| v.as_i64()).unwrap_or(0),
+        None,
+      ),
+      Err(error) => record_query_history(
+        conn_id.as_deref(),
+        db.as_deref(),
+        &query,
+        "error",
+        started.elapsed().as_millis() as i64,
+        0,
+        Some(error),
+      ),
+    }
   }
 
-  Ok(json!({
-    "ok": true,
-    "resultSets": [],
-    "rowCount": 0,
-    "rowsAffected": [0],
-    "messages": [],
-    "elapsedMs": 0,
-    "truncated": false,
-    "maxRows": 20000
-  }))
+  outcome
 }
 
 #[tauri::command]
@@ -230,23 +303,49 @@ pub fn list_query_history(
   database: Option<String>,
   limit: Option<usize>,
 ) -> Result<Value, String> {
-  let _ = (connection_id, database, limit);
+  let Some(connection_id) = connection_id.as_deref().filter(|value| !value.is_empty()) else {
+    return Ok(json!({ "ok": true, "history": [] }));
+  };
+
+  let db_path = FileSystem::get_database_path()?;
+  let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
+  let history = LocalStore::list_query_history(&conn, connection_id, database.as_deref(), limit.unwrap_or(100))
+    .map_err(|e| e.to_string())?;
+
   Ok(json!({
     "ok": true,
-    "history": []
+    "history": history
   }))
 }
 
 #[tauri::command]
 pub fn clear_query_history(connection_id: Option<String>, database: Option<String>) -> Result<Value, String> {
-  let _ = (connection_id, database);
-  Ok(json!({ "ok": true }))
+  let Some(connection_id) = connection_id.as_deref().filter(|value| !value.is_empty()) else {
+    return Ok(json!({ "ok": true, "cleared": false }));
+  };
+
+  let db_path = FileSystem::get_database_path()?;
+  let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
+  let cleared = LocalStore::clear_query_history(&conn, connection_id, database.as_deref())
+    .map_err(|e| e.to_string())?;
+
+  Ok(json!({
+    "ok": true,
+    "cleared": cleared
+  }))
 }
 
 #[tauri::command]
 pub fn delete_query_history(id: String) -> Result<Value, String> {
-  let _ = id;
-  Ok(json!({ "ok": true }))
+  let db_path = FileSystem::get_database_path()?;
+  let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
+  let deleted = LocalStore::delete_query_history(&conn, &id).map_err(|e| e.to_string())?;
+
+  Ok(json!({
+    "ok": true,
+    "deleted": deleted,
+    "id": id
+  }))
 }
 
 #[tauri::command]
