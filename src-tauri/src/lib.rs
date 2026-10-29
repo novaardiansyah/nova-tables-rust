@@ -10,6 +10,7 @@ use crate::database::local_store::LocalStore;
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_opener::init())
+    .plugin(tauri_plugin_dialog::init())
     .setup(|_app| {
       // Ensure application database and directories exist
       if let Ok(db_path) = FileSystem::get_database_path() {

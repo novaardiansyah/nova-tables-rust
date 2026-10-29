@@ -53,11 +53,25 @@ pub fn save_settings(settings: Value) -> Result<Value, String> {
   }))
 }
 
+fn requested_file_name(default_path: &str) -> String {
+  std::path::Path::new(default_path)
+    .file_name()
+    .map(|name| name.to_string_lossy().to_string())
+    .unwrap_or_else(|| default_path.to_string())
+}
+
 #[tauri::command]
-pub fn save_file(input: Value) -> Result<Value, String> {
+pub async fn save_file(app: tauri::AppHandle, input: Value) -> Result<Value, String> {
+  use tauri_plugin_dialog::DialogExt;
+
   let file_path = input
     .get("filePath")
     .or_else(|| input.get("file_path"))
+    .and_then(|v| v.as_str())
+    .unwrap_or("");
+  let default_path = input
+    .get("defaultPath")
+    .or_else(|| input.get("default_path"))
     .and_then(|v| v.as_str())
     .unwrap_or("");
   let content = input
@@ -65,8 +79,65 @@ pub fn save_file(input: Value) -> Result<Value, String> {
     .and_then(|v| v.as_str())
     .unwrap_or("");
 
-  if !file_path.is_empty() {
-    std::fs::write(file_path, content).map_err(|e| e.to_string())?;
+  let target = if file_path.is_empty() {
+    let mut dialog = app.dialog().file().set_title("Save File");
+
+    if !default_path.is_empty() {
+      dialog = dialog.set_file_name(requested_file_name(default_path));
+    }
+
+    let filters = input
+      .get("filters")
+      .and_then(|v| v.as_array())
+      .cloned()
+      .unwrap_or_default();
+
+    for filter in filters {
+      let name = filter.get("name").and_then(|v| v.as_str()).unwrap_or("Files");
+      let extensions: Vec<String> = filter
+        .get("extensions")
+        .and_then(|v| v.as_array())
+        .map(|items| {
+          items
+            .iter()
+            .filter_map(|item| item.as_str().map(|ext| ext.to_string()))
+            .collect()
+        })
+        .unwrap_or_default();
+
+      if !extensions.is_empty() {
+        let refs: Vec<&str> = extensions.iter().map(|ext| ext.as_str()).collect();
+        dialog = dialog.add_filter(name, &refs);
+      }
+    }
+
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    dialog.save_file(move |path| {
+      let _ = sender.send(path);
+    });
+
+    match receiver.await.map_err(|e| e.to_string())? {
+      Some(path) => Some(path.into_path().map_err(|e| e.to_string())?),
+      None => None,
+    }
+  } else {
+    Some(std::path::PathBuf::from(file_path))
+  };
+
+  match target {
+    Some(path) => {
+      std::fs::write(&path, content).map_err(|e| e.to_string())?;
+      Ok(json!({
+        "ok": true,
+        "saved": true,
+        "canceled": false,
+        "filePath": path.to_string_lossy()
+      }))
+    }
+    None => Ok(json!({
+      "ok": true,
+      "saved": false,
+      "canceled": true
+    })),
   }
-  Ok(json!({ "ok": true }))
 }
