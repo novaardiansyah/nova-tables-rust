@@ -106,6 +106,12 @@ export const DEFAULT_SETTINGS: Settings = {
   queryExecutionMode: 'silent',
 }
 
+let activeSettings: Settings = { ...DEFAULT_SETTINGS }
+
+export function getCurrentSettings(): Settings {
+  return activeSettings
+}
+
 export function getResponsiveDefaultFontSize(): number {
   if (typeof window !== 'undefined') {
     const width = window.screen?.width || window.innerWidth || 0
@@ -187,6 +193,7 @@ export function applySettings(input: unknown): Settings {
   root.style.setProperty('--query-font-size', `${settings.queryFontSize}px`)
   root.style.setProperty('--query-font-family', fontFamilyValue(settings.queryFontFamily))
 
+  activeSettings = settings
   listeners.forEach((listener) => listener(settings))
 
   return settings

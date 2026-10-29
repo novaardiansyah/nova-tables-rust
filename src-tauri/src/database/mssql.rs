@@ -1,7 +1,8 @@
+use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use tiberius::{AuthMethod, Client, ColumnData, Config, EncryptionLevel};
+use tiberius::{AuthMethod, Client, ColumnData, Config, EncryptionLevel, FromSql};
 use tokio::net::TcpStream;
 use tokio_util::compat::{Compat, TokioAsyncWriteCompatExt};
 
@@ -26,12 +27,30 @@ pub fn column_data_to_json(data: &ColumnData<'static>) -> Value {
       Value::String(hex)
     }).unwrap_or(Value::Null),
     ColumnData::Numeric(opt) => opt.as_ref().map(|n| Value::String(n.to_string())).unwrap_or(Value::Null),
-    ColumnData::DateTime(opt) => opt.as_ref().map(|d| Value::String(format!("{:?}", d))).unwrap_or(Value::Null),
-    ColumnData::SmallDateTime(opt) => opt.as_ref().map(|d| Value::String(format!("{:?}", d))).unwrap_or(Value::Null),
-    ColumnData::Time(opt) => opt.as_ref().map(|d| Value::String(format!("{:?}", d))).unwrap_or(Value::Null),
-    ColumnData::Date(opt) => opt.as_ref().map(|d| Value::String(format!("{:?}", d))).unwrap_or(Value::Null),
-    ColumnData::DateTime2(opt) => opt.as_ref().map(|d| Value::String(format!("{:?}", d))).unwrap_or(Value::Null),
-    ColumnData::DateTimeOffset(opt) => opt.as_ref().map(|d| Value::String(format!("{:?}", d))).unwrap_or(Value::Null),
+    ColumnData::DateTime(_) | ColumnData::SmallDateTime(_) | ColumnData::DateTime2(_) => {
+      match NaiveDateTime::from_sql(data) {
+        Ok(Some(dt)) => Value::String(dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()),
+        _ => Value::Null,
+      }
+    }
+    ColumnData::Date(_) => {
+      match NaiveDate::from_sql(data) {
+        Ok(Some(d)) => Value::String(d.format("%Y-%m-%d").to_string()),
+        _ => Value::Null,
+      }
+    }
+    ColumnData::Time(_) => {
+      match NaiveTime::from_sql(data) {
+        Ok(Some(t)) => Value::String(t.format("%H:%M:%S%.3f").to_string()),
+        _ => Value::Null,
+      }
+    }
+    ColumnData::DateTimeOffset(_) => {
+      match DateTime::<FixedOffset>::from_sql(data) {
+        Ok(Some(dto)) => Value::String(dto.to_rfc3339()),
+        _ => Value::Null,
+      }
+    }
     ColumnData::Xml(opt) => opt.as_ref().map(|x| Value::String(x.to_string())).unwrap_or(Value::Null),
   }
 }

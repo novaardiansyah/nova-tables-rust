@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import Icon from '@/components/common/Icon'
 import JsonView from '@/components/results/JsonView'
-import { cellText } from '@/resultFormats'
+import { cellText, formatDateTime, isDateTimeString } from '@/resultFormats'
 
-function formatRaw(value: unknown): string {
+function formatRaw(value: unknown, timeZone?: string): string {
   if (value === null || value === undefined) return ''
   if (typeof value === 'object' && value !== null && 'special' in value) return String((value as { special: unknown }).special)
-  if (value instanceof Date) return value.toISOString()
+  if (value instanceof Date) return formatDateTime(value, timeZone)
+  if (typeof value === 'string' && isDateTimeString(value)) return formatDateTime(value, timeZone)
   if (typeof value === 'object') {
     try {
       return JSON.stringify(value, null, 2)
@@ -128,6 +129,7 @@ export interface EditCellState {
 export interface ValueInspectorDialogProps {
   open: boolean
   target?: InspectorTarget | null
+  timezone?: string
   edits?: Record<string, EditCellState>
   editable?: boolean
   onSave?: (newValue: string) => void
@@ -138,6 +140,7 @@ export interface ValueInspectorDialogProps {
 export default function ValueInspectorDialog({
   open,
   target = null,
+  timezone,
   edits = {},
   editable = false,
   onSave,
@@ -151,25 +154,30 @@ export default function ValueInspectorDialog({
     if (target.type === 'cell') {
       const edit = edits[`${target.rowIndex}:${target.column?.name}`]
       const val = edit ? edit.value : target.value
-      return formatRaw(val)
+      return formatRaw(val, timezone)
     }
     if (target.type === 'rows' || target.type === 'selection') {
       const cols = target.columnNames || []
       const records = (target.matrix || []).map((row) => {
         const item: Record<string, unknown> = {}
         cols.forEach((colName, idx) => {
-          item[colName] = row[idx] ?? null
+          const cellVal = row[idx]
+          if (cellVal !== null && cellVal !== undefined && isDateTimeString(cellVal)) {
+            item[colName] = formatDateTime(cellVal, timezone)
+          } else {
+            item[colName] = cellVal ?? null
+          }
         })
         return item
       })
       try {
         return JSON.stringify(records.length === 1 ? records[0] : records, null, 2)
       } catch {
-        return (target.matrix || []).map((row) => row.map(cellText).join('\t')).join('\n')
+        return (target.matrix || []).map((row) => row.map((c) => cellText(c, timezone)).join('\t')).join('\n')
       }
     }
     return ''
-  }, [edits, open, target])
+  }, [edits, open, target, timezone])
 
   const initialFormat = useMemo(() => {
     if (isMulti) return 'json'
