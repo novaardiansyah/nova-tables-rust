@@ -44,7 +44,10 @@ function buildInitial(connection?: ConnectionDialogConnection | null): Connectio
     port: String(connection.port || 1433),
     username: connection.username || '',
     password: '',
-    database: connection.database || connection.databaseName || '',
+    database:
+      connection.databaseName !== undefined && connection.databaseName !== null
+        ? connection.databaseName
+        : connection.database || '',
     environment: connection.environment || '',
     encrypt: connection.encrypt !== false,
     trustServerCertificate: connection.trustServerCertificate !== false,
@@ -118,6 +121,7 @@ export default function ConnectionDialog({
       port: Number(form.port),
       username: form.username.trim(),
       database: form.database.trim(),
+      databaseName: form.database.trim(),
       environment: form.environment,
       encrypt: form.encrypt,
       trustServerCertificate: form.trustServerCertificate,

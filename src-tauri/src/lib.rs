@@ -27,6 +27,7 @@ pub fn run() {
       commands::connection::list_connections,
       commands::connection::save_connection,
       commands::connection::delete_connection,
+      commands::connection::update_last_database,
       commands::connection::list_folders,
       commands::connection::save_folder,
       commands::connection::delete_folder,

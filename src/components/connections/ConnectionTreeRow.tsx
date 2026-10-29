@@ -12,6 +12,7 @@ export interface ConnectionItem {
   password?: string | null
   database?: string | null
   databaseName?: string | null
+  lastDatabaseUsed?: string | null
   environment?: string | null
   folderId?: string | null
   lastConnectedAt?: string | null
@@ -171,7 +172,9 @@ export function ConnectionRow({
             </span>
             <span className="block truncate text-[length:var(--app-text-10)] leading-[calc(var(--app-text-12)+4px)] text-text-faint">
               {connection.host}:{connection.port}
-              {connection.database ? ` · ${connection.database}` : ''}
+              {connection.lastDatabaseUsed || connection.database || connection.databaseName
+                ? ` · ${connection.lastDatabaseUsed || connection.database || connection.databaseName}`
+                : ''}
             </span>
           </span>
         </button>

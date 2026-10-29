@@ -259,7 +259,14 @@ export function useSessionManager({
         setLastConnectedId(connection.id)
         setConnections((prev) =>
           prev.map((c) =>
-            c.id === connection.id ? { ...c, lastConnectedAt: new Date().toISOString() } : c,
+            c.id === connection.id
+              ? {
+                  ...c,
+                  lastConnectedAt: new Date().toISOString(),
+                  lastDatabaseUsed: database,
+                  database,
+                }
+              : c,
           ),
         )
 
@@ -296,6 +303,22 @@ export function useSessionManager({
       const current = activeSession()
       if (!current || !database) return
       patchSession(current.connectionId, { activeDatabase: database })
+      try {
+        await api.updateLastDatabase(current.connectionId, database)
+        setConnections((prev) =>
+          prev.map((c) =>
+            c.id === current.connectionId
+              ? {
+                  ...c,
+                  lastDatabaseUsed: database,
+                  database,
+                }
+              : c,
+          ),
+        )
+      } catch {
+        // Ignore failure
+      }
       await loadTables(current.connectionId, database)
       await loadColumns(current.connectionId, database)
       await loadModules(current.connectionId, database)
@@ -361,6 +384,24 @@ export function useSessionManager({
         if (!current) return
         const database = pickDatabase(databases, current.activeDatabase)
         patchSession(activeConnectionId, { databases, activeDatabase: database })
+        if (database) {
+          try {
+            await api.updateLastDatabase(activeConnectionId, database)
+            setConnections((prev) =>
+              prev.map((c) =>
+                c.id === activeConnectionId
+                  ? {
+                      ...c,
+                      lastDatabaseUsed: database,
+                      database,
+                    }
+                  : c,
+              ),
+            )
+          } catch {
+            // Ignore failure
+          }
+        }
         await loadTables(activeConnectionId, database)
         await loadColumns(activeConnectionId, database)
         await loadModules(activeConnectionId, database)

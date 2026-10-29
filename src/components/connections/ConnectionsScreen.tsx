@@ -932,7 +932,9 @@ export default function ConnectionsScreen({
                             </span>
                             <span className="block truncate text-[length:var(--app-text-10)] leading-[calc(var(--app-text-12)+4px)] text-text-faint">
                               {conn.host}:{conn.port}
-                              {conn.database ? ` · ${conn.database}` : ''}
+                              {conn.lastDatabaseUsed || conn.database || conn.databaseName
+                                ? ` · ${conn.lastDatabaseUsed || conn.database || conn.databaseName}`
+                                : ''}
                               {conn.lastConnectedAt ? ` · ${formatRelativeTime(String(conn.lastConnectedAt))}` : ''}
                             </span>
                           </span>
@@ -998,7 +1000,9 @@ export default function ConnectionsScreen({
                         </span>
                         <span className="truncate text-[length:var(--app-text-11)] text-text-muted">
                           {lastConnection.host}:{lastConnection.port}
-                          {lastConnection.database ? ` · ${lastConnection.database}` : ''}
+                          {lastConnection.lastDatabaseUsed || lastConnection.database || lastConnection.databaseName
+                            ? ` · ${lastConnection.lastDatabaseUsed || lastConnection.database || lastConnection.databaseName}`
+                            : ''}
                         </span>
                       </div>
                     </div>

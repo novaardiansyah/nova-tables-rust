@@ -37,6 +37,15 @@ pub fn delete_connection(id: String) -> Result<Value, String> {
 }
 
 #[tauri::command]
+pub fn update_last_database(connection_id: String, database: String) -> Result<Value, String> {
+  let db_path = FileSystem::get_database_path()?;
+  let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
+  LocalStore::update_last_database_used(&conn, &connection_id, &database)
+    .map_err(|e| e.to_string())?;
+  Ok(json!({ "ok": true }))
+}
+
+#[tauri::command]
 pub fn list_folders() -> Result<Value, String> {
   let db_path = FileSystem::get_database_path()?;
   let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
@@ -142,6 +151,7 @@ pub async fn test_connection(connection: Value) -> Result<Value, String> {
     .get("database")
     .or_else(|| connection.get("databaseName"))
     .and_then(|v| v.as_str())
+    .filter(|s| !s.is_empty())
     .map(|s| s.to_string())
     .or_else(|| stored.as_ref().and_then(|s| s.database_name.clone()));
 
@@ -277,12 +287,33 @@ pub async fn connect(input: Value) -> Result<Value, String> {
     .or_else(|| stored.as_ref().and_then(|s| s.password_cipher.clone()))
     .unwrap_or_default();
 
+  // Prefer explicitly requested database; if not specified, use last_database_used, then default database_name
   let database = input
     .get("database")
-    .or_else(|| input.get("databaseName"))
     .and_then(|v| v.as_str())
+    .filter(|s| !s.is_empty())
     .map(|s| s.to_string())
-    .or_else(|| stored.as_ref().and_then(|s| s.database_name.clone()))
+    .or_else(|| {
+      stored.as_ref().and_then(|s| {
+        s.last_database_used
+          .as_ref()
+          .filter(|db| !db.is_empty())
+          .cloned()
+          .or_else(|| {
+            s.database_name
+              .as_ref()
+              .filter(|db| !db.is_empty())
+              .cloned()
+          })
+      })
+    })
+    .or_else(|| {
+      input
+        .get("databaseName")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+    })
     .unwrap_or_else(|| "master".to_string());
 
   let encrypt = input
@@ -331,10 +362,10 @@ pub async fn connect(input: Value) -> Result<Value, String> {
 
       let (server_name, version, edition) = mssql::read_server_info(&mut client).await;
 
-      // Update last_connected_at
+      // Update last_connected_at and last_database_used
       let _ = conn.execute(
-        "UPDATE connections SET last_connected_at = datetime('now') WHERE id = ?1",
-        params![id],
+        "UPDATE connections SET last_connected_at = datetime('now'), last_database_used = ?1 WHERE id = ?2",
+        params![database, id],
       );
 
       Ok(json!({

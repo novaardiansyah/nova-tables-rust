@@ -40,6 +40,7 @@ export interface ConnectionModel {
   password?: string | null
   database?: string
   databaseName?: string
+  lastDatabaseUsed?: string | null
   folderId?: string | null
   environment?: string
   encrypt?: boolean
@@ -320,7 +321,11 @@ export const api = {
 
   listConnections: async (): Promise<ConnectionModel[]> => {
     const res = await callCommand<{ connections?: ConnectionModel[] }>('list_connections')
-    return res?.connections || []
+    const list = res?.connections || []
+    return list.map((conn) => ({
+      ...conn,
+      database: conn.lastDatabaseUsed || conn.databaseName || conn.database || '',
+    }))
   },
 
   getLastConnectedId: async (): Promise<string | null> => {
@@ -343,7 +348,10 @@ export const api = {
       host: connection.host || '127.0.0.1',
       port: Number(connection.port) || 1433,
       username: connection.username || '',
-      databaseName: connection.databaseName || connection.database || '',
+      databaseName:
+        connection.databaseName !== undefined && connection.databaseName !== null
+          ? connection.databaseName
+          : connection.database || '',
       folderId: connection.folderId || null,
       environment: connection.environment || '',
       encrypt: connection.encrypt !== false,
@@ -797,6 +805,12 @@ export const api = {
         target = { ...found, ...connection }
       }
     }
+    if (!connection?.database && !connection?.databaseName) {
+      const preferredDb = target.lastDatabaseUsed || target.database || target.databaseName || ''
+      if (preferredDb) {
+        target.database = preferredDb
+      }
+    }
     const res =
       (await callCommand('connect', { input: target })) ||
       (await callCommand('test_connection', { connection: target }))
@@ -812,7 +826,7 @@ export const api = {
       name: target?.name || 'SQL Server',
       host: target?.host || '127.0.0.1',
       port: target?.port || 1433,
-      database: target?.database || target?.databaseName || 'master',
+      database: res?.database || target?.database || target?.lastDatabaseUsed || target?.databaseName || 'master',
       databases: [
         { name: 'master', isSystem: true, isOnline: true },
         { name: 'model', isSystem: true, isOnline: true },
@@ -824,6 +838,10 @@ export const api = {
       edition: 'Developer Edition',
       ...(res || {}),
     }
+  },
+
+  updateLastDatabase: async (connectionId: string, database: string): Promise<unknown> => {
+    return callCommand('update_last_database', { connectionId, database })
   },
 
   disconnect: async (connectionId: string): Promise<unknown> => {
