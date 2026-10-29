@@ -19,7 +19,10 @@ pub fn run() {
     })
     .invoke_handler(tauri::generate_handler![
       commands::system::get_system_info,
+      commands::system::get_app_info,
       commands::system::greet,
+      commands::system::get_settings,
+      commands::system::save_settings,
       commands::connection::list_connections,
       commands::connection::save_connection,
       commands::connection::delete_connection,
@@ -30,6 +33,20 @@ pub fn run() {
       commands::query::execute_query,
       commands::query::list_databases,
       commands::query::list_tables,
+      commands::query::list_columns,
+      commands::query::table_structure,
+      commands::query::table_relations,
+      commands::query::list_modules,
+      commands::query::module_definition,
+      commands::query::describe_result,
+      commands::query::get_execution_plan,
+      commands::query::list_query_history,
+      commands::query::clear_query_history,
+      commands::query::delete_query_history,
+      commands::query::list_saved_queries,
+      commands::query::save_saved_query,
+      commands::query::rename_saved_query,
+      commands::query::delete_saved_query,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

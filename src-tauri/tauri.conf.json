@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Nova Tables",
         "width": 1280,
         "height": 800,
