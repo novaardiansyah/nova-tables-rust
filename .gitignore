@@ -13,6 +13,8 @@ dist-electron
 dist-ssr
 release
 build
+src-tauri/target
+target
 *.local
 
 # Local agent notes
