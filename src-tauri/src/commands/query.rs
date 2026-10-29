@@ -107,20 +107,35 @@ pub async fn table_structure(
   }
   Ok(json!({
     "ok": true,
+    "database": database,
+    "schema": s,
+    "table": t,
+    "objectName": format!("[{}].[{}]", s.replace(']', "]]"), t.replace(']', "]]")),
     "columns": [],
+    "primaryKey": [],
+    "uniqueKeys": [],
     "indexes": [],
-    "foreignKeys": []
+    "foreignKeys": [],
+    "statement": ""
   }))
 }
 
 #[tauri::command]
-pub fn table_relations(
+pub async fn table_relations(
   connection_id: Option<String>,
   database: Option<String>,
   schema: Option<String>,
   table: Option<String>,
 ) -> Result<Value, String> {
-  let _ = (connection_id, database, schema, table);
+  let s = schema.unwrap_or_else(|| "dbo".to_string());
+  let t = table.unwrap_or_default();
+  if let Some(id) = connection_id.as_deref() {
+    if let Ok(mut client) = mssql::get_client_for_connection(id, database.as_deref()).await {
+      if let Ok(res) = mssql::table_relations(&mut client, database.as_deref(), &s, &t).await {
+        return Ok(res);
+      }
+    }
+  }
   Ok(json!({
     "ok": true,
     "relations": []

@@ -392,6 +392,154 @@ pub async fn list_modules(client: &mut MssqlClient, database: Option<&str>) -> R
   }))
 }
 
+fn quote_name(value: &str) -> String {
+  format!("[{}]", value.replace(']', "]]"))
+}
+
+struct TableColumnItem {
+  name: String,
+  type_name: String,
+  max_length: i16,
+  precision: u8,
+  scale: u8,
+  is_nullable: bool,
+  is_identity: bool,
+  is_computed: bool,
+  computed_definition: Option<String>,
+  seed_value: Option<i64>,
+  increment_value: Option<i64>,
+  collation: Option<String>,
+  database_collation: Option<String>,
+  default_name: Option<String>,
+  default_definition: Option<String>,
+}
+
+fn build_column_definition(col: &TableColumnItem) -> String {
+  if col.is_computed {
+    return format!(
+      "{} AS {}",
+      quote_name(&col.name),
+      col.computed_definition.as_deref().unwrap_or("")
+    );
+  }
+
+  let type_lower = col.type_name.to_lowercase();
+  let type_str = match type_lower.as_str() {
+    "decimal" | "numeric" => format!("{}({}, {})", col.type_name, col.precision, col.scale),
+    "datetime2" | "datetimeoffset" | "time" => format!("{}({})", col.type_name, col.scale),
+    "char" | "varchar" | "binary" | "varbinary" => {
+      if col.max_length == -1 {
+        format!("{}(MAX)", col.type_name)
+      } else {
+        format!("{}({})", col.type_name, col.max_length)
+      }
+    }
+    "nchar" | "nvarchar" => {
+      if col.max_length == -1 {
+        format!("{}(MAX)", col.type_name)
+      } else {
+        format!("{}({})", col.type_name, col.max_length / 2)
+      }
+    }
+    _ => col.type_name.clone(),
+  };
+
+  let mut definition = format!("{} {}", quote_name(&col.name), type_str);
+
+  if col.is_identity {
+    let seed = col.seed_value.unwrap_or(1);
+    let inc = col.increment_value.unwrap_or(1);
+    definition.push_str(&format!(" IDENTITY({}, {})", seed, inc));
+  }
+
+  if let Some(collat) = &col.collation {
+    if col.database_collation.as_ref() != Some(collat) {
+      definition.push_str(&format!(" COLLATE {}", collat));
+    }
+  }
+
+  if !col.is_nullable {
+    definition.push_str(" NOT NULL");
+  }
+
+  definition
+}
+
+struct KeyEntry {
+  name: String,
+  primary: bool,
+  unique: bool,
+  unique_constraint: bool,
+  clustered: bool,
+  columns: Vec<String>,
+  column_names: Vec<String>,
+  descending: Vec<bool>,
+}
+
+struct FkItem {
+  column: String,
+  referenced_column: String,
+}
+
+struct FkGroup {
+  name: String,
+  referenced_schema: String,
+  referenced_table: String,
+  columns: Vec<FkItem>,
+}
+
+pub async fn table_relations(
+  client: &mut MssqlClient,
+  database: Option<&str>,
+  schema: &str,
+  table: &str,
+) -> Result<Value, String> {
+  if let Some(db) = database {
+    if !db.is_empty() {
+      let switch_query = format!("USE [{}]", db.replace(']', "]]"));
+      let _ = client.simple_query(switch_query).await;
+    }
+  }
+
+  let rel_query = "SELECT pc.name AS columnName,
+          rs.name AS referencedSchema,
+          rt.name AS referencedTable,
+          rc.name AS referencedColumn
+     FROM sys.foreign_keys fk
+     JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+     JOIN sys.columns pc ON pc.object_id = fkc.parent_object_id AND pc.column_id = fkc.parent_column_id
+     JOIN sys.tables rt ON rt.object_id = fkc.referenced_object_id
+     JOIN sys.schemas rs ON rs.schema_id = rt.schema_id
+     JOIN sys.columns rc ON rc.object_id = fkc.referenced_object_id AND rc.column_id = fkc.referenced_column_id
+     JOIN sys.tables t ON t.object_id = fk.parent_object_id
+     JOIN sys.schemas s ON s.schema_id = t.schema_id
+    WHERE s.name = @P1 AND t.name = @P2
+    ORDER BY fk.name, fkc.constraint_column_id";
+
+  let mut relations = Vec::new();
+  if let Ok(stream) = client.query(rel_query, &[&schema, &table]).await {
+    if let Ok(rows) = stream.into_first_result().await {
+      for row in rows {
+        let col: &str = row.get(0).unwrap_or("");
+        let ref_schema: &str = row.get(1).unwrap_or("");
+        let ref_table: &str = row.get(2).unwrap_or("");
+        let ref_col: &str = row.get(3).unwrap_or("");
+        relations.push(json!({
+          "column": col,
+          "referencedSchema": ref_schema,
+          "referencedTable": ref_table,
+          "referencedColumn": ref_col,
+        }));
+      }
+    }
+  }
+
+  Ok(json!({
+    "ok": true,
+    "relations": relations
+  }))
+}
+
 pub async fn table_structure(
   client: &mut MssqlClient,
   database: Option<&str>,
@@ -405,16 +553,46 @@ pub async fn table_structure(
     }
   }
 
+  // 1. Default constraints
+  let def_query = "SELECT c.name AS columnName, d.name AS constraintName, d.definition AS definition
+     FROM sys.default_constraints d
+     JOIN sys.columns c ON c.object_id = d.parent_object_id AND c.column_id = d.parent_column_id
+     JOIN sys.tables t ON t.object_id = d.parent_object_id
+     JOIN sys.schemas s ON s.schema_id = t.schema_id
+    WHERE s.name = @P1 AND t.name = @P2";
+
+  let mut defaults: HashMap<String, (String, String)> = HashMap::new();
+  if let Ok(stream) = client.query(def_query, &[&schema, &table]).await {
+    if let Ok(rows) = stream.into_first_result().await {
+      for row in rows {
+        let col_name: &str = row.get(0).unwrap_or("");
+        let constr_name: &str = row.get(1).unwrap_or("");
+        let definition: &str = row.get(2).unwrap_or("");
+        if !col_name.is_empty() {
+          defaults.insert(col_name.to_string(), (constr_name.to_string(), definition.to_string()));
+        }
+      }
+    }
+  }
+
+  // 2. Columns
   let col_query = "SELECT c.name AS columnName,
           c.is_nullable AS isNullable,
           c.is_identity AS isIdentity,
           c.is_computed AS isComputed,
+          cc.definition AS computedDefinition,
+          CAST(ic.seed_value AS bigint) AS seedValue,
+          CAST(ic.increment_value AS bigint) AS incrementValue,
+          c.collation_name AS collation,
+          CAST(DATABASEPROPERTYEX(DB_NAME(), 'Collation') AS nvarchar(128)) AS databaseCollation,
           ty.name AS typeName,
           c.max_length AS maxLength,
           c.precision AS precision,
           c.scale AS scale
      FROM sys.columns c
      JOIN sys.types ty ON ty.user_type_id = c.user_type_id
+     LEFT JOIN sys.identity_columns ic ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+     LEFT JOIN sys.computed_columns cc ON cc.object_id = c.object_id AND cc.column_id = c.column_id
      JOIN sys.tables t ON t.object_id = c.object_id
      JOIN sys.schemas s ON s.schema_id = t.schema_id
     WHERE s.name = @P1 AND t.name = @P2
@@ -423,39 +601,276 @@ pub async fn table_structure(
   let stream = client.query(col_query, &[&schema, &table]).await.map_err(|e| e.to_string())?;
   let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
 
-  let mut columns = Vec::new();
+  let mut columns: Vec<TableColumnItem> = Vec::new();
   for row in rows {
     let col_name: &str = row.get(0).unwrap_or("");
     let is_nullable: bool = row.get(1).unwrap_or(false);
     let is_identity: bool = row.get(2).unwrap_or(false);
     let is_computed: bool = row.get(3).unwrap_or(false);
-    let type_name: &str = row.get(4).unwrap_or("");
-    let max_length: i16 = row.get(5).unwrap_or(0);
-    let precision: u8 = row.get(6).unwrap_or(0);
-    let scale: u8 = row.get(7).unwrap_or(0);
+    let computed_def: Option<&str> = row.get(4);
+    let seed_value: Option<i64> = row.get(5);
+    let increment_value: Option<i64> = row.get(6);
+    let collation: Option<&str> = row.get(7);
+    let db_collation: Option<&str> = row.get(8);
+    let type_name: &str = row.get(9).unwrap_or("");
+    let max_length: i16 = row.get(10).unwrap_or(0);
+    let precision: u8 = row.get(11).unwrap_or(0);
+    let scale: u8 = row.get(12).unwrap_or(0);
 
-    columns.push(json!({
-      "name": col_name,
-      "typeName": type_name,
-      "maxLength": max_length,
-      "precision": precision,
-      "scale": scale,
-      "isNullable": is_nullable,
-      "isIdentity": is_identity,
-      "isComputed": is_computed,
-      "defaultName": null,
-      "defaultDefinition": null,
-    }));
+    let (def_name, def_definition) = defaults
+      .get(col_name)
+      .map(|(n, d)| (Some(n.clone()), Some(d.clone())))
+      .unwrap_or((None, None));
+
+    columns.push(TableColumnItem {
+      name: col_name.to_string(),
+      type_name: type_name.to_string(),
+      max_length,
+      precision,
+      scale,
+      is_nullable,
+      is_identity,
+      is_computed,
+      computed_definition: computed_def.map(|s| s.to_string()),
+      seed_value,
+      increment_value,
+      collation: collation.map(|s| s.to_string()),
+      database_collation: db_collation.map(|s| s.to_string()),
+      default_name: def_name,
+      default_definition: def_definition,
+    });
   }
+
+  // 3. Keys and Indexes
+  let keys_query = "SELECT i.is_primary_key AS isPrimaryKey,
+          i.is_unique AS isUnique,
+          i.is_unique_constraint AS isUniqueConstraint,
+          i.type_desc AS typeDesc,
+          i.name AS indexName,
+          col.name AS columnName,
+          ic.is_descending_key AS isDescending
+     FROM sys.indexes i
+     JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+     JOIN sys.columns col ON col.object_id = ic.object_id AND col.column_id = ic.column_id
+     JOIN sys.tables t ON t.object_id = i.object_id
+     JOIN sys.schemas s ON s.schema_id = t.schema_id
+    WHERE s.name = @P1 AND t.name = @P2 AND ic.is_included_column = 0
+      AND i.is_hypothetical = 0 AND i.type IN (1, 2)
+    ORDER BY i.is_primary_key DESC, i.name, ic.key_ordinal";
+
+  let mut key_order: Vec<String> = Vec::new();
+  let mut key_map: HashMap<String, KeyEntry> = HashMap::new();
+
+  if let Ok(stream) = client.query(keys_query, &[&schema, &table]).await {
+    if let Ok(rows) = stream.into_first_result().await {
+      for row in rows {
+        let is_primary: bool = row.get(0).unwrap_or(false);
+        let is_unique: bool = row.get(1).unwrap_or(false);
+        let is_unique_constraint: bool = row.get(2).unwrap_or(false);
+        let type_desc: &str = row.get(3).unwrap_or("");
+        let index_name: &str = row.get(4).unwrap_or("");
+        let col_name: &str = row.get(5).unwrap_or("");
+        let is_descending: bool = row.get(6).unwrap_or(false);
+
+        let prefix = if is_unique_constraint { "uq" } else if is_primary { "pk" } else { "ix" };
+        let map_key = format!("{}::{}", prefix, index_name);
+
+        if !key_map.contains_key(&map_key) {
+          key_order.push(map_key.clone());
+          key_map.insert(map_key.clone(), KeyEntry {
+            name: index_name.to_string(),
+            primary: is_primary,
+            unique: is_unique,
+            unique_constraint: is_unique_constraint,
+            clustered: type_desc.to_uppercase().starts_with("CLUSTERED"),
+            columns: Vec::new(),
+            column_names: Vec::new(),
+            descending: Vec::new(),
+          });
+        }
+
+        if let Some(entry) = key_map.get_mut(&map_key) {
+          let col_formatted = if is_descending {
+            format!("{} DESC", quote_name(col_name))
+          } else {
+            quote_name(col_name)
+          };
+          entry.columns.push(col_formatted);
+          entry.column_names.push(col_name.to_string());
+          entry.descending.push(is_descending);
+        }
+      }
+    }
+  }
+
+  let mut keys: Vec<KeyEntry> = Vec::new();
+  let mut indexes: Vec<KeyEntry> = Vec::new();
+
+  for map_key in key_order {
+    if let Some(entry) = key_map.remove(&map_key) {
+      if entry.primary || entry.unique_constraint {
+        keys.push(entry);
+      } else {
+        indexes.push(entry);
+      }
+    }
+  }
+
+  // 4. Foreign Keys
+  let fk_query = "SELECT fk.name AS foreignKeyName,
+          pc.name AS parentColumn,
+          rs.name AS referencedSchema,
+          rt.name AS referencedTable,
+          rc.name AS referencedColumn
+     FROM sys.foreign_keys fk
+     JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+     JOIN sys.columns pc ON pc.object_id = fkc.parent_object_id AND pc.column_id = fkc.parent_column_id
+     JOIN sys.tables rt ON rt.object_id = fkc.referenced_object_id
+     JOIN sys.schemas rs ON rs.schema_id = rt.schema_id
+     JOIN sys.columns rc ON rc.object_id = fkc.referenced_object_id AND rc.column_id = fkc.referenced_column_id
+     JOIN sys.tables t ON t.object_id = fk.parent_object_id
+     JOIN sys.schemas s ON s.schema_id = t.schema_id
+    WHERE s.name = @P1 AND t.name = @P2
+    ORDER BY fk.name, fkc.constraint_column_id";
+
+  let mut fk_order: Vec<String> = Vec::new();
+  let mut fk_map: HashMap<String, FkGroup> = HashMap::new();
+
+  if let Ok(stream) = client.query(fk_query, &[&schema, &table]).await {
+    if let Ok(rows) = stream.into_first_result().await {
+      for row in rows {
+        let fk_name: &str = row.get(0).unwrap_or("");
+        let parent_col: &str = row.get(1).unwrap_or("");
+        let ref_schema: &str = row.get(2).unwrap_or("");
+        let ref_table: &str = row.get(3).unwrap_or("");
+        let ref_col: &str = row.get(4).unwrap_or("");
+
+        if !fk_map.contains_key(fk_name) {
+          fk_order.push(fk_name.to_string());
+          fk_map.insert(fk_name.to_string(), FkGroup {
+            name: fk_name.to_string(),
+            referenced_schema: ref_schema.to_string(),
+            referenced_table: ref_table.to_string(),
+            columns: Vec::new(),
+          });
+        }
+
+        if let Some(entry) = fk_map.get_mut(fk_name) {
+          entry.columns.push(FkItem {
+            column: parent_col.to_string(),
+            referenced_column: ref_col.to_string(),
+          });
+        }
+      }
+    }
+  }
+
+  let mut foreign_keys: Vec<FkGroup> = Vec::new();
+  for fk_name in fk_order {
+    if let Some(entry) = fk_map.remove(&fk_name) {
+      foreign_keys.push(entry);
+    }
+  }
+
+  // 5. Build DDL Statement
+  let mut lines = Vec::new();
+  for col in &columns {
+    let mut def = build_column_definition(col);
+    if let Some(default_def) = &col.default_definition {
+      if !col.is_computed {
+        def.push_str(&format!(" DEFAULT {}", default_def));
+      }
+    }
+    lines.push(def);
+  }
+
+  for foreign in &foreign_keys {
+    let columns_list = foreign.columns.iter().map(|item| quote_name(&item.column)).collect::<Vec<_>>().join(", ");
+    let referenced_list = foreign.columns.iter().map(|item| quote_name(&item.referenced_column)).collect::<Vec<_>>().join(", ");
+    lines.push(format!(
+      "CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {}.{} ({})",
+      quote_name(&foreign.name),
+      columns_list,
+      quote_name(&foreign.referenced_schema),
+      quote_name(&foreign.referenced_table),
+      referenced_list
+    ));
+  }
+
+  for key in &keys {
+    if key.primary {
+      lines.push(format!("PRIMARY KEY ({})", key.columns.join(", ")));
+    } else {
+      let modifier = if key.clustered { " CLUSTERED" } else { "" };
+      lines.push(format!("CONSTRAINT {} UNIQUE{} ({})", quote_name(&key.name), modifier, key.columns.join(", ")));
+    }
+  }
+
+  let body = lines.iter().map(|line| format!("  {}", line)).collect::<Vec<_>>().join(", \n");
+  let statement = format!("CREATE TABLE {}.{} (\n{}\n);", quote_name(schema), quote_name(table), body);
+
+  // 6. Format JSON responses
+  let json_columns: Vec<Value> = columns.iter().map(|col| json!({
+    "name": col.name,
+    "typeName": col.type_name,
+    "maxLength": col.max_length,
+    "precision": col.precision,
+    "scale": col.scale,
+    "isNullable": col.is_nullable,
+    "isIdentity": col.is_identity,
+    "isComputed": col.is_computed,
+    "computedDefinition": col.computed_definition,
+    "seedValue": col.seed_value,
+    "incrementValue": col.increment_value,
+    "collation": col.collation,
+    "databaseCollation": col.database_collation,
+    "defaultName": col.default_name,
+    "defaultDefinition": col.default_definition,
+  })).collect();
+
+  let json_primary_key: Vec<Value> = keys.iter().filter(|k| k.primary).map(|k| json!({
+    "name": k.name,
+    "columns": k.column_names,
+    "descending": k.descending,
+    "clustered": k.clustered,
+  })).collect();
+
+  let json_unique_keys: Vec<Value> = keys.iter().filter(|k| !k.primary).map(|k| json!({
+    "name": k.name,
+    "columns": k.column_names,
+    "descending": k.descending,
+    "clustered": k.clustered,
+  })).collect();
+
+  let json_indexes: Vec<Value> = indexes.iter().map(|idx| json!({
+    "name": idx.name,
+    "columns": idx.column_names,
+    "descending": idx.descending,
+    "unique": idx.unique,
+    "clustered": idx.clustered,
+  })).collect();
+
+  let json_foreign_keys: Vec<Value> = foreign_keys.iter().map(|fk| json!({
+    "name": fk.name,
+    "referencedSchema": fk.referenced_schema,
+    "referencedTable": fk.referenced_table,
+    "columns": fk.columns.iter().map(|c| json!({
+      "column": c.column,
+      "referencedColumn": c.referenced_column,
+    })).collect::<Vec<_>>(),
+  })).collect();
 
   Ok(json!({
     "database": database,
     "schema": schema,
     "table": table,
-    "objectName": format!("[{}].[{}]", schema, table),
-    "columns": columns,
-    "foreignKeys": [],
-    "indexes": []
+    "objectName": format!("{}.{}", quote_name(schema), quote_name(table)),
+    "statement": statement,
+    "columns": json_columns,
+    "foreignKeys": json_foreign_keys,
+    "primaryKey": json_primary_key,
+    "uniqueKeys": json_unique_keys,
+    "indexes": json_indexes,
   }))
 }
 

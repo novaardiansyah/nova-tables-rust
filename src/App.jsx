@@ -1344,20 +1344,27 @@ export default function App() {
         schema,
         table,
       )
+      const primaryKeyList = Array.isArray(structure?.primaryKey) ? structure.primaryKey : []
+      const uniqueKeysList = Array.isArray(structure?.uniqueKeys) ? structure.uniqueKeys : []
+      const foreignKeysList = Array.isArray(structure?.foreignKeys) ? structure.foreignKeys : []
+      const indexesList = Array.isArray(structure?.indexes) ? structure.indexes : []
+      const columnsList = Array.isArray(structure?.columns) ? structure.columns : []
+
       updateTab(current.connectionId, tabId, {
         loading: false,
         error: null,
         title: `Design ${table}`,
         target: { mode: 'edit', schema, table },
         design: {
-          schema: structure.schema,
-          table: structure.table,
-          columns: structure.columns.map((column) => ({ ...column, originalName: column.name })),
-          primaryKey: structure.primaryKey[0]?.columns ?? [],
-          primaryKeyName: structure.primaryKey[0]?.name ?? null,
-          uniqueKeys: structure.uniqueKeys,
-          foreignKeys: structure.foreignKeys,
-          indexes: structure.indexes,
+          schema: structure?.schema || schema,
+          table: structure?.table || table,
+          columns: columnsList.map((column) => ({ ...column, originalName: column.name })),
+          primaryKey: primaryKeyList[0]?.columns ?? [],
+          primaryKeyName: primaryKeyList[0]?.name ?? null,
+          uniqueKeys: uniqueKeysList,
+          foreignKeys: foreignKeysList,
+          indexes: indexesList,
+          statement: structure?.statement || '',
         },
       })
     },
@@ -1366,6 +1373,7 @@ export default function App() {
 
   const handleOpenStructure = useCallback(
     async (table) => {
+      if (!table) return
       const current = activeSession()
       if (!current) {
         showBanner('warn', 'Open a connection before opening a structure.')
@@ -1376,14 +1384,18 @@ export default function App() {
         return
       }
 
-      const tabId = openDesignTab(current.connectionId, `Design ${table.name}`, {
+      const schema = table.schema || 'dbo'
+      const tableName = table.name || table.table || ''
+      if (!tableName) return
+
+      const tabId = openDesignTab(current.connectionId, `Design ${tableName}`, {
         mode: 'edit',
-        schema: table.schema,
-        table: table.name,
+        schema,
+        table: tableName,
       })
 
       try {
-        await reloadDesign(tabId, table.schema, table.name)
+        await reloadDesign(tabId, schema, tableName)
       } catch (error) {
         updateTab(current.connectionId, tabId, { loading: false, error: error.message })
       }

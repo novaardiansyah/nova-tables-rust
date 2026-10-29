@@ -12,24 +12,30 @@ function constraintName(prefix, table, columns) {
 }
 
 function cloneDesign(structure, name) {
+  const primaryKeyList = Array.isArray(structure?.primaryKey) ? structure.primaryKey : []
+  const uniqueKeysList = Array.isArray(structure?.uniqueKeys) ? structure.uniqueKeys : []
+  const foreignKeysList = Array.isArray(structure?.foreignKeys) ? structure.foreignKeys : []
+  const indexesList = Array.isArray(structure?.indexes) ? structure.indexes : []
+  const columnsList = Array.isArray(structure?.columns) ? structure.columns : []
+
   return {
-    schema: structure.schema,
+    schema: structure?.schema || 'dbo',
     table: name,
-    columns: structure.columns.map((column) => ({
+    columns: columnsList.map((column) => ({
       ...column,
       defaultName: null,
       originalName: null,
     })),
-    primaryKey: structure.primaryKey[0]?.columns ?? [],
-    uniqueKeys: structure.uniqueKeys.map((key) => ({
+    primaryKey: primaryKeyList[0]?.columns ?? [],
+    uniqueKeys: uniqueKeysList.map((key) => ({
       ...key,
       name: constraintName('UQ', name, key.columns),
     })),
-    foreignKeys: structure.foreignKeys.map((key) => ({
+    foreignKeys: foreignKeysList.map((key) => ({
       ...key,
       name: constraintName('FK', name, key.columns.map((item) => item.column)),
     })),
-    indexes: structure.indexes.map((index) => ({
+    indexes: indexesList.map((index) => ({
       ...index,
       name: constraintName('IX', name, index.columns),
     })),
