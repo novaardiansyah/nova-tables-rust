@@ -1,7 +1,7 @@
 {
   "name": "nova-tables",
   "private": true,
-  "version": "1.2.4",
+  "version": "2.0.0",
   "description": "A modern desktop SQL client for Microsoft SQL Server built with Tauri and React.",
   "type": "module",
   "scripts": {
