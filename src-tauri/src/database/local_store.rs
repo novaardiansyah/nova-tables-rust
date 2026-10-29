@@ -9,7 +9,7 @@ pub struct DbConnectionItem {
   pub host: String,
   pub port: u16,
   pub username: String,
-  #[serde(rename = "databaseName")]
+  #[serde(rename = "databaseName", alias = "database")]
   pub database_name: Option<String>,
   #[serde(rename = "folderId")]
   pub folder_id: Option<String>,
@@ -118,6 +118,40 @@ impl LocalStore {
       result.push(item?);
     }
     Ok(result)
+  }
+
+  pub fn get_connection(conn: &SqliteConnection, id: &str) -> Result<Option<DbConnectionItem>> {
+    let mut stmt = conn.prepare(
+      "SELECT id, name, host, port, username, database_name, folder_id, environment,
+              encrypt, trust_server_certificate, last_connected_at, created_at, updated_at
+       FROM connections WHERE id = ?1 LIMIT 1",
+    )?;
+    let mut rows = stmt.query_map(params![id], |row| {
+      let encrypt_int: i32 = row.get(8)?;
+      let trust_cert_int: i32 = row.get(9)?;
+      let port_int: i32 = row.get(3)?;
+      Ok(DbConnectionItem {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        host: row.get(2)?,
+        port: port_int as u16,
+        username: row.get(4)?,
+        database_name: row.get(5)?,
+        folder_id: row.get(6)?,
+        environment: row.get(7)?,
+        encrypt: encrypt_int != 0,
+        trust_server_certificate: trust_cert_int != 0,
+        last_connected_at: row.get(10)?,
+        created_at: row.get(11)?,
+        updated_at: row.get(12)?,
+      })
+    })?;
+
+    if let Some(item) = rows.next() {
+      Ok(Some(item?))
+    } else {
+      Ok(None)
+    }
   }
 
   pub fn save_connection(conn: &SqliteConnection, item: &DbConnectionItem) -> Result<()> {
