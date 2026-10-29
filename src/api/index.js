@@ -603,7 +603,19 @@ export const api = {
 
   tableStructure: async (connectionId, database, schema, table) => {
     const res = await callCommand('table_structure', { connectionId, database, schema, table })
-    return res || { columns: [], indexes: [], foreignKeys: [] }
+    const targetSchema = schema || 'dbo'
+    const targetTable = table || ''
+    return {
+      schema: res?.schema || targetSchema,
+      table: res?.table || targetTable,
+      objectName: res?.objectName || `[${targetSchema}].[${targetTable}]`,
+      statement: res?.statement || '',
+      columns: Array.isArray(res?.columns) ? res.columns : [],
+      primaryKey: Array.isArray(res?.primaryKey) ? res.primaryKey : [],
+      uniqueKeys: Array.isArray(res?.uniqueKeys) ? res.uniqueKeys : [],
+      foreignKeys: Array.isArray(res?.foreignKeys) ? res.foreignKeys : [],
+      indexes: Array.isArray(res?.indexes) ? res.indexes : [],
+    }
   },
 
   tableRelations: async (connectionId, database, schema, table) => {
