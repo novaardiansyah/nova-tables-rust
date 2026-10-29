@@ -6,7 +6,7 @@ Welcome to **Nova Tables**, a modern, high-performance desktop SQL client for **
 
 Nova Tables is made for people who work with Microsoft SQL Server every day and simply want a tidy place to look something up, write a query and read the answer. By moving from Electron to Tauri and Rust, it delivers lightweight binary sizes, lower memory consumption (~60–80MB), and instant native startup.
 
-> **Note:** Nova Tables works with Microsoft SQL Server only. It is a local desktop application — nothing is uploaded anywhere, and neither your data nor your credentials ever leave your computer.
+> **Note:** Nova Tables works with Microsoft SQL Server only. It is a local desktop application - nothing is uploaded anywhere, and neither your data nor your credentials ever leave your computer.
 
 ---
 
@@ -22,7 +22,7 @@ The connection screen keeps the whole tree together: a recent-connection card fo
 
 ### Select several connections for bulk actions
 
-Ticking rows reveals a floating action bar, so a group of connections — or a whole folder with everything inside it — can be exported, moved or deleted in one go.
+Ticking rows reveals a floating action bar, so a group of connections - or a whole folder with everything inside it - can be exported, moved or deleted in one go.
 
 ![Connection selection](./public/demo/connections-selection.png)
 
@@ -94,7 +94,7 @@ Every execution is logged locally with row count, duration and errors, scoped to
 
 ### Customise themes, fonts and editor typography
 
-Preferences cover light and dark palettes, app, grid, JSON and editor fonts, sizes, timezone and editor wrapping — persisted to the local SQLite store.
+Preferences cover light and dark palettes, app, grid, JSON and editor fonts, sizes, timezone and editor wrapping - persisted to the local SQLite store.
 
 ![Settings dialog](./public/demo/settings.png)
 
@@ -102,16 +102,16 @@ Preferences cover light and dark palettes, app, grid, JSON and editor fonts, siz
 
 ## Dazzling Tech Stack
 
-- [Tauri v2](https://v2.tauri.app/) — Native desktop application framework
-- [Rust 2021](https://www.rust-lang.org/) — High-performance native backend
-- [React 18](https://react.dev/) — Sandboxed reactive UI
-- [TypeScript](https://www.typescriptlang.org/) — Strict TypeScript frontend with explicit data contracts
-- [Vite 5](https://vitejs.dev/) — Fast frontend build tool and dev server
-- [Tailwind CSS](https://tailwindcss.com/) — Clean, semantic styling tokens
-- [Monaco Editor](https://microsoft.github.io/monaco-editor/) — Editor engine, the same one behind VS Code
-- [rusqlite](https://github.com/rusqlite/rusqlite) — Embedded SQLite store with WAL journal mode
-- [tiberius](https://github.com/prisma/tiberius) & [tokio](https://tokio.rs/) — Native asynchronous TDS protocol for SQL Server
-- [Microsoft SQL Server](https://www.microsoft.com/en-us/sql-server/) — Supported database engine
+- [Tauri v2](https://v2.tauri.app/) - Native desktop application framework
+- [Rust 2021](https://www.rust-lang.org/) - High-performance native backend
+- [React 18](https://react.dev/) - Sandboxed reactive UI
+- [TypeScript](https://www.typescriptlang.org/) - Strict TypeScript frontend with explicit data contracts
+- [Vite 5](https://vitejs.dev/) - Fast frontend build tool and dev server
+- [Tailwind CSS](https://tailwindcss.com/) - Clean, semantic styling tokens
+- [Monaco Editor](https://microsoft.github.io/monaco-editor/) - Editor engine, the same one behind VS Code
+- [rusqlite](https://github.com/rusqlite/rusqlite) - Embedded SQLite store with WAL journal mode
+- [tiberius](https://github.com/prisma/tiberius) & [tokio](https://tokio.rs/) - Native asynchronous TDS protocol for SQL Server
+- [Microsoft SQL Server](https://www.microsoft.com/en-us/sql-server/) - Supported database engine
 
 ---
 
