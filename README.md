@@ -12,47 +12,89 @@ Nova Tables is made for people who work with Microsoft SQL Server every day and 
 
 ## Screenshots
 
-### Your connections, in one place
+Every image below is captured from Nova Tables 2.1.0 connected to a local SQL Server test database.
+
+### Your connections, recent sessions and folders in one place
+
+The connection screen keeps the whole tree together: a recent-connection card for one-click access, environment badges, collapsible folders and a quick connect button that jumps straight into a session.
 
 ![Connections](./public/demo/connections.png)
 
 ### Select several connections for bulk actions
 
+Ticking rows reveals a floating action bar, so a group of connections — or a whole folder with everything inside it — can be exported, moved or deleted in one go.
+
 ![Connection selection](./public/demo/connections-selection.png)
 
 ### Export connections and their folders as one encrypted file
+
+The export dialog previews exactly what will be written, including nested folders, before you set the passphrase.
 
 ![Export connections](./public/demo/export-connections.png)
 
 ### Import the file on another machine with the same password
 
+Importing asks only for the passphrase; folders are recreated and duplicate names get a safe suffix.
+
 ![Import connections](./public/demo/import-connections.png)
 
 ### A new connection, tested before it is saved
 
+Connection details, environment and TLS options live in a single form with a test button that reports the server version before the connection is stored.
+
 ![New connection](./public/demo/new-connection.png)
 
+### A calm workspace: editor above, results below
+
+The Monaco SQL editor keeps syntax highlighting, completion and line numbers, while the resizable results grid stays in view. The header holds the database picker, execution guard, estimated plan and the run button.
+
+![Workspace](./public/demo/workspace.png)
+
+### Right-click a table for object actions
+
+Opening a new tab, scripting a table as `CREATE`, inspecting its structure, renaming, cloning, truncating or dropping it all start from the sidebar context menu.
+
+![Table context menu](./public/demo/table-menu.png)
+
+### Inspect and change table structure in the table designer
+
+Columns, lengths, defaults, nullability, identity, primary keys, unique keys and foreign keys are editable side by side, with generated DDL ready to review before it is applied.
+
+![Table designer](./public/demo/table-designer.png)
+
 ### Edit a whole block of cells at once
+
+Browse a table and type directly into the grid; changed cells stay highlighted, and a counter keeps track of how many edits are pending.
 
 ![Editing cells](./public/demo/cell-editing.png)
 
 ### Ready-to-run UPDATE statements from your edits
 
+No edit is written silently. Reviewing changes shows the exact `UPDATE` statements generated per row, with the primary key in the `WHERE` clause, and lets you discard or apply them.
+
 ![Generated UPDATE statements](./public/demo/changes.png)
 
 ### Read a row as a JSON record
 
+The inspect dialog formats any row or selection as JSON, with raw, wrapped and XML views for long values.
+
 ![JSON viewer](./public/demo/json-viewer.png)
 
-### Right-click a cell for edit, copy and delete actions
+### Right-click a cell for inspect, copy and export actions
+
+The cell menu covers value inspection, filtering by the cell value, copying as text, JSON or `INSERT`, and exporting just the current selection.
 
 ![Cell context menu](./public/demo/cell-menu.png)
 
-### Right-click a table for object actions
+### Revisit what you ran with query history
 
-![Table context menu](./public/demo/table-menu.png)
+Every execution is logged locally with row count, duration and errors, scoped to the active database and searchable.
+
+![Query history](./public/demo/query-history.png)
 
 ### Customise themes, fonts and editor typography
+
+Preferences cover light and dark palettes, app, grid, JSON and editor fonts, sizes, timezone and editor wrapping — persisted to the local SQLite store.
 
 ![Settings dialog](./public/demo/settings.png)
 
@@ -63,7 +105,7 @@ Nova Tables is made for people who work with Microsoft SQL Server every day and 
 - [Tauri v2](https://v2.tauri.app/) — Native desktop application framework
 - [Rust 2021](https://www.rust-lang.org/) — High-performance native backend
 - [React 18](https://react.dev/) — Sandboxed reactive UI
-- [JavaScript](https://developer.mozilla.org/en-US/docs/Web/JavaScript) — Plain JavaScript (JSX) frontend, no TypeScript
+- [TypeScript](https://www.typescriptlang.org/) — Strict TypeScript frontend with explicit data contracts
 - [Vite 5](https://vitejs.dev/) — Fast frontend build tool and dev server
 - [Tailwind CSS](https://tailwindcss.com/) — Clean, semantic styling tokens
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/) — Editor engine, the same one behind VS Code
@@ -112,6 +154,12 @@ make compile
 
 # Build and package the release binary (AppImage, deb, rpm)
 make build
+
+# Build the Windows NSIS installer from Linux (cargo-xwin + makensis)
+make build-win
+
+# Copy the generated installers into build/<version>/
+make artifacts
 
 # Install locally to ~/.local/opt/nova-tables and add desktop launcher
 make deploy

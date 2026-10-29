@@ -354,7 +354,7 @@ export default function ConnectionDialog({
           </div>
 
           <p className="text-[length:var(--app-text-11)] leading-[calc(var(--app-text-12)+4px)] text-text-faint">
-            Passwords are protected with Electron safeStorage and are never exposed to the interface.
+            Passwords are stored only in the local SQLite database and never leave your computer.
           </p>
 
           {testResult ? (
