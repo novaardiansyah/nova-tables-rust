@@ -7,8 +7,12 @@ export default function ImportConnectionsDialog({
   busy = false,
   error = null,
   onClose,
+  onCancel,
   onImport,
+  onConfirm,
 }) {
+  const handleClose = onClose || onCancel || (() => {})
+  const handleImport = onImport || onConfirm || (() => {})
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
@@ -21,24 +25,30 @@ export default function ImportConnectionsDialog({
   useEffect(() => {
     if (!open) return undefined
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') handleClose()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, onClose])
+  }, [open, handleClose])
 
   if (!open) return null
 
   const handleSubmit = (event) => {
     event.preventDefault()
     if (!password) return
-    onImport(password)
+    handleImport(password)
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !busy) handleClose()
+      }}
+    >
       <form
         onSubmit={handleSubmit}
+        onClick={(event) => event.stopPropagation()}
         className="animate-fade-in w-full max-w-sm overflow-hidden rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70"
       >
         <div className="flex items-start gap-3 p-5">
@@ -54,7 +64,7 @@ export default function ImportConnectionsDialog({
               connection names get a “(new)” prefix.
             </p>
           </div>
-          <button type="button" className="icon-btn h-6 w-6" onClick={onClose} disabled={busy}>
+          <button type="button" className="icon-btn h-6 w-6" onClick={handleClose} disabled={busy}>
             <Icon name="x" size={13} />
           </button>
         </div>
@@ -99,7 +109,7 @@ export default function ImportConnectionsDialog({
         </div>
 
         <div className="flex justify-end gap-2 border-t border-line px-5 py-3.5">
-          <button type="button" className="btn-soft" onClick={onClose} disabled={busy}>
+          <button type="button" className="btn-soft" onClick={handleClose} disabled={busy}>
             Cancel
           </button>
           <button type="submit" className="btn-primary" disabled={!password || busy}>

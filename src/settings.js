@@ -59,7 +59,7 @@ export const TIMEZONES = [
 ]
 
 export const DEFAULT_SETTINGS = {
-  theme: 'nova',
+  theme: 'light-nova',
   timezone: 'UTC',
   appFontSize: 12,
   appFontFamily: 'system',
@@ -71,6 +71,16 @@ export const DEFAULT_SETTINGS = {
   queryFontFamily: 'hack',
   queryWordWrap: false,
   queryExecutionMode: 'silent',
+}
+
+export function getResponsiveDefaultFontSize() {
+  if (typeof window !== 'undefined') {
+    const width = window.screen?.width || window.innerWidth || 0
+    if (width >= 1600) {
+      return 14
+    }
+  }
+  return 12
 }
 
 function normalizeFontSize(value, fallback, max = FONT_SIZE_MAX) {
@@ -89,17 +99,18 @@ function normalizeTimezone(value, fallback) {
 
 export function normalizeSettings(input) {
   const source = input && typeof input === 'object' ? input : {}
+  const defaultSize = getResponsiveDefaultFontSize()
 
   return {
     theme: THEMES.some((theme) => theme.id === source.theme) ? source.theme : DEFAULT_SETTINGS.theme,
     timezone: normalizeTimezone(source.timezone, DEFAULT_SETTINGS.timezone),
-    appFontSize: normalizeFontSize(source.appFontSize, DEFAULT_SETTINGS.appFontSize, APP_FONT_SIZE_MAX),
+    appFontSize: normalizeFontSize(source.appFontSize, defaultSize, APP_FONT_SIZE_MAX),
     appFontFamily: normalizeFontFamily(source.appFontFamily, DEFAULT_SETTINGS.appFontFamily),
-    gridFontSize: normalizeFontSize(source.gridFontSize, DEFAULT_SETTINGS.gridFontSize),
+    gridFontSize: normalizeFontSize(source.gridFontSize, defaultSize),
     gridFontFamily: normalizeFontFamily(source.gridFontFamily, DEFAULT_SETTINGS.gridFontFamily),
-    jsonFontSize: normalizeFontSize(source.jsonFontSize, DEFAULT_SETTINGS.jsonFontSize),
+    jsonFontSize: normalizeFontSize(source.jsonFontSize, defaultSize),
     jsonFontFamily: normalizeFontFamily(source.jsonFontFamily, DEFAULT_SETTINGS.jsonFontFamily),
-    queryFontSize: normalizeFontSize(source.queryFontSize, DEFAULT_SETTINGS.queryFontSize),
+    queryFontSize: normalizeFontSize(source.queryFontSize, defaultSize),
     queryFontFamily: normalizeFontFamily(source.queryFontFamily, DEFAULT_SETTINGS.queryFontFamily),
     queryWordWrap: source.queryWordWrap === true,
     queryExecutionMode: EXECUTION_MODES.some((mode) => mode.id === source.queryExecutionMode)
@@ -119,6 +130,14 @@ export function applySettings(input) {
   const scale = settings.appFontSize / APP_BASE_SIZE
 
   root.dataset.theme = settings.theme
+  if (settings.theme.startsWith('light')) {
+    root.classList.remove('dark')
+    root.classList.add('light')
+  } else {
+    root.classList.remove('light')
+    root.classList.add('dark')
+  }
+
   APP_LADDER.forEach((size) => {
     root.style.setProperty(`--app-text-${size}`, `${Math.round(size * scale)}px`)
   })

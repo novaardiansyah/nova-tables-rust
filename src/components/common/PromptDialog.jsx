@@ -14,8 +14,10 @@ export default function PromptDialog({
   error = null,
   busy,
   onCancel,
+  onClose,
   onConfirm,
 }) {
+  const handleCancel = onCancel || onClose || (() => {})
   const [value, setValue] = useState(initialValue ?? '')
 
   useEffect(() => {
@@ -25,7 +27,7 @@ export default function PromptDialog({
   useEffect(() => {
     if (!open) return undefined
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') onCancel()
+      if (event.key === 'Escape') handleCancel()
       if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
         const next = value.trim()
         if (next) { event.preventDefault(); onConfirm(next) }
@@ -33,7 +35,7 @@ export default function PromptDialog({
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, value, onCancel, onConfirm])
+  }, [open, value, handleCancel, onConfirm])
 
   if (!open) return null
 
@@ -44,9 +46,15 @@ export default function PromptDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !busy) handleCancel()
+      }}
+    >
       <form
         onSubmit={submit}
+        onClick={(event) => event.stopPropagation()}
         className="animate-fade-in w-full max-w-sm overflow-hidden rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70"
       >
         <div className="flex items-start gap-3 p-5">
@@ -59,7 +67,7 @@ export default function PromptDialog({
               <p className="mt-1 whitespace-pre-wrap break-words text-[length:var(--app-text-12)] leading-[calc(var(--app-text-12)+8px)] text-text-soft">{description}</p>
             ) : null}
           </div>
-          <button type="button" className="icon-btn h-6 w-6" onClick={onCancel} disabled={busy}>
+          <button type="button" className="icon-btn h-6 w-6" onClick={handleCancel} disabled={busy}>
             <Icon name="x" size={13} />
           </button>
         </div>
@@ -88,7 +96,7 @@ export default function PromptDialog({
         </div>
 
         <div className="flex justify-end gap-2 border-t border-line px-5 py-3.5">
-          <button type="button" className="btn-soft" onClick={onCancel} disabled={busy}>
+          <button type="button" className="btn-soft" onClick={handleCancel} disabled={busy}>
             Cancel
           </button>
           <button type="submit" className="btn-primary" disabled={!value || busy}>

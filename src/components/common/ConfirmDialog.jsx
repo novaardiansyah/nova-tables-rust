@@ -11,22 +11,33 @@ export default function ConfirmDialog({
   danger = false,
   busy = false,
   onCancel,
+  onClose,
   onConfirm,
 }) {
+  const handleCancel = onCancel || onClose || (() => {})
+
   useEffect(() => {
     if (!open) return
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') onCancel()
+      if (event.key === 'Escape') handleCancel()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, onCancel])
+  }, [open, handleCancel])
 
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]">
-      <div className={`w-full ${detail ? 'max-w-2xl' : 'max-w-sm'} animate-fade-in rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70`}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !busy) handleCancel()
+      }}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        className={`w-full ${detail ? 'max-w-2xl' : 'max-w-sm'} animate-fade-in rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70`}
+      >
         <div className="flex items-start gap-3 p-5">
           <span
             className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
@@ -57,7 +68,7 @@ export default function ConfirmDialog({
         </div>
 
         <div className="flex justify-end gap-2 border-t border-line px-5 py-3.5">
-          <button type="button" className="btn-soft" onClick={onCancel} disabled={busy}>
+          <button type="button" className="btn-soft" onClick={handleCancel} disabled={busy}>
             Cancel
           </button>
           <button

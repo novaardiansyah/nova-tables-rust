@@ -10,6 +10,7 @@ import {
   THEMES,
   TIMEZONES,
   applySettings,
+  getResponsiveDefaultFontSize,
   normalizeSettings,
 } from '../../settings.js'
 
@@ -133,7 +134,16 @@ export default function SettingsDialog({ open, settings, onClose, onSave }) {
     onClose()
   }
 
-  const handleReset = () => setDraft({ ...DEFAULT_SETTINGS })
+  const handleReset = () => {
+    const defaultSize = getResponsiveDefaultFontSize()
+    setDraft({
+      ...DEFAULT_SETTINGS,
+      appFontSize: defaultSize,
+      gridFontSize: defaultSize,
+      jsonFontSize: defaultSize,
+      queryFontSize: defaultSize,
+    })
+  }
 
   const handleSubmit = async (event) => {
     event.preventDefault()

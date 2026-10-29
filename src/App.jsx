@@ -329,7 +329,13 @@ export default function App() {
     api
       .loadSettings()
       .then((stored) => {
-        if (!cancelled) setSettings(applySettings(stored))
+        if (!cancelled) {
+          const resolved = applySettings(stored)
+          setSettings(resolved)
+          if (!stored) {
+            api.saveSettings(resolved).catch(() => {})
+          }
+        }
       })
       .catch(() => {})
 
