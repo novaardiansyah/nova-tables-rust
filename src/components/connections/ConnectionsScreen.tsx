@@ -916,6 +916,21 @@ export default function ConnectionsScreen({
                               </span>
                               <span className="flex shrink-0 items-center gap-1.5">
                                 <EnvironmentBadge environment={conn.environment} />
+                                {conn.driverType === 'sqlserver' ? (
+                                  <span
+                                    title={conn.driverType}
+                                    className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-success">
+                                    <span className="h-1 w-1 rounded-full bg-current" />
+                                    {conn.driverType}
+                                  </span>
+                                ) : conn.driverType === 'mysql' ? (
+                                  <span
+                                    title={conn.driverType}
+                                    className="flex shrink-0 items-center gap-1 rounded-full bg-warning/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-warning">
+                                    <span className="h-1 w-1 rounded-full bg-current" />
+                                    {conn.driverType}
+                                  </span>
+                                ) : null}
                                 {isOpen ? (
                                   <span
                                     title="Session is open"
@@ -985,6 +1000,21 @@ export default function ConnectionsScreen({
                           Recent connection
                         </span>
                         <EnvironmentBadge environment={lastConnection.environment} />
+                        {lastConnection.driverType === 'sqlserver' ? (
+                          <span
+                            title={lastConnection.driverType}
+                            className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-success">
+                            <span className="h-1 w-1 rounded-full bg-current" />
+                            {lastConnection.driverType}
+                          </span>
+                        ) : lastConnection.driverType === 'mysql' ? (
+                          <span
+                            title={lastConnection.driverType}
+                            className="flex shrink-0 items-center gap-1 rounded-full bg-warning/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-warning">
+                            <span className="h-1 w-1 rounded-full bg-current" />
+                            {lastConnection.driverType}
+                          </span>
+                        ) : null}
                         {lastConnection.lastConnectedAt ? (
                           <span className="text-[length:var(--app-text-10)] text-text-faint">
                             · {formatRelativeTime(String(lastConnection.lastConnectedAt))}
@@ -992,7 +1022,7 @@ export default function ConnectionsScreen({
                         ) : null}
                       </div>
                       <div className="flex items-baseline gap-2">
-                        <span className="truncate text-[length:var(--app-text-13)] font-semibold text-text-strong">
+                        <span className="truncate text-[length:var(--app-text-12)] font-medium text-text">
                           {lastConnection.name}
                         </span>
                         <span className="truncate text-[length:var(--app-text-11)] text-text-muted">

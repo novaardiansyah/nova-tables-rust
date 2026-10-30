@@ -19,6 +19,7 @@ export interface ConnectionItem {
   hasPassword?: boolean
   encrypt?: boolean
   trustServerCertificate?: boolean
+  driverType?: string | null
   [key: string]: unknown
 }
 
@@ -150,6 +151,21 @@ export function ConnectionRow({
               <span className="truncate text-[length:var(--app-text-12)] text-text">{connection.name}</span>
               <span className="flex shrink-0 items-center gap-1.5">
                 <EnvironmentBadge environment={connection.environment} />
+                {connection.driverType === 'sqlserver' ? (
+                  <span
+                    title={connection.driverType}
+                    className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-success">
+                    <span className="h-1 w-1 rounded-full bg-current" />
+                    {connection.driverType}
+                  </span>
+                ) : connection.driverType === 'mysql' ? (
+                  <span
+                    title={connection.driverType}
+                    className="flex shrink-0 items-center gap-1 rounded-full bg-warning/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-warning">
+                    <span className="h-1 w-1 rounded-full bg-current" />
+                    {connection.driverType}
+                  </span>
+                ) : null}
                 {isLastConnected ? (
                   <span
                     title="Last connected session"
