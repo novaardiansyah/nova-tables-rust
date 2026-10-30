@@ -1,6 +1,9 @@
 import React, { useEffect, useState, FormEvent } from 'react'
 import Icon, { Spinner } from '@/components/common/Icon'
 import Select from '@/components/common/Select'
+import ConfigTransferDialog, { ConfigTransferMode } from '@/components/dialogs/ConfigTransferDialog'
+import { BannerType } from '@/components/common/Banner'
+import { api } from '@/api'
 import {
   APP_FONT_SIZE_MAX,
   DEFAULT_SETTINGS,
@@ -127,16 +130,33 @@ export interface SettingsDialogProps {
   settings: Settings
   onClose: () => void
   onSave: (settings: Settings) => Promise<unknown> | void
+  onConfigImported?: () => Promise<unknown> | void
+  onNotify?: (type: BannerType, message: string) => void
 }
 
-export default function SettingsDialog({ open, settings, onClose, onSave }: SettingsDialogProps) {
+export default function SettingsDialog({
+  open,
+  settings,
+  onClose,
+  onSave,
+  onConfigImported,
+  onNotify,
+}: SettingsDialogProps) {
   const [draft, setDraft] = useState<Settings>(settings)
   const [saving, setSaving] = useState(false)
+  const [transferMode, setTransferMode] = useState<ConfigTransferMode | null>(null)
+  const [transferBusy, setTransferBusy] = useState(false)
+  const [transferError, setTransferError] = useState<string | null>(null)
+  const [importFile, setImportFile] = useState<{ name: string; content: string } | null>(null)
 
   useEffect(() => {
     if (!open) return
     setDraft(settings)
     setSaving(false)
+    setTransferMode(null)
+    setTransferBusy(false)
+    setTransferError(null)
+    setImportFile(null)
   }, [open, settings])
 
   useEffect(() => {
@@ -147,11 +167,16 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
   useEffect(() => {
     if (!open) return
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key !== 'Escape') return
+      if (transferMode) {
+        setTransferMode(null)
+        return
+      }
+      onClose()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, onClose])
+  }, [open, onClose, transferMode])
 
   if (!open) return null
 
@@ -184,6 +209,67 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
       return
     }
     setSaving(false)
+  }
+
+  const openTransfer = (mode: ConfigTransferMode) => {
+    setTransferMode(mode)
+    setTransferError(null)
+    setImportFile(null)
+  }
+
+  const handleChooseConfigFile = async () => {
+    try {
+      const picked = await api.selectImportFile()
+      if (picked.canceled || !picked.content) return
+      setImportFile({ name: picked.fileName ?? '', content: picked.content })
+      setTransferError(null)
+    } catch (error: any) {
+      setTransferError(error.message)
+    }
+  }
+
+  const handleExportConfig = async (password: string) => {
+    setTransferBusy(true)
+    try {
+      const result = await api.exportAppConfig(normalizeSettings(draft), password)
+      setTransferMode(null)
+      onNotify?.(
+        'success',
+        `Configuration exported with ${result.connectionCount} connection${result.connectionCount === 1 ? '' : 's'}.`,
+      )
+    } catch (error: any) {
+      setTransferError(error.message)
+    } finally {
+      setTransferBusy(false)
+    }
+  }
+
+  const handleImportConfig = async (password: string) => {
+    if (!importFile) return
+    setTransferBusy(true)
+    try {
+      const result = await api.importAppConfig(importFile.content, password)
+      setTransferMode(null)
+      setImportFile(null)
+      await onConfigImported?.()
+      if (result.settings) {
+        await onSave(normalizeSettings(result.settings))
+      }
+      onNotify?.(
+        'success',
+        `Configuration imported with ${result.importedCount} connection${result.importedCount === 1 ? '' : 's'}.`,
+      )
+    } catch (error: any) {
+      setTransferError(error.message)
+    } finally {
+      setTransferBusy(false)
+    }
+  }
+
+  const handleTransferClose = () => {
+    if (transferBusy) return
+    setTransferMode(null)
+    setTransferError(null)
   }
 
   return (
@@ -346,6 +432,32 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
             </Row>
           </section>
 
+          <section className="border-t border-line pt-4">
+            <p className="field-label">Configuration</p>
+            <Row label="Backup & restore" hint="Move preferences and saved connections between devices">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="btn-soft"
+                  onClick={() => openTransfer('export')}
+                  disabled={saving || transferBusy}
+                >
+                  <Icon name="download" size={13} />
+                  Export…
+                </button>
+                <button
+                  type="button"
+                  className="btn-soft"
+                  onClick={() => openTransfer('import')}
+                  disabled={saving || transferBusy}
+                >
+                  <Icon name="upload" size={13} />
+                  Import…
+                </button>
+              </div>
+            </Row>
+          </section>
+
           <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
             <button type="button" className="btn-ghost" onClick={handleReset} disabled={saving}>
               <Icon name="refresh" size={13} />
@@ -363,6 +475,19 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
           </div>
         </form>
       </div>
+
+      {transferMode ? (
+        <ConfigTransferDialog
+          open
+          mode={transferMode}
+          fileName={importFile?.name ?? ''}
+          busy={transferBusy}
+          error={transferError}
+          onClose={handleTransferClose}
+          onChooseFile={handleChooseConfigFile}
+          onSubmit={transferMode === 'export' ? handleExportConfig : handleImportConfig}
+        />
+      ) : null}
     </div>
   )
 }

@@ -344,6 +344,7 @@ export default function App() {
         databaseUsers={databaseUsers}
         savedQueries={savedQueries}
         queryHistory={queryHistory}
+        onNotify={showBanner}
       />
     </div>
   )

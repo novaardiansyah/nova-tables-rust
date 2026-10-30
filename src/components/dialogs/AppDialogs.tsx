@@ -14,6 +14,7 @@ import DropDatabaseDialog from '@/components/dialogs/DropDatabaseDialog'
 import DatabaseUsersDialog from '@/components/dialogs/DatabaseUsersDialog'
 import { Settings } from '@/settings'
 import { api } from '@/api'
+import { BannerType } from '@/components/common/Banner'
 import { SessionData, SessionTab } from '@/utils/sessionHelpers'
 import { editSqlHeader, buildUpdateStatements, buildDeleteStatementsForRows } from '@/edits'
 
@@ -32,6 +33,7 @@ export interface AppDialogsProps {
   databaseUsers: any
   savedQueries: any
   queryHistory: any
+  onNotify?: (type: BannerType, message: string) => void
   testConnection?: (connection: Record<string, unknown>) => Promise<ConnectionTestResult>
 }
 
@@ -50,6 +52,7 @@ export default function AppDialogs({
   databaseUsers,
   savedQueries,
   queryHistory,
+  onNotify,
   testConnection = api.testConnection,
 }: AppDialogsProps) {
   const {
@@ -158,6 +161,8 @@ export default function AppDialogs({
         settings={settings}
         onClose={() => setSettingsOpen(false)}
         onSave={saveSettings}
+        onConfigImported={sessionManager.handleReloadConnections}
+        onNotify={onNotify}
       />
 
       <SavedQueriesDialog

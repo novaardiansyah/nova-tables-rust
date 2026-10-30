@@ -256,6 +256,201 @@ export interface ImportFileDialogResult {
   content?: string
 }
 
+interface ConnectionsBundle {
+  connections: Record<string, unknown>[]
+  folders: { id: string; name: string; parentId: string | null }[]
+  order: { connections: string[]; folders: string[] }
+}
+
+async function buildConnectionsBundle(
+  connectionIds: string[] | null | undefined
+): Promise<ConnectionsBundle> {
+  const allConnections = await api.listConnections()
+  const allSelected = !Array.isArray(connectionIds) || connectionIds.length === 0
+  const targetIds = new Set(
+    allSelected ? allConnections.map((c) => c.id!) : connectionIds.map(String)
+  )
+
+  const allFolders = await api.listFolders()
+  const folderById = new Map<string, FolderModel>(allFolders.map((f) => [f.id, f]))
+  const folderIds = new Set<string>()
+  const folderOrder: string[] = []
+
+  if (allSelected) {
+    for (const folder of allFolders) folderIds.add(folder.id)
+  } else {
+    for (const conn of allConnections) {
+      if (!targetIds.has(conn.id!) || !conn.folderId) continue
+      for (const id of exportFolderChain(conn.folderId, folderById)) {
+        folderIds.add(id)
+      }
+    }
+  }
+
+  for (const folder of allFolders) {
+    if (folderIds.has(folder.id)) folderOrder.push(folder.id)
+  }
+
+  const connections: Record<string, unknown>[] = []
+  const connectionOrder: string[] = []
+  for (const item of allConnections) {
+    if (!targetIds.has(item.id!)) continue
+    connectionOrder.push(item.id!)
+    connections.push({
+      name: item.name,
+      host: item.host,
+      port: item.port,
+      username: item.username,
+      database: item.databaseName || item.database || '',
+      environment: item.environment || '',
+      encrypt: item.encrypt !== false,
+      trustServerCertificate: item.trustServerCertificate !== false,
+      password: item.password || null,
+      folderId: item.folderId ?? null,
+    })
+  }
+
+  const folders = folderOrder.map((id) => {
+    const folder = folderById.get(id)!
+    return {
+      id: folder.id,
+      name: folder.name,
+      parentId: folder.parentId ?? null,
+    }
+  })
+
+  return { connections, folders, order: { connections: connectionOrder, folders: folderOrder } }
+}
+
+function downloadJsonFile(fileName: string, content: string): void {
+  if (typeof document === 'undefined') return
+  const blob = new Blob([content], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+async function applyImportedConnections(payload: {
+  connections?: any[]
+  folders?: any[]
+}): Promise<{
+  importedCount: number
+  importedFolderCount: number
+  connections: ConnectionModel[]
+  folders: FolderModel[]
+}> {
+  const items = payload.connections || []
+  const sourceFolders = Array.isArray(payload.folders) ? payload.folders : []
+
+  const existingConnections = await api.listConnections()
+  const existingNames = new Set(existingConnections.map((c) => (c.name || '').toLowerCase()))
+  const existingFolders = await api.listFolders()
+  const reusableFolders = new Map<string, string>()
+  for (const folder of existingFolders) {
+    const key = importFolderKey(folder.parentId ?? null, folder.name)
+    if (!reusableFolders.has(key)) reusableFolders.set(key, folder.id)
+  }
+
+  const folderIdMap = new Map<string, string>()
+  const importedFolderIds: string[] = []
+  const sourceFolderById = new Map<string, FolderModel>(
+    sourceFolders.filter((f: any) => f && f.id).map((f: any) => [String(f.id), f])
+  )
+  const orderedSourceFolders = [...sourceFolderById.values()].sort(
+    (left, right) =>
+      importFolderDepth(left, sourceFolderById) - importFolderDepth(right, sourceFolderById)
+  )
+
+  for (const folder of orderedSourceFolders) {
+    const name = cleanText(folder.name)
+    if (!name) continue
+    const sourceParentId = folder.parentId ? String(folder.parentId) : null
+    const parentId = sourceParentId ? folderIdMap.get(sourceParentId) ?? null : null
+    const key = importFolderKey(parentId, name)
+    const reusableId = reusableFolders.get(key)
+    let targetId = reusableId
+
+    if (reusableId) {
+      reusableFolders.delete(key)
+    } else {
+      const created = await api.saveFolder({ name, parentId })
+      targetId = created.id
+      importedFolderIds.push(targetId)
+    }
+
+    if (targetId) {
+      folderIdMap.set(String(folder.id), targetId)
+    }
+  }
+
+  const nameFolderCache = new Map<string, string>()
+  const resolveLegacyFolder = async (folderName: string): Promise<string | null> => {
+    const name = cleanText(folderName)
+    if (!name) return null
+    const key = importFolderKey(null, name)
+    if (nameFolderCache.has(key)) return nameFolderCache.get(key) ?? null
+    const fine = reusableFolders.get(key) ?? null
+    if (fine) {
+      reusableFolders.delete(key)
+      nameFolderCache.set(key, fine)
+      return fine
+    }
+    const created = await api.saveFolder({ name })
+    importedFolderIds.push(created.id)
+    nameFolderCache.set(key, created.id)
+    return created.id
+  }
+
+  const imported: ConnectionModel[] = []
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue
+    let name = cleanText(item.name)
+    if (!name) continue
+
+    if (existingNames.has(name.toLowerCase())) {
+      name = `(new) ${name}`
+      while (existingNames.has(name.toLowerCase())) {
+        name = `(new) ${name}`
+      }
+    }
+    existingNames.add(name.toLowerCase())
+
+    let folderId: string | null = null
+    if (item.folderId && folderIdMap.has(String(item.folderId))) {
+      folderId = folderIdMap.get(String(item.folderId)) ?? null
+    } else if (item.folderName) {
+      folderId = await resolveLegacyFolder(item.folderName)
+    }
+
+    const saved = await api.saveConnection({
+      name,
+      host: item.host,
+      port: Number(item.port) || 1433,
+      username: item.username || '',
+      databaseName: item.database || item.databaseName || '',
+      environment: item.environment || '',
+      encrypt: item.encrypt !== false,
+      trustServerCertificate: item.trustServerCertificate !== false,
+      folderId,
+      password: item.password || null,
+    })
+
+    imported.push(saved)
+  }
+
+  return {
+    importedCount: imported.length,
+    importedFolderCount: importedFolderIds.length,
+    connections: await api.listConnections(),
+    folders: await api.listFolders(),
+  }
+}
+
 export const api = {
   appInfo: async (): Promise<SystemInfo> => {
     const res = await callCommand<{ version?: string }>('get_system_info')
@@ -388,90 +583,50 @@ export const api = {
       })
     }
 
-    const allConnections = await api.listConnections()
-    const allSelected = !Array.isArray(connectionIds) || connectionIds.length === 0
-    const targetIds = new Set(
-      allSelected ? allConnections.map((c) => c.id!) : connectionIds.map(String)
-    )
-
-    const allFolders = await api.listFolders()
-    const folderById = new Map<string, FolderModel>(allFolders.map((f) => [f.id, f]))
-    const folderIds = new Set<string>()
-    const folderOrder: string[] = []
-
-    if (allSelected) {
-      for (const folder of allFolders) folderIds.add(folder.id)
-    } else {
-      for (const conn of allConnections) {
-        if (!targetIds.has(conn.id!) || !conn.folderId) continue
-        for (const id of exportFolderChain(conn.folderId, folderById)) {
-          folderIds.add(id)
-        }
-      }
-    }
-
-    for (const folder of allFolders) {
-      if (folderIds.has(folder.id)) folderOrder.push(folder.id)
-    }
-
-    const list: Record<string, unknown>[] = []
-    const connectionOrder: string[] = []
-    for (const item of allConnections) {
-      if (!targetIds.has(item.id!)) continue
-      connectionOrder.push(item.id!)
-      list.push({
-        name: item.name,
-        host: item.host,
-        port: item.port,
-        username: item.username,
-        database: item.databaseName || item.database || '',
-        environment: item.environment || '',
-        encrypt: item.encrypt !== false,
-        trustServerCertificate: item.trustServerCertificate !== false,
-        password: item.password || null,
-        folderId: item.folderId ?? null,
-      })
-    }
-
-    if (list.length === 0) {
+    const bundle = await buildConnectionsBundle(connectionIds)
+    if (bundle.connections.length === 0) {
       throw new IpcError({ message: 'No connections found to export', code: 'NO_CONNECTIONS' })
     }
 
-    const folders = folderOrder.map((id) => {
-      const folder = folderById.get(id)!
-      return {
-        id: folder.id,
-        name: folder.name,
-        parentId: folder.parentId ?? null,
-      }
-    })
-
-    const payload = {
-      version: 2,
-      exportedAt: new Date().toISOString(),
-      connections: list,
-      folders,
-      order: {
-        connections: connectionOrder,
-        folders: folderOrder,
+    const encrypted = await encryptExportPayload(
+      {
+        version: 2,
+        exportedAt: new Date().toISOString(),
+        ...bundle,
       },
+      secret
+    )
+    downloadJsonFile('nova-tables-connections.json', encrypted)
+
+    return { saved: true, count: bundle.connections.length }
+  },
+
+  exportAppConfig: async (
+    settings: unknown,
+    password: string | null | undefined
+  ): Promise<{ saved: boolean; connectionCount: number }> => {
+    const secret = String(password ?? '')
+    if (!secret) {
+      throw new IpcError({
+        message: 'Password is required to encrypt export',
+        code: 'PASSWORD_REQUIRED',
+      })
     }
 
-    const encrypted = await encryptExportPayload(payload, secret)
+    const bundle = await buildConnectionsBundle(null)
+    const encrypted = await encryptExportPayload(
+      {
+        version: 2,
+        kind: 'app-config',
+        exportedAt: new Date().toISOString(),
+        settings: settings ?? null,
+        ...bundle,
+      },
+      secret
+    )
+    downloadJsonFile('nova-tables-config.json', encrypted)
 
-    if (typeof document !== 'undefined') {
-      const blob = new Blob([encrypted], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'nova-tables-connections.json'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    }
-
-    return { saved: true, count: list.length }
+    return { saved: true, connectionCount: bundle.connections.length }
   },
 
   selectImportFile: async (): Promise<{
@@ -565,111 +720,44 @@ export const api = {
       })
     }
 
-    const items = payload.connections || []
-    const sourceFolders = Array.isArray(payload.folders) ? payload.folders : []
+    return applyImportedConnections(payload)
+  },
 
-    const existingConnections = await api.listConnections()
-    const existingNames = new Set(existingConnections.map((c) => (c.name || '').toLowerCase()))
-    const existingFolders = await api.listFolders()
-    const reusableFolders = new Map<string, string>()
-    for (const folder of existingFolders) {
-      const key = importFolderKey(folder.parentId ?? null, folder.name)
-      if (!reusableFolders.has(key)) reusableFolders.set(key, folder.id)
-    }
-
-    const folderIdMap = new Map<string, string>()
-    const importedFolderIds: string[] = []
-    const sourceFolderById = new Map<string, FolderModel>(
-      sourceFolders.filter((f: any) => f && f.id).map((f: any) => [String(f.id), f]),
-    )
-    const orderedSourceFolders = [...sourceFolderById.values()].sort(
-      (left, right) =>
-        importFolderDepth(left, sourceFolderById) - importFolderDepth(right, sourceFolderById),
-    )
-
-    for (const folder of orderedSourceFolders) {
-      const name = cleanText(folder.name)
-      if (!name) continue
-      const sourceParentId = folder.parentId ? String(folder.parentId) : null
-      const parentId = sourceParentId ? folderIdMap.get(sourceParentId) ?? null : null
-      const key = importFolderKey(parentId, name)
-      const reusableId = reusableFolders.get(key)
-      let targetId = reusableId
-
-      if (reusableId) {
-        reusableFolders.delete(key)
-      } else {
-        const created = await api.saveFolder({ name, parentId })
-        targetId = created.id
-        importedFolderIds.push(targetId)
-      }
-
-      if (targetId) {
-        folderIdMap.set(String(folder.id), targetId)
-      }
-    }
-
-    const nameFolderCache = new Map<string, string>()
-    const resolveLegacyFolder = async (folderName: string): Promise<string | null> => {
-      const name = cleanText(folderName)
-      if (!name) return null
-      const key = importFolderKey(null, name)
-      if (nameFolderCache.has(key)) return nameFolderCache.get(key) ?? null
-      const fine = reusableFolders.get(key) ?? null
-      if (fine) {
-        reusableFolders.delete(key)
-        nameFolderCache.set(key, fine)
-        return fine
-      }
-      const created = await api.saveFolder({ name })
-      importedFolderIds.push(created.id)
-      nameFolderCache.set(key, created.id)
-      return created.id
-    }
-
-    const imported: ConnectionModel[] = []
-    for (const item of items) {
-      if (!item || typeof item !== 'object') continue
-      let name = cleanText(item.name)
-      if (!name) continue
-
-      if (existingNames.has(name.toLowerCase())) {
-        name = `(new) ${name}`
-        while (existingNames.has(name.toLowerCase())) {
-          name = `(new) ${name}`
-        }
-      }
-      existingNames.add(name.toLowerCase())
-
-      let folderId: string | null = null
-      if (item.folderId && folderIdMap.has(String(item.folderId))) {
-        folderId = folderIdMap.get(String(item.folderId)) ?? null
-      } else if (item.folderName) {
-        folderId = await resolveLegacyFolder(item.folderName)
-      }
-
-      const saved = await api.saveConnection({
-        name,
-        host: item.host,
-        port: Number(item.port) || 1433,
-        username: item.username || '',
-        databaseName: item.database || item.databaseName || '',
-        environment: item.environment || '',
-        encrypt: item.encrypt !== false,
-        trustServerCertificate: item.trustServerCertificate !== false,
-        folderId,
-        password: item.password || null,
+  importAppConfig: async (
+    content: string | Record<string, unknown>,
+    password: string | null | undefined
+  ): Promise<{
+    importedCount: number
+    importedFolderCount: number
+    connections: ConnectionModel[]
+    folders: FolderModel[]
+    settings: Record<string, unknown> | null
+  }> => {
+    const secret = String(password ?? '')
+    if (!secret) {
+      throw new IpcError({
+        message: 'Password is required to decrypt configuration',
+        code: 'PASSWORD_REQUIRED',
       })
-
-      imported.push(saved)
     }
 
-    return {
-      importedCount: imported.length,
-      importedFolderCount: importedFolderIds.length,
-      connections: await api.listConnections(),
-      folders: await api.listFolders(),
+    let payload: { connections?: any[]; folders?: any[]; settings?: unknown }
+    try {
+      payload = await decryptImportPayload(content, secret)
+    } catch (err: any) {
+      throw new IpcError({
+        message: err?.message || 'Failed to decrypt configuration file',
+        code: err?.code || 'DECRYPT_ERROR',
+      })
     }
+
+    const imported = await applyImportedConnections(payload)
+    const settings =
+      payload.settings && typeof payload.settings === 'object'
+        ? (payload.settings as Record<string, unknown>)
+        : null
+
+    return { ...imported, settings }
   },
 
   listFolders: async (): Promise<FolderModel[]> => {
