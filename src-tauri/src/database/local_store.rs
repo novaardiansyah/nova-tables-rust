@@ -22,6 +22,8 @@ pub struct DbConnectionItem {
   pub trust_server_certificate: bool,
   #[serde(rename = "passwordCipher")]
   pub password_cipher: Option<String>,
+  #[serde(rename = "driverType")]
+  pub driver_type: Option<String>,
   #[serde(rename = "lastConnectedAt")]
   pub last_connected_at: Option<String>,
   #[serde(rename = "lastDatabaseUsed", alias = "last_database_used")]
@@ -107,6 +109,7 @@ impl LocalStore {
          environment TEXT NOT NULL DEFAULT '',
          encrypt INTEGER NOT NULL DEFAULT 1,
          trust_server_certificate INTEGER NOT NULL DEFAULT 1,
+         driver_type TEXT NOT NULL DEFAULT 'sqlserver',
          password_cipher TEXT,
          last_connected_at TEXT,
          last_database_used TEXT,
@@ -140,20 +143,22 @@ impl LocalStore {
          ON query_history (connection_id, database_name, created_at DESC);"
     )?;
     let _ = conn.execute("ALTER TABLE connections ADD COLUMN last_database_used TEXT", []);
+    let _ = conn.execute("ALTER TABLE connections ADD COLUMN driver_type TEXT DEFAULT 'sqlserver'", []);
     Ok(conn)
   }
 
   pub fn list_connections(conn: &SqliteConnection) -> Result<Vec<DbConnectionItem>> {
     let mut stmt = conn.prepare(
       "SELECT id, name, host, port, username, database_name, folder_id, environment,
-              encrypt, trust_server_certificate, last_connected_at, last_database_used, created_at, updated_at, password_cipher
+              encrypt, trust_server_certificate, driver_type, last_connected_at, last_database_used, created_at, updated_at, password_cipher
        FROM connections ORDER BY name ASC",
     )?;
     let rows = stmt.query_map([], |row| {
       let encrypt_int: i32 = row.get(8)?;
       let trust_cert_int: i32 = row.get(9)?;
+      let driver_type: Option<String> = row.get(10)?;
       let port_int: i32 = row.get(3)?;
-      let cipher: Option<String> = row.get(14)?;
+      let cipher: Option<String> = row.get(15)?;
       Ok(DbConnectionItem {
         id: row.get(0)?,
         name: row.get(1)?,
@@ -166,11 +171,12 @@ impl LocalStore {
         environment: row.get(7)?,
         encrypt: encrypt_int != 0,
         trust_server_certificate: trust_cert_int != 0,
+        driver_type,
         password_cipher: cipher,
-        last_connected_at: row.get(10)?,
-        last_database_used: row.get(11)?,
-        created_at: row.get(12)?,
-        updated_at: row.get(13)?,
+        last_connected_at: row.get(11)?,
+        last_database_used: row.get(12)?,
+        created_at: row.get(13)?,
+        updated_at: row.get(14)?,
       })
     })?;
 
@@ -184,14 +190,15 @@ impl LocalStore {
   pub fn get_connection(conn: &SqliteConnection, id: &str) -> Result<Option<DbConnectionItem>> {
     let mut stmt = conn.prepare(
       "SELECT id, name, host, port, username, database_name, folder_id, environment,
-              encrypt, trust_server_certificate, last_connected_at, last_database_used, created_at, updated_at, password_cipher
+              encrypt, trust_server_certificate, driver_type, last_connected_at, last_database_used, created_at, updated_at, password_cipher
        FROM connections WHERE id = ?1 LIMIT 1",
     )?;
     let mut rows = stmt.query_map(params![id], |row| {
       let encrypt_int: i32 = row.get(8)?;
       let trust_cert_int: i32 = row.get(9)?;
+      let driver_type: Option<String> = row.get(10)?;
       let port_int: i32 = row.get(3)?;
-      let cipher: Option<String> = row.get(14)?;
+      let cipher: Option<String> = row.get(15)?;
       Ok(DbConnectionItem {
         id: row.get(0)?,
         name: row.get(1)?,
@@ -204,11 +211,12 @@ impl LocalStore {
         environment: row.get(7)?,
         encrypt: encrypt_int != 0,
         trust_server_certificate: trust_cert_int != 0,
+        driver_type,
         password_cipher: cipher,
-        last_connected_at: row.get(10)?,
-        last_database_used: row.get(11)?,
-        created_at: row.get(12)?,
-        updated_at: row.get(13)?,
+        last_connected_at: row.get(11)?,
+        last_database_used: row.get(12)?,
+        created_at: row.get(13)?,
+        updated_at: row.get(14)?,
       })
     })?;
 
@@ -221,9 +229,10 @@ impl LocalStore {
 
   pub fn save_connection(conn: &SqliteConnection, item: &DbConnectionItem) -> Result<()> {
     let password = item.password.as_deref().or(item.password_cipher.as_deref());
+    let driver_type = item.driver_type.as_deref().unwrap_or("sqlserver");
     conn.execute(
-      "INSERT INTO connections (id, name, host, port, username, database_name, folder_id, environment, encrypt, trust_server_certificate, password_cipher, last_database_used, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, datetime('now'), datetime('now'))
+      "INSERT INTO connections (id, name, host, port, username, database_name, folder_id, environment, encrypt, trust_server_certificate, driver_type, password_cipher, last_database_used, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, datetime('now'), datetime('now'))
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name,
          host = excluded.host,
@@ -234,6 +243,7 @@ impl LocalStore {
          environment = excluded.environment,
          encrypt = excluded.encrypt,
          trust_server_certificate = excluded.trust_server_certificate,
+         driver_type = excluded.driver_type,
          password_cipher = COALESCE(excluded.password_cipher, connections.password_cipher),
          last_database_used = COALESCE(excluded.last_database_used, connections.last_database_used),
          updated_at = datetime('now')",
@@ -248,6 +258,7 @@ impl LocalStore {
         item.environment.as_deref().unwrap_or(""),
         if item.encrypt { 1 } else { 0 },
         if item.trust_server_certificate { 1 } else { 0 },
+        driver_type,
         password,
         item.last_database_used.as_deref(),
       ],

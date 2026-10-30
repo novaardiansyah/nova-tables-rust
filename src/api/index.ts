@@ -607,6 +607,7 @@ export const api = {
       environment: connection.environment || '',
       encrypt: connection.encrypt !== false,
       trustServerCertificate: connection.trustServerCertificate !== false,
+      driverType: connection.driverType,
     }
     const res = await callCommand<{ connection?: ConnectionModel }>('save_connection', {
       connection: payload,

@@ -1,5 +1,6 @@
 use crate::database::local_store::{DbConnectionItem, FolderItem, LocalStore};
 use crate::database::mssql;
+use crate::database::mysql;
 use crate::file_system::FileSystem;
 use rusqlite::params;
 use serde_json::{json, Value};
@@ -167,10 +168,16 @@ pub async fn test_connection(connection: Value) -> Result<Value, String> {
     .or_else(|| stored.as_ref().map(|s| s.trust_server_certificate))
     .unwrap_or(true);
 
+  let driver_type = connection
+    .get("driverType")
+    .and_then(|v| v.as_str())
+    .or_else(|| stored.as_ref().map(|s| s.driver_type.as_deref().unwrap_or("sqlserver")))
+    .unwrap_or("sqlserver");
+
   let started = std::time::Instant::now();
 
   // If username is provided, attempt full TDS handshake with SQL Server
-  if !username.is_empty() {
+  if !username.is_empty() && driver_type == "sqlserver" {
     match mssql::create_client(
       &host,
       port,
@@ -191,6 +198,42 @@ pub async fn test_connection(connection: Value) -> Result<Value, String> {
           "edition": edition,
           "elapsedMs": started.elapsed().as_millis(),
           "message": "Connection successful"
+        }));
+      }
+      Err(err) => {
+        return Ok(json!({
+          "ok": false,
+          "error": {
+            "message": err
+          }
+        }));
+      }
+    }
+  }
+
+  // MySQL connection test
+  if !username.is_empty() && driver_type == "mysql" {
+    match mysql::create_client(
+      &host,
+      port,
+      &username,
+      &password,
+      database.as_deref(),
+      encrypt,
+      trust_cert,
+    )
+    .await
+    {
+      Ok(mut client) => {
+        let databases = mysql::list_databases(&mut client).await;
+        return Ok(json!({
+          "ok": true,
+          "serverName": host,
+          "productVersion": "8.0", // simplified
+          "edition": "Community Edition",
+          "elapsedMs": started.elapsed().as_millis(),
+          "message": "MySQL connection successful",
+          "databases": databases.unwrap_or_default()
         }));
       }
       Err(err) => {
@@ -231,6 +274,119 @@ pub async fn test_connection(connection: Value) -> Result<Value, String> {
         "message": format!("Connection to {} timed out", addr)
       }
     })),
+  }
+}
+
+#[tauri::command]
+pub async fn test_mysql_connection(connection: Value) -> Result<Value, String> {
+  let db_path = FileSystem::get_database_path()?;
+  let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
+
+  let id_opt = connection.get("id").and_then(|v| v.as_str());
+  let stored = if let Some(id) = id_opt {
+    LocalStore::get_connection(&conn, id).ok().flatten()
+  } else {
+    None
+  };
+
+  let host = connection
+    .get("host")
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string())
+    .or_else(|| stored.as_ref().map(|s| s.host.clone()))
+    .unwrap_or_else(|| "127.0.0.1".to_string());
+
+  let port = connection
+    .get("port")
+    .and_then(|v| v.as_u64())
+    .map(|p| p as u16)
+    .or_else(|| stored.as_ref().map(|s| s.port))
+    .unwrap_or(3306);
+
+  let username = connection
+    .get("username")
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string())
+    .or_else(|| stored.as_ref().map(|s| s.username.clone()))
+    .unwrap_or_default();
+
+  let password = connection
+    .get("password")
+    .and_then(|v| v.as_str())
+    .map(|s| s.to_string())
+    .or_else(|| stored.as_ref().and_then(|s| s.password.clone()))
+    .or_else(|| stored.as_ref().and_then(|s| s.password_cipher.clone()))
+    .unwrap_or_default();
+
+  let database = connection
+    .get("database")
+    .or_else(|| connection.get("databaseName"))
+    .and_then(|v| v.as_str())
+    .filter(|s| !s.is_empty())
+    .map(|s| s.to_string())
+    .or_else(|| stored.as_ref().and_then(|s| s.database_name.clone()));
+
+  let encrypt = connection
+    .get("encrypt")
+    .and_then(|v| v.as_bool())
+    .or_else(|| stored.as_ref().map(|s| s.encrypt))
+    .unwrap_or(false);
+
+  let trust_cert = connection
+    .get("trustServerCertificate")
+    .and_then(|v| v.as_bool())
+    .or_else(|| stored.as_ref().map(|s| s.trust_server_certificate))
+    .unwrap_or(true);
+
+  let driver_type = connection
+    .get("driverType")
+    .and_then(|v| v.as_str())
+    .or_else(|| stored.as_ref().map(|s| s.driver_type.as_deref().unwrap_or("sqlserver")))
+    .unwrap_or("sqlserver");
+
+  // Only proceed if driver_type is mysql
+  if driver_type != "mysql" {
+    return Ok(json!({
+      "ok": false,
+      "error": {
+        "message": "Connection test requires driver_type=mysql"
+      }
+    }));
+  }
+
+  let started = std::time::Instant::now();
+
+  match mysql::create_client(
+    &host,
+    port,
+    &username,
+    &password,
+    database.as_deref(),
+    encrypt,
+    trust_cert,
+  )
+  .await
+  {
+    Ok(mut client) => {
+      let databases = mysql::list_databases(&mut client).await;
+      Ok(json!({
+        "ok": true,
+        "serverName": host,
+        "productVersion": "8.0",
+        "edition": "Community Edition",
+        "elapsedMs": started.elapsed().as_millis(),
+        "message": "MySQL connection successful",
+        "databases": databases.unwrap_or_default()
+      }))
+    }
+    Err(err) => {
+      Ok(json!({
+        "ok": false,
+        "error": {
+          "message": err
+        }
+      }))
+    }
   }
 }
 
@@ -287,6 +443,13 @@ pub async fn connect(input: Value) -> Result<Value, String> {
     .or_else(|| stored.as_ref().and_then(|s| s.password_cipher.clone()))
     .unwrap_or_default();
 
+  // Determine driver type - check stored connection first, then input
+  let driver_type = input
+    .get("driverType")
+    .and_then(|v| v.as_str())
+    .or_else(|| stored.as_ref().map(|s| s.driver_type.as_deref().unwrap_or("sqlserver")))
+    .unwrap_or("sqlserver");
+
   // Prefer explicitly requested database; if not specified, use last_database_used, then default database_name
   let database = input
     .get("database")
@@ -328,7 +491,7 @@ pub async fn connect(input: Value) -> Result<Value, String> {
     .or_else(|| stored.as_ref().map(|s| s.trust_server_certificate))
     .unwrap_or(true);
 
-  // If password was provided in input and is non-empty, persist it
+  // Prefer explicitly provided password
   if let Some(pwd) = input.get("password").and_then(|v| v.as_str()) {
     if !pwd.is_empty() {
       let _ = conn.execute(
@@ -338,66 +501,125 @@ pub async fn connect(input: Value) -> Result<Value, String> {
     }
   }
 
-  // Try real SQL Server connection via mssql
-  match mssql::create_client(
-    &host,
-    port,
-    &username,
-    &password,
-    Some(&database),
-    encrypt,
-    trust_cert,
-  )
-  .await
-  {
-    Ok(mut client) => {
-      let databases = mssql::list_databases(&mut client).await.unwrap_or_else(|_| {
-        vec![
-          json!({ "name": "master", "isSystem": true, "isOnline": true }),
-          json!({ "name": "model", "isSystem": true, "isOnline": true }),
-          json!({ "name": "msdb", "isSystem": true, "isOnline": true }),
-          json!({ "name": "tempdb", "isSystem": true, "isOnline": true }),
-        ]
-      });
+  // Try connection based on driver type
+  if driver_type == "mysql" {
+    // MySQL connection
+    match mysql::create_client(
+      &host,
+      port,
+      &username,
+      &password,
+      Some(&database),
+      encrypt,
+      trust_cert,
+    )
+    .await
+    {
+      Ok(mut client) => {
+        let databases = mysql::list_databases(&mut client).await.unwrap_or_else(|_| {
+          vec![
+            json!({ "name": "mysql", "isSystem": true, "isOnline": true }),
+            json!({ "name": "information_schema", "isSystem": true, "isOnline": true }),
+            json!({ "name": "performance_schema", "isSystem": true, "isOnline": true }),
+            json!({ "name": "sys", "isSystem": true, "isOnline": true }),
+          ]
+        });
 
-      let (server_name, version, edition) = mssql::read_server_info(&mut client).await;
-
-      // Update last_connected_at and last_database_used
-      let _ = conn.execute(
-        "UPDATE connections SET last_connected_at = datetime('now'), last_database_used = ?1 WHERE id = ?2",
-        params![database, id],
-      );
-
-      Ok(json!({
-        "ok": true,
-        "connectionId": id,
-        "name": name,
-        "host": host,
-        "port": port,
-        "database": database,
-        "databases": databases,
-        "serverVersion": version,
-        "serverName": server_name,
-        "edition": edition
-      }))
+        Ok(json!({
+          "ok": true,
+          "connectionId": id,
+          "name": name,
+          "host": host,
+          "port": port,
+          "database": database,
+          "databases": databases,
+          "serverVersion": "MySQL 8.0",
+          "serverName": host,
+          "edition": "Community Edition"
+        }))
+      }
+      Err(e) => {
+        if password.is_empty() {
+          Ok(json!({
+            "ok": false,
+            "error": {
+              "code": "PASSWORD_MISSING",
+              "message": "No saved password for this connection. Edit it and enter the password to continue."
+            }
+          }))
+        } else {
+          Ok(json!({
+            "ok": false,
+            "error": {
+              "code": "CONNECTION_FAILED",
+              "message": e
+            }
+          }))
+        }
+      }
     }
-    Err(e) => {
-      if password.is_empty() {
+  } else {
+    // SQL Server connection (existing logic)
+    match mssql::create_client(
+      &host,
+      port,
+      &username,
+      &password,
+      Some(&database),
+      encrypt,
+      trust_cert,
+    )
+    .await
+    {
+      Ok(mut client) => {
+        let databases = mssql::list_databases(&mut client).await.unwrap_or_else(|_| {
+          vec![
+            json!({ "name": "master", "isSystem": true, "isOnline": true }),
+            json!({ "name": "model", "isSystem": true, "isOnline": true }),
+            json!({ "name": "msdb", "isSystem": true, "isOnline": true }),
+            json!({ "name": "tempdb", "isSystem": true, "isOnline": true }),
+          ]
+        });
+
+        let (server_name, version, edition) = mssql::read_server_info(&mut client).await;
+
+        // Update last_connected_at and last_database_used
+        let _ = conn.execute(
+          "UPDATE connections SET last_connected_at = datetime('now'), last_database_used = ?1 WHERE id = ?2",
+          params![database, id],
+        );
+
         Ok(json!({
-          "ok": false,
-          "error": {
-            "code": "PASSWORD_MISSING",
-            "message": "No saved password for this connection. Edit it and enter the password to continue."
-          }
+          "ok": true,
+          "connectionId": id,
+          "name": name,
+          "host": host,
+          "port": port,
+          "database": database,
+          "databases": databases,
+          "serverVersion": version,
+          "serverName": server_name,
+          "edition": edition
         }))
-      } else {
-        Ok(json!({
-          "ok": false,
-          "error": {
-            "code": "CONNECTION_FAILED",
-            "message": e
-          }
-        }))
+      }
+      Err(e) => {
+        if password.is_empty() {
+          Ok(json!({
+            "ok": false,
+            "error": {
+              "code": "PASSWORD_MISSING",
+              "message": "No saved password for this connection. Edit it and enter the password to continue."
+            }
+          }))
+        } else {
+          Ok(json!({
+            "ok": false,
+            "error": {
+              "code": "CONNECTION_FAILED",
+              "message": e
+            }
+          }))
+        }
       }
     }
   }
