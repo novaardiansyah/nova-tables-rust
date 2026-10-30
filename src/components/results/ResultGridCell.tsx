@@ -45,6 +45,10 @@ export default function CellEditor({ value, onCommit, onCancel, controllerRef }:
 
   const finish = (next: string) => {
     if (settledRef.current) return
+    if (next === initial) {
+      commitValue(value)
+      return
+    }
     const text = next.trim()
     const exact = SPECIAL_VALUES.find((option) => option.label.toLowerCase() === text.toLowerCase())
     if (exact) {
