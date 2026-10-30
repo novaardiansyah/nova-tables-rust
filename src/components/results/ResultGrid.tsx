@@ -449,6 +449,9 @@ export default function ResultGrid({
 
   const commitEdit = (value: unknown) => {
     if (!active || !onCellChange) return
+    const unchanged = value === cellValue(active.row, active.col)
+    setActive(null)
+    if (unchanged) return
     const range = editRange(active, bounds)
     for (let row = range.rowStart; row <= range.rowEnd; row += 1) {
       for (let col = range.colStart; col <= range.colEnd; col += 1) {
@@ -457,7 +460,6 @@ export default function ResultGrid({
         onCellChange(row, column.name, value, cellValue(row, col))
       }
     }
-    setActive(null)
   }
 
   const cancelEdit = () => setActive(null)
