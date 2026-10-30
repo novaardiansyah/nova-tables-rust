@@ -12,6 +12,7 @@ import { useQueryExecution } from '@/hooks/useQueryExecution'
 import { useTableBrowser } from '@/hooks/useTableBrowser'
 import { useTabManager } from '@/hooks/useTabManager'
 import Banner, { BannerType } from '@/components/common/Banner'
+import MenuBar, { MenuBarMenu } from '@/components/common/MenuBar'
 import ConnectionsScreen from '@/components/connections/ConnectionsScreen'
 import WorkspaceView from '@/components/WorkspaceView'
 import AppDialogs from '@/components/dialogs/AppDialogs'
@@ -179,9 +180,113 @@ export default function App() {
 
   const session = activeConnectionId ? sessions[activeConnectionId] || null : null
   const activeTab = session ? session.tabs.find((tab) => tab.id === session.activeTabId) || null : null
+  const workspaceReady = screen === 'workspace' && Boolean(session)
+
+  const menus: MenuBarMenu[] = [
+    {
+      id: 'file',
+      label: 'File',
+      items: [
+        {
+          id: 'new-connection',
+          label: 'New Connection',
+          shortcut: 'Ctrl+N',
+          onSelect: () => sessionManager.setDialog({ mode: 'new' }),
+        },
+        {
+          id: 'connections',
+          label: 'Connections',
+          shortcut: 'Ctrl+O',
+          onSelect: sessionManager.openConnectionScreen,
+        },
+        {
+          id: 'new-query-tab',
+          label: 'New Query Tab',
+          shortcut: 'Ctrl+T',
+          disabled: !workspaceReady,
+          onSelect: tabManager.handleNewTab,
+        },
+        {
+          id: 'save-query',
+          label: 'Save Query',
+          shortcut: 'Ctrl+S',
+          disabled: !workspaceReady,
+          onSelect: savedQueries.handleSaveQuery,
+        },
+        {
+          id: 'close-tab',
+          label: 'Close Tab',
+          shortcut: 'Ctrl+W',
+          disabled: !workspaceReady,
+          onSelect: tabManager.handleCloseActiveTab,
+        },
+        {
+          id: 'close-connection',
+          label: 'Close Connection',
+          disabled: !activeConnectionId,
+          onSelect: () => {
+            if (activeConnectionId) sessionManager.closeSession(activeConnectionId)
+          },
+        },
+      ],
+    },
+    {
+      id: 'view',
+      label: 'View',
+      items: [
+        {
+          id: 'saved-queries',
+          label: 'Saved Queries',
+          onSelect: savedQueries.handleOpenSavedQueries,
+        },
+        {
+          id: 'query-history',
+          label: 'Query History',
+          onSelect: queryHistory.handleOpenQueryHistory,
+        },
+        {
+          id: 'toggle-sidebar',
+          label: layout.sidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar',
+          disabled: !workspaceReady,
+          onSelect: () => layout.setSidebarCollapsed((collapsed) => !collapsed),
+        },
+        {
+          id: 'toggle-json-panel',
+          label: layout.jsonPanelCollapsed ? 'Show JSON Panel' : 'Hide JSON Panel',
+          disabled: !workspaceReady,
+          onSelect: () => layout.setJsonPanelCollapsed((collapsed) => !collapsed),
+        },
+      ],
+    },
+    {
+      id: 'settings',
+      label: 'Settings',
+      items: [
+        {
+          id: 'preferences',
+          label: 'Preferences…',
+          shortcut: 'Ctrl+,',
+          onSelect: () => setSettingsOpen(true),
+        },
+      ],
+    },
+    {
+      id: 'help',
+      label: 'Help',
+      items: [
+        {
+          id: 'shortcuts',
+          label: 'Keyboard Shortcuts',
+          shortcut: 'F1',
+          onSelect: () => setShortcutsOpen(true),
+        },
+      ],
+    },
+  ]
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      <MenuBar menus={menus} />
       {banner ? <Banner type={banner.type} message={banner.message} onDismiss={() => setBanner(null)} /> : null}
 
       {session && screen === 'workspace' ? (
