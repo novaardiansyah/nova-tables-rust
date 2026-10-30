@@ -14,6 +14,7 @@ export interface QueryState {
 export function useWorkspaceLayout() {
   const [query, setQuery] = useState<QueryState>({ id: 0, value: STARTER_SQL, focus: true })
   const [editorHeight, setEditorHeight] = useState(EDITOR_DEFAULT_HEIGHT)
+  const [headerCollapsed, setHeaderCollapsed] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [jsonPanelWidth, setJsonPanelWidth] = useState(JSON_PANEL_DEFAULT_WIDTH)
@@ -34,6 +35,10 @@ export function useWorkspaceLayout() {
 
   const handleSqlChange = useCallback((value: string) => {
     sqlRef.current = value
+  }, [])
+
+  const toggleHeaderCollapsed = useCallback(() => {
+    setHeaderCollapsed((collapsed) => !collapsed)
   }, [])
 
   const handleSelectionChange = useCallback((text: string) => {
@@ -74,6 +79,8 @@ export function useWorkspaceLayout() {
     query,
     editorHeight,
     setEditorHeight,
+    headerCollapsed,
+    toggleHeaderCollapsed,
     sidebarWidth,
     setSidebarWidth,
     sidebarCollapsed,
