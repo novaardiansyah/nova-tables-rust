@@ -14,6 +14,7 @@ export interface ConnectionFormState {
   environment: string
   encrypt: boolean
   trustServerCertificate: boolean
+  driverType: string
 }
 
 const DEFAULTS: ConnectionFormState = {
@@ -26,6 +27,7 @@ const DEFAULTS: ConnectionFormState = {
   environment: '',
   encrypt: true,
   trustServerCertificate: true,
+  driverType: 'sqlserver',
 }
 
 export type ConnectionDialogMode = 'new' | 'edit'
@@ -34,6 +36,7 @@ export interface ConnectionDialogConnection extends Partial<ConnectionItem> {
   hasPassword?: boolean
   encrypt?: boolean
   trustServerCertificate?: boolean
+  driverType?: string
 }
 
 function buildInitial(connection?: ConnectionDialogConnection | null): ConnectionFormState {
@@ -51,6 +54,7 @@ function buildInitial(connection?: ConnectionDialogConnection | null): Connectio
     environment: connection.environment || '',
     encrypt: connection.encrypt !== false,
     trustServerCertificate: connection.trustServerCertificate !== false,
+    driverType: connection.driverType || 'sqlserver',
   }
 }
 
@@ -125,6 +129,7 @@ export default function ConnectionDialog({
       environment: form.environment,
       encrypt: form.encrypt,
       trustServerCertificate: form.trustServerCertificate,
+      driverType: form.driverType,
     }
     if (isEdit && connection?.id) data.id = connection.id
     if (!isEdit || form.password !== '') data.password = form.password
@@ -188,10 +193,18 @@ export default function ConnectionDialog({
           </span>
           <div className="flex-1">
             <h2 className="text-[length:var(--app-text-14)] font-semibold text-text-strong">
-              {isEdit ? 'Edit connection' : 'New SQL Server connection'}
+              {isEdit
+                ? 'Edit connection'
+                : form.driverType === 'mysql'
+                ? 'New MySQL connection'
+                : 'New SQL Server connection'}
             </h2>
             <p className="text-[length:var(--app-text-11)] text-text-muted">
-              {isEdit ? 'Update the connection details below.' : 'Connect to a Microsoft SQL Server instance.'}
+              {isEdit
+                ? 'Update the connection details below.'
+                : form.driverType === 'mysql'
+                ? 'Connect to a MySQL or MariaDB instance.'
+                : 'Connect to a Microsoft SQL Server instance.'}
             </p>
           </div>
           <button type="button" className="icon-btn" onClick={onClose} title="Close" disabled={saving}>
@@ -207,21 +220,24 @@ export default function ConnectionDialog({
             </div>
           ) : null}
 
-          <div className="grid grid-cols-[1fr_200px] gap-3">
-            <div>
-              <label className="field-label" htmlFor="conn-name">
-                Connection name
-              </label>
-              <input
-                id="conn-name"
-                className="field"
-                value={form.name}
-                onChange={update('name')}
-                placeholder="Production database"
-                autoFocus
-              />
-              <FieldError message={fieldErrors.name} />
-            </div>
+          {/* Connection name full width */}
+          <div>
+            <label className="field-label" htmlFor="conn-name">
+              Connection name
+            </label>
+            <input
+              id="conn-name"
+              className="field"
+              value={form.name}
+              onChange={update('name')}
+              placeholder="Production database"
+              autoFocus
+            />
+            <FieldError message={fieldErrors.name} />
+          </div>
+
+          {/* Environment and Driver side by side */}
+          <div className="grid grid-cols-[1fr_1fr] gap-3">
             <div>
               <span className="field-label">Environment</span>
               <Select
@@ -234,7 +250,25 @@ export default function ConnectionDialog({
                 icon="server"
                 placeholder="Select environment"
                 emptyLabel="No environments"
-                panelClassName="w-full"
+                panelClassName="w-64"
+              />
+            </div>
+            <div>
+              <span className="field-label">Driver</span>
+              <Select
+                value={form.driverType}
+                options={[
+                  { value: 'sqlserver', label: 'SQL Server' },
+                  { value: 'mysql', label: 'MySQL' },
+                ]}
+                onChange={(value) => {
+                  setForm((prev) => ({ ...prev, driverType: value }))
+                  setTestResult(null)
+                }}
+                icon="database"
+                placeholder="Select driver"
+                emptyLabel="No drivers"
+                panelClassName="w-48"
               />
             </div>
           </div>

@@ -1,5 +1,6 @@
 use crate::database::local_store::{LocalStore, QueryHistoryItem};
 use crate::database::mssql;
+use crate::database::mysql;
 use crate::file_system::FileSystem;
 use serde_json::{json, Value};
 
@@ -64,10 +65,49 @@ pub async fn execute_query(
     .or_else(|| input.as_ref().and_then(|i| i.get("recordHistory").or_else(|| i.get("record_history"))).and_then(|v| v.as_bool()))
     .unwrap_or(false);
 
+  // Check connection driver type from local_store
+  let mut driver_type = "sqlserver".to_string();
+  if let Some(id) = conn_id.as_deref() {
+    if let Ok(db_path) = FileSystem::get_database_path() {
+      if let Ok(conn) = LocalStore::init(&db_path) {
+        if let Ok(Some(item)) = LocalStore::get_connection(&conn, id) {
+          if let Some(dt) = item.driver_type {
+            driver_type = dt;
+          }
+        }
+      }
+    }
+  }
+
   let outcome = if let Some(id) = conn_id.as_deref() {
-    match mssql::get_client_for_connection(id, db.as_deref()).await {
-      Ok(mut client) => mssql::execute_sql(&mut client, &query).await,
-      Err(error) => Err(error),
+    if driver_type == "mysql" {
+      // For MySQL, get client info and execute
+      let db_path = FileSystem::get_database_path()?;
+      let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
+      let item = LocalStore::get_connection(&conn, id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("Connection {} not found", id))?;
+      let password = item.password.or(item.password_cipher).unwrap_or_default();
+      let db_to_use = db.as_deref().or(item.database_name.as_deref());
+
+      match mysql::create_client(
+        &item.host,
+        item.port,
+        &item.username,
+        &password,
+        db_to_use,
+        item.encrypt,
+        item.trust_server_certificate,
+      ).await {
+        Ok(mut client) => mysql::execute_sql(&mut client, &query).await,
+        Err(error) => Err(error),
+      }
+    } else {
+      // SQL Server path
+      match mssql::get_client_for_connection(id, db.as_deref()).await {
+        Ok(mut client) => mssql::execute_sql(&mut client, &query).await,
+        Err(error) => Err(error),
+      }
     }
   } else {
     Ok(json!({
@@ -110,6 +150,7 @@ pub async fn execute_query(
 
 #[tauri::command]
 pub async fn list_databases(connection_id: Option<String>) -> Result<Value, String> {
+  // Try SQL Server first
   if let Some(id) = connection_id.as_deref() {
     if let Ok(mut client) = mssql::get_client_for_connection(id, Some("master")).await {
       if let Ok(databases) = mssql::list_databases(&mut client).await {
@@ -117,6 +158,44 @@ pub async fn list_databases(connection_id: Option<String>) -> Result<Value, Stri
           "ok": true,
           "databases": databases
         }));
+      }
+    }
+  }
+
+  // Then try MySQL
+  if let Some(id) = connection_id.as_deref() {
+    if let Ok(db_path) = FileSystem::get_database_path() {
+      if let Ok(conn) = LocalStore::init(&db_path) {
+        if let Ok(Some(item)) = LocalStore::get_connection(&conn, id) {
+          let driver_type = item.driver_type.as_deref().unwrap_or("sqlserver");
+          if driver_type == "mysql" {
+            let password = item.password.or(item.password_cipher).unwrap_or_default();
+            let db_to_use = item.database_name.as_deref().unwrap_or("");
+            
+            match mysql::create_client(
+              &item.host,
+              item.port,
+              &item.username,
+              &password,
+              Some(db_to_use),
+              item.encrypt,
+              item.trust_server_certificate,
+            ).await
+            {
+              Ok(mut client) => {
+                if let Ok(databases) = mysql::list_databases(&mut client).await {
+                  return Ok(json!({
+                    "ok": true,
+                    "databases": databases
+                  }));
+                }
+              }
+              Err(_) => {
+                // Ignore error, fall through to default
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -134,6 +213,7 @@ pub async fn list_databases(connection_id: Option<String>) -> Result<Value, Stri
 
 #[tauri::command]
 pub async fn list_tables(connection_id: Option<String>, database: Option<String>) -> Result<Value, String> {
+  // Try SQL Server first
   if let Some(id) = connection_id.as_deref() {
     if let Ok(mut client) = mssql::get_client_for_connection(id, database.as_deref()).await {
       if let Ok(res) = mssql::list_tables(&mut client, database.as_deref()).await {
@@ -141,6 +221,35 @@ pub async fn list_tables(connection_id: Option<String>, database: Option<String>
       }
     }
   }
+
+  // Then try MySQL
+  if let Some(id) = connection_id.as_deref() {
+    if let Ok(db_path) = FileSystem::get_database_path() {
+      if let Ok(conn) = LocalStore::init(&db_path) {
+        if let Ok(Some(item)) = LocalStore::get_connection(&conn, id) {
+          let driver_type = item.driver_type.as_deref().unwrap_or("sqlserver");
+          if driver_type == "mysql" {
+            let db_to_use = database.as_deref().or(item.database_name.as_deref()).unwrap_or("");
+            let password = item.password.or(item.password_cipher).unwrap_or_default();
+            if let Ok(mut client) = mysql::create_client(
+              &item.host,
+              item.port,
+              &item.username,
+              &password,
+              Some(db_to_use),
+              item.encrypt,
+              item.trust_server_certificate,
+            ).await {
+              if let Ok(res) = mysql::list_tables(&mut client, Some(db_to_use)).await {
+                return Ok(res);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   Ok(json!({
     "ok": true,
     "tables": []
