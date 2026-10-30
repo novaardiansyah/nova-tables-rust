@@ -322,17 +322,34 @@ async function buildConnectionsBundle(
   return { connections, folders, order: { connections: connectionOrder, folders: folderOrder } }
 }
 
-function downloadJsonFile(fileName: string, content: string): void {
-  if (typeof document === 'undefined') return
-  const blob = new Blob([content], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = fileName
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+function getYYYYMMDD(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}${month}${day}`
+}
+
+async function saveFileWithDialog(input: {
+  defaultPath: string
+  filters: { name: string; extensions: string[] }[]
+  content: string
+}): Promise<{ saved: boolean; filePath?: string }> {
+  if (typeof window === 'undefined' || !window.__TAURI_INTERNALS__) {
+    // Fallback to browser download if not Tauri
+    const blob = new Blob([input.content], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = input.defaultPath
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    return { saved: true }
+  }
+  const res = await callCommand<any>('save_file', input)
+  return res || { saved: false }
 }
 
 async function applyImportedConnections(payload: {
@@ -635,7 +652,15 @@ export const api = {
       },
       secret
     )
-    downloadJsonFile('nova-tables-connections.json', encrypted)
+    const defaultName = `connections-${getYYYYMMDD()}.nova-tables`
+    saveFileWithDialog({
+      defaultPath: defaultName,
+      filters: [
+        { name: 'Nova Tables Export', extensions: ['nova-tables'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+      content: encrypted,
+    })
 
     return { saved: true, count: bundle.connections.length }
   },
@@ -663,7 +688,15 @@ export const api = {
       },
       secret
     )
-    downloadJsonFile('nova-tables-config.json', encrypted)
+    const defaultName = `configs-${getYYYYMMDD()}.nova-tables`
+    saveFileWithDialog({
+      defaultPath: defaultName,
+      filters: [
+        { name: 'Nova Tables Config', extensions: ['nova-tables'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+      content: encrypted,
+    })
 
     return { saved: true, connectionCount: bundle.connections.length }
   },
@@ -677,7 +710,7 @@ export const api = {
     return new Promise((resolve) => {
       const input = document.createElement('input')
       input.type = 'file'
-      input.accept = '.json,application/json'
+      input.accept = '.nova-tables,.json,application/json'
       input.style.display = 'none'
       document.body.appendChild(input)
 
