@@ -1,6 +1,13 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/api'
 import { DEFAULT_SETTINGS, applySettings, Settings } from '@/settings'
+import {
+  DEFAULT_WORKSPACE_STATE,
+  PersistedSessionTabs,
+  WorkspaceState,
+  normalizeWorkspaceState,
+  workspaceTabsFromSession,
+} from '@/workspaceState'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useDatabaseUsers } from '@/hooks/useDatabaseUsers'
 import { useQueryHistory } from '@/hooks/useQueryHistory'
@@ -38,6 +45,15 @@ export default function App() {
   const layout = useWorkspaceLayout()
   const { sqlRef, selectionRef, seedEditor } = layout
 
+  const workspaceRef = useRef<WorkspaceState>(DEFAULT_WORKSPACE_STATE)
+  const [workspaceLoaded, setWorkspaceLoaded] = useState(false)
+
+  const getPersistedTabs = useCallback(
+    (connectionId: string): PersistedSessionTabs | null =>
+      workspaceRef.current.connections[connectionId] ?? null,
+    [],
+  )
+
   const sessionManager = useSessionManager({
     showBanner,
     onDismissBanner: () => setBanner(null),
@@ -45,10 +61,80 @@ export default function App() {
     setSettings,
     settings,
     setSettingsOpen,
+    getPersistedTabs,
   })
 
   const { activeSession, patchSession, updateTab, setSessions, tabIdRef, activeConnectionId, screen, sessions } = sessionManager
   const scopeDatabase = activeConnectionId ? sessions[activeConnectionId]?.activeDatabase ?? null : null
+
+  useEffect(() => {
+    let cancelled = false
+
+    api
+      .loadWorkspaceState()
+      .then((stored) => {
+        if (cancelled) return
+        const state = normalizeWorkspaceState(stored)
+        workspaceRef.current = state
+        layout.hydrateLayout(state)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setWorkspaceLoaded(true)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [layout.hydrateLayout])
+
+  useEffect(() => {
+    if (!workspaceLoaded) return undefined
+
+    const connections: Record<string, PersistedSessionTabs> = { ...workspaceRef.current.connections }
+    const known = new Set<string>(sessionManager.connections.map((connection: any) => String(connection.id)))
+    Object.keys(connections).forEach((connectionId) => {
+      if (known.size > 0 && !known.has(connectionId)) delete connections[connectionId]
+    })
+
+    Object.values(sessions).forEach((session) => {
+      const persisted = workspaceTabsFromSession(
+        session,
+        session.connectionId === activeConnectionId ? sqlRef.current : null,
+      )
+      if (persisted) connections[session.connectionId] = persisted
+    })
+
+    const snapshot: WorkspaceState = {
+      sidebarCollapsed: layout.sidebarCollapsed,
+      sidebarWidth: layout.sidebarWidth,
+      jsonPanelCollapsed: layout.jsonPanelCollapsed,
+      jsonPanelWidth: layout.jsonPanelWidth,
+      headerCollapsed: layout.headerCollapsed,
+      editorHeight: layout.editorHeight,
+      activeConnectionId,
+      connections,
+    }
+
+    workspaceRef.current = snapshot
+    const timer = setTimeout(() => {
+      api.saveWorkspaceState(snapshot).catch(() => {})
+    }, 400)
+
+    return () => clearTimeout(timer)
+  }, [
+    workspaceLoaded,
+    layout.sidebarCollapsed,
+    layout.sidebarWidth,
+    layout.jsonPanelCollapsed,
+    layout.jsonPanelWidth,
+    layout.headerCollapsed,
+    layout.editorHeight,
+    activeConnectionId,
+    sessions,
+    sessionManager.connections,
+    sqlRef,
+  ])
 
   const queryExecution = useQueryExecution({
     activeSession,

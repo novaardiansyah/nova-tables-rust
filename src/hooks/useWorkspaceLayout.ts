@@ -4,6 +4,7 @@ import { ActiveDataPayload } from '@/components/results/ResultsPanel'
 import { EDITOR_DEFAULT_HEIGHT, STARTER_SQL } from '@/utils/sessionHelpers'
 import { SIDEBAR_DEFAULT_WIDTH } from '@/components/Sidebar'
 import { JSON_PANEL_DEFAULT_WIDTH } from '@/components/results/JsonPanel'
+import { WorkspaceState } from '@/workspaceState'
 
 export interface QueryState {
   id: number
@@ -39,6 +40,15 @@ export function useWorkspaceLayout() {
 
   const toggleHeaderCollapsed = useCallback(() => {
     setHeaderCollapsed((collapsed) => !collapsed)
+  }, [])
+
+  const hydrateLayout = useCallback((state: WorkspaceState) => {
+    setSidebarCollapsed(state.sidebarCollapsed)
+    setSidebarWidth(state.sidebarWidth)
+    setJsonPanelCollapsed(state.jsonPanelCollapsed)
+    setJsonPanelWidth(state.jsonPanelWidth)
+    setHeaderCollapsed(state.headerCollapsed)
+    setEditorHeight(state.editorHeight)
   }, [])
 
   const handleSelectionChange = useCallback((text: string) => {
@@ -81,6 +91,7 @@ export function useWorkspaceLayout() {
     setEditorHeight,
     headerCollapsed,
     toggleHeaderCollapsed,
+    hydrateLayout,
     sidebarWidth,
     setSidebarWidth,
     sidebarCollapsed,
