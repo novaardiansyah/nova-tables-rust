@@ -343,16 +343,14 @@ export function Spinner({ size = 14, className = '' }: { size?: number; classNam
 
 export function BrandMark({ size = 26, className = '' }: { size?: number; className?: string }) {
   return (
-    <svg viewBox="0 0 64 64" width={size} height={size} className={className} aria-hidden="true">
-      <defs>
-        <linearGradient id="nova-brand" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#4f8cff" />
-          <stop offset="1" stopColor="#8b5cf6" />
-        </linearGradient>
-      </defs>
-      <rect x="6" y="8" width="52" height="48" rx="9" fill="none" stroke="url(#nova-brand)" strokeWidth="4" />
-      <path d="M6 24h52" stroke="url(#nova-brand)" strokeWidth="4" />
-      <path d="M25 24v32M41 24v32" stroke="url(#nova-brand)" strokeWidth="4" />
-    </svg>
+    <img
+      src="/logo.png"
+      width={size}
+      height={size}
+      className={`shrink-0 select-none ${className}`}
+      alt=""
+      aria-hidden="true"
+      draggable={false}
+    />
   )
 }

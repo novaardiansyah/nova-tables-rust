@@ -735,9 +735,6 @@ export default function ConnectionsScreen({
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line px-6">
         <BrandMark size={22} />
         <span className="text-[length:var(--app-text-13)] font-semibold tracking-tight text-text-strong">Nova Tables</span>
-        <span className="rounded border border-line-strong bg-tint/[0.03] px-1.5 py-0.5 text-[length:var(--app-text-9)] font-semibold uppercase tracking-wider text-text-muted">
-          MSSQL
-        </span>
 
         <div className="ml-auto flex items-center gap-2">
           <button

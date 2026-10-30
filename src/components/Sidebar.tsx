@@ -462,12 +462,9 @@ export default function Sidebar({
       <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-line px-4">
         <BrandMark size={20} />
         <span className="min-w-0 truncate text-[length:var(--app-text-13)] font-semibold tracking-tight text-text-strong">Nova Tables</span>
-        <span className="ml-auto shrink-0 rounded border border-line-strong bg-tint/[0.03] px-1.5 py-0.5 text-[length:var(--app-text-9)] font-semibold uppercase tracking-wider text-text-muted">
-          MSSQL
-        </span>
         <button
           type="button"
-          className="icon-btn h-6 w-6 shrink-0"
+          className="icon-btn ml-auto h-6 w-6 shrink-0"
           title={toggleAction.title}
           aria-label={toggleAction.title}
           onClick={toggleAction.onClick}
