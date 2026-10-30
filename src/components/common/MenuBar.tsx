@@ -5,6 +5,7 @@ export interface MenuBarItem {
   label: string
   shortcut?: string
   disabled?: boolean
+  separatorBefore?: boolean
   onSelect: () => void
 }
 
@@ -68,24 +69,26 @@ export default function MenuBar({ menus }: MenuBarProps) {
                 className="absolute left-0 top-[calc(100%+4px)] z-50 min-w-[220px] animate-fade-in rounded-lg border border-line-strong bg-elevated py-1 shadow-xl shadow-black/50"
               >
                 {menu.items.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    role="menuitem"
-                    disabled={item.disabled}
-                    onClick={() => {
-                      setOpenId(null)
-                      item.onSelect()
-                    }}
-                    className="flex w-full items-center gap-6 px-3 py-[5px] text-left text-[length:var(--app-text-12)] text-text transition-colors hover:bg-tint/[0.06] hover:text-text-strong disabled:pointer-events-none disabled:text-text-faint"
-                  >
-                    <span className="flex-1 truncate">{item.label}</span>
-                    {item.shortcut ? (
-                      <span className="shrink-0 font-mono text-[length:var(--app-text-10)] text-text-faint">
-                        {item.shortcut}
-                      </span>
-                    ) : null}
-                  </button>
+                  <React.Fragment key={item.id}>
+                    {item.separatorBefore ? <div className="my-1 h-px bg-line" /> : null}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={item.disabled}
+                      onClick={() => {
+                        setOpenId(null)
+                        item.onSelect()
+                      }}
+                      className="flex w-full items-center gap-6 px-3 py-[5px] text-left text-[length:var(--app-text-12)] text-text transition-colors hover:bg-tint/[0.06] hover:text-text-strong disabled:pointer-events-none disabled:text-text-faint"
+                    >
+                      <span className="flex-1 truncate">{item.label}</span>
+                      {item.shortcut ? (
+                        <span className="shrink-0 font-mono text-[length:var(--app-text-10)] text-text-faint">
+                          {item.shortcut}
+                        </span>
+                      ) : null}
+                    </button>
+                  </React.Fragment>
                 ))}
               </div>
             ) : null}

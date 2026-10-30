@@ -13,6 +13,7 @@ import { useTableBrowser } from '@/hooks/useTableBrowser'
 import { useTabManager } from '@/hooks/useTabManager'
 import Banner, { BannerType } from '@/components/common/Banner'
 import MenuBar, { MenuBarMenu } from '@/components/common/MenuBar'
+import { ConfigTransferMode } from '@/components/dialogs/ConfigTransferDialog'
 import ConnectionsScreen from '@/components/connections/ConnectionsScreen'
 import WorkspaceView from '@/components/WorkspaceView'
 import AppDialogs from '@/components/dialogs/AppDialogs'
@@ -21,6 +22,7 @@ export default function App() {
   const [banner, setBanner] = useState<{ type: BannerType; message: string } | null>(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [configTransfer, setConfigTransfer] = useState<ConfigTransferMode | null>(null)
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
 
   const showBanner = useCallback((type: BannerType, message: string) => {
@@ -158,6 +160,7 @@ export default function App() {
     queryHistory.history.open ||
     shortcutsOpen ||
     settingsOpen ||
+    Boolean(configTransfer) ||
     queryExecution.editConfirmOpen ||
     queryExecution.deleteConfirmOpen
 
@@ -264,9 +267,20 @@ export default function App() {
       items: [
         {
           id: 'preferences',
-          label: 'Preferences…',
+          label: 'Preferences',
           shortcut: 'Ctrl+,',
           onSelect: () => setSettingsOpen(true),
+        },
+        {
+          id: 'export-config',
+          label: 'Export Configuration',
+          separatorBefore: true,
+          onSelect: () => setConfigTransfer('export'),
+        },
+        {
+          id: 'import-config',
+          label: 'Import Configuration',
+          onSelect: () => setConfigTransfer('import'),
         },
       ],
     },
@@ -344,6 +358,8 @@ export default function App() {
         databaseUsers={databaseUsers}
         savedQueries={savedQueries}
         queryHistory={queryHistory}
+        configTransfer={configTransfer}
+        setConfigTransfer={setConfigTransfer}
         onNotify={showBanner}
       />
     </div>
