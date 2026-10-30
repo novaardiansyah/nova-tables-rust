@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import ShortcutPanel from '@/components/dialogs/ShortcutPanel'
 import SettingsDialog from '@/components/dialogs/SettingsDialog'
+import ConfigTransferDialog, { ConfigTransferMode } from '@/components/dialogs/ConfigTransferDialog'
 import SavedQueriesDialog from '@/components/dialogs/SavedQueriesDialog'
 import QueryHistoryDialog from '@/components/dialogs/QueryHistoryDialog'
 import SaveQueryDialog from '@/components/dialogs/SaveQueryDialog'
@@ -12,7 +13,7 @@ import DeleteConfirmDialog from '@/components/results/DeleteConfirmDialog'
 import ConfirmDialog from '@/components/common/ConfirmDialog'
 import DropDatabaseDialog from '@/components/dialogs/DropDatabaseDialog'
 import DatabaseUsersDialog from '@/components/dialogs/DatabaseUsersDialog'
-import { Settings } from '@/settings'
+import { Settings, normalizeSettings } from '@/settings'
 import { api } from '@/api'
 import { BannerType } from '@/components/common/Banner'
 import { SessionData, SessionTab } from '@/utils/sessionHelpers'
@@ -33,6 +34,8 @@ export interface AppDialogsProps {
   databaseUsers: any
   savedQueries: any
   queryHistory: any
+  configTransfer: ConfigTransferMode | null
+  setConfigTransfer: (mode: ConfigTransferMode | null) => void
   onNotify?: (type: BannerType, message: string) => void
   testConnection?: (connection: Record<string, unknown>) => Promise<ConnectionTestResult>
 }
@@ -52,6 +55,8 @@ export default function AppDialogs({
   databaseUsers,
   savedQueries,
   queryHistory,
+  configTransfer,
+  setConfigTransfer,
   onNotify,
   testConnection = api.testConnection,
 }: AppDialogsProps) {
@@ -152,6 +157,70 @@ export default function AppDialogs({
     }
   }, [deleteConfirmOpen, activeTab, tabResultSet])
 
+  const [configBusy, setConfigBusy] = useState(false)
+  const [configError, setConfigError] = useState<string | null>(null)
+  const [configFile, setConfigFile] = useState<{ name: string; content: string } | null>(null)
+
+  useEffect(() => {
+    setConfigBusy(false)
+    setConfigError(null)
+    setConfigFile(null)
+  }, [configTransfer])
+
+  const closeConfigTransfer = () => {
+    if (configBusy) return
+    setConfigTransfer(null)
+  }
+
+  const handleChooseConfigFile = async () => {
+    try {
+      const picked = await api.selectImportFile()
+      if (picked.canceled || !picked.content) return
+      setConfigFile({ name: picked.fileName ?? '', content: picked.content })
+      setConfigError(null)
+    } catch (error: any) {
+      setConfigError(error.message)
+    }
+  }
+
+  const handleExportConfig = async (password: string) => {
+    setConfigBusy(true)
+    try {
+      const result = await api.exportAppConfig(settings, password)
+      setConfigTransfer(null)
+      onNotify?.(
+        'success',
+        `Configuration exported with ${result.connectionCount} connection${result.connectionCount === 1 ? '' : 's'}.`,
+      )
+    } catch (error: any) {
+      setConfigError(error.message)
+    } finally {
+      setConfigBusy(false)
+    }
+  }
+
+  const handleImportConfig = async (password: string) => {
+    if (!configFile) return
+    setConfigBusy(true)
+    try {
+      const result = await api.importAppConfig(configFile.content, password)
+      setConfigTransfer(null)
+      setConfigFile(null)
+      await sessionManager.handleReloadConnections()
+      if (result.settings) {
+        await saveSettings(normalizeSettings(result.settings))
+      }
+      onNotify?.(
+        'success',
+        `Configuration imported with ${result.importedCount} connection${result.importedCount === 1 ? '' : 's'}.`,
+      )
+    } catch (error: any) {
+      setConfigError(error.message)
+    } finally {
+      setConfigBusy(false)
+    }
+  }
+
   return (
     <>
       <ShortcutPanel open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} session={session} />
@@ -161,8 +230,17 @@ export default function AppDialogs({
         settings={settings}
         onClose={() => setSettingsOpen(false)}
         onSave={saveSettings}
-        onConfigImported={sessionManager.handleReloadConnections}
-        onNotify={onNotify}
+      />
+
+      <ConfigTransferDialog
+        open={Boolean(configTransfer)}
+        mode={configTransfer ?? 'export'}
+        fileName={configFile?.name ?? ''}
+        busy={configBusy}
+        error={configError}
+        onClose={closeConfigTransfer}
+        onChooseFile={handleChooseConfigFile}
+        onSubmit={configTransfer === 'import' ? handleImportConfig : handleExportConfig}
       />
 
       <SavedQueriesDialog
