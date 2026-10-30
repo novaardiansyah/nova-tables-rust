@@ -10,7 +10,7 @@ pub type MssqlClient = Client<Compat<TcpStream>>;
 
 pub fn column_data_to_json(data: &ColumnData<'static>) -> Value {
   match data {
-    ColumnData::Bit(opt) => opt.map(Value::from).unwrap_or(Value::Null),
+    ColumnData::Bit(opt) => opt.map(|flag| Value::from(if flag { 1 } else { 0 })).unwrap_or(Value::Null),
     ColumnData::U8(opt) => opt.map(Value::from).unwrap_or(Value::Null),
     ColumnData::I16(opt) => opt.map(Value::from).unwrap_or(Value::Null),
     ColumnData::I32(opt) => opt.map(Value::from).unwrap_or(Value::Null),
