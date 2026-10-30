@@ -24,6 +24,8 @@ pub fn run() {
       commands::system::greet,
       commands::system::get_settings,
       commands::system::save_settings,
+      commands::system::get_workspace_state,
+      commands::system::save_workspace_state,
       commands::system::save_file,
       commands::connection::list_connections,
       commands::connection::save_connection,

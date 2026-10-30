@@ -3,6 +3,7 @@ import { api, DatabaseInfo } from '@/api'
 import { SessionData, SessionTab, createTab, createSession, pickDatabase, STARTER_SQL, queryTitle, EMPTY_TABLES, EMPTY_COLUMNS, EMPTY_MODULES } from '@/utils/sessionHelpers'
 import { ConnectionDialogConnection, ConnectionDialogMode } from '@/components/connections/ConnectionDialog'
 import { Settings, applySettings } from '@/settings'
+import { PersistedSessionTabs, tabsFromPersisted } from '@/workspaceState'
 
 export interface UseSessionManagerProps {
   showBanner: (type: 'info' | 'warn' | 'error' | 'success', message: string) => void
@@ -11,6 +12,7 @@ export interface UseSessionManagerProps {
   setSettings: React.Dispatch<React.SetStateAction<Settings>>
   settings: Settings
   setSettingsOpen: React.Dispatch<React.SetStateAction<boolean>>
+  getPersistedTabs?: (connectionId: string) => PersistedSessionTabs | null
 }
 
 export function useSessionManager({
@@ -20,6 +22,7 @@ export function useSessionManager({
   setSettings,
   settings,
   setSettingsOpen,
+  getPersistedTabs,
 }: UseSessionManagerProps) {
   const [connections, setConnections] = useState<any[]>([])
   const [folders, setFolders] = useState<any[]>([])
@@ -271,13 +274,30 @@ export function useSessionManager({
         )
 
         tabIdRef.current += 1
-        const tab = createTab(`tab-${tabIdRef.current}`, queryTitle(1), STARTER_SQL)
-        const created = createSession(result, connection, database, tab)
+        const persisted = getPersistedTabs?.(connection.id) ?? null
+        let tabs: SessionTab[]
+        if (persisted) {
+          tabs = tabsFromPersisted(persisted)
+          tabs.forEach((tab) => {
+            const numeric = Number(tab.id.replace('tab-', ''))
+            if (Number.isFinite(numeric) && numeric > tabIdRef.current) tabIdRef.current = numeric
+          })
+        } else {
+          tabs = [createTab(`tab-${tabIdRef.current}`, queryTitle(1), STARTER_SQL)]
+        }
+
+        const activeTabId =
+          persisted && tabs.some((tab) => tab.id === persisted.activeTabId)
+            ? persisted.activeTabId
+            : tabs[0].id
+        const created = createSession(result, connection, database, tabs[0])
+        created.tabs = tabs
+        created.activeTabId = activeTabId
 
         setSessions((prev) => ({ ...prev, [connection.id]: created }))
         setActiveConnectionId(connection.id)
         setScreen('workspace')
-        seedEditor(tab.sql)
+        seedEditor((tabs.find((tab) => tab.id === activeTabId) || tabs[0]).sql)
         await loadTables(connection.id, database)
         await loadColumns(connection.id, database)
         await loadModules(connection.id, database)
@@ -295,7 +315,7 @@ export function useSessionManager({
         setConnectingId(null)
       }
     },
-    [activateSession, loadColumns, loadModules, loadTables, seedEditor, showBanner],
+    [activateSession, getPersistedTabs, loadColumns, loadModules, loadTables, seedEditor, showBanner],
   )
 
   const handleSelectDatabase = useCallback(

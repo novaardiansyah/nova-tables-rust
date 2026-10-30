@@ -490,6 +490,36 @@ export const api = {
     return settings
   },
 
+  loadWorkspaceState: async (): Promise<Record<string, unknown> | null> => {
+    try {
+      const res = await callCommand<{ workspace?: Record<string, unknown> }>('get_workspace_state')
+      if (res?.workspace) {
+        return res.workspace
+      }
+    } catch {
+      // Ignore IPC errors and fall back to localStorage
+    }
+    try {
+      const stored = localStorage.getItem('nova_tables_workspace')
+      if (stored) {
+        return JSON.parse(stored)
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+    return null
+  },
+
+  saveWorkspaceState: async (workspace: unknown): Promise<unknown> => {
+    try {
+      localStorage.setItem('nova_tables_workspace', JSON.stringify(workspace))
+    } catch {
+      // Ignore localStorage errors
+    }
+    await callCommand('save_workspace_state', { workspace })
+    return workspace
+  },
+
   copyText: async (text: string): Promise<boolean> => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       await navigator.clipboard.writeText(text)
@@ -524,6 +554,15 @@ export const api = {
   },
 
   getLastConnectedId: async (): Promise<string | null> => {
+    try {
+      const res = await callCommand<{ workspace?: { activeConnectionId?: string | null } }>(
+        'get_workspace_state',
+      )
+      const activeId = res?.workspace?.activeConnectionId
+      if (typeof activeId === 'string' && activeId) return activeId
+    } catch {
+      // Ignore IPC errors and fall back to localStorage
+    }
     try {
       return localStorage.getItem('nova_tables_last_connected_id') || null
     } catch {
