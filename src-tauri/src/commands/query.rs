@@ -255,16 +255,65 @@ pub async fn module_definition(
 }
 
 #[tauri::command]
-pub fn describe_result(
+pub async fn describe_result(
   connection_id: Option<String>,
   database: Option<String>,
   sql: Option<String>,
 ) -> Result<Value, String> {
-  let _ = (connection_id, database, sql);
-  Ok(json!({
-    "ok": true,
-    "columns": []
-  }))
+  let query = sql.as_deref().map(|s| s.trim().trim_end_matches(';').trim()).unwrap_or_default();
+  if query.is_empty() {
+    return Ok(json!({ "ok": true, "columns": [] }));
+  }
+
+  let mut client = mssql::get_client_for_connection(
+    &connection_id.clone().unwrap_or_default(),
+    database.as_deref(),
+  )
+  .await
+  .map_err(|e| e.to_string())?;
+
+  let stream = client
+    .query(
+      "SELECT column_ordinal,
+              name,
+              source_schema,
+              source_table,
+              source_column,
+              is_updateable,
+              is_computed_column
+       FROM sys.dm_exec_describe_first_result_set(@P1, NULL, 1)
+       WHERE is_hidden = 0
+       ORDER BY column_ordinal",
+      &[&query],
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+  let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
+
+  let mut columns = Vec::new();
+  for row in rows {
+    let name: &str = row.get(1).unwrap_or("");
+    if name.is_empty() {
+      continue;
+    }
+    let source_schema: Option<&str> = row.get(2);
+    let source_table: Option<&str> = row.get(3);
+    let source_column: Option<&str> = row.get(4);
+    let is_updateable: bool = row.get(5).unwrap_or(false);
+    let is_computed_column: bool = row.get(6).unwrap_or(false);
+
+    columns.push(json!({
+      "name": name,
+      "schema": source_schema,
+      "table": source_table,
+      "column": source_column,
+      "updateable": is_updateable,
+      "computed": is_computed_column,
+    }));
+  }
+
+  Ok(json!({ "ok": true, "columns": columns }))
 }
 
 #[tauri::command]
