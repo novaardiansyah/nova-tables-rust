@@ -259,6 +259,12 @@ export default function App() {
           disabled: !workspaceReady,
           onSelect: () => layout.setJsonPanelCollapsed((collapsed) => !collapsed),
         },
+        {
+          id: 'toggle-header',
+          label: layout.headerCollapsed ? 'Show Toolbar' : 'Hide Toolbar',
+          disabled: !workspaceReady,
+          onSelect: layout.toggleHeaderCollapsed,
+        },
       ],
     },
     {

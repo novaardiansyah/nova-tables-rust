@@ -49,6 +49,8 @@ export default function WorkspaceView({
     query,
     editorHeight,
     setEditorHeight,
+    headerCollapsed,
+    toggleHeaderCollapsed,
     sidebarWidth,
     setSidebarWidth,
     sidebarCollapsed,
@@ -193,24 +195,26 @@ export default function WorkspaceView({
       />
 
       <main className="flex min-w-0 flex-1 flex-col bg-base">
-        <WorkspaceHeader
-          session={session}
-          activeDatabase={session.activeDatabase}
-          running={running}
-          queryExecutionMode={settings.queryExecutionMode}
-          canDropDatabase={dropState.allowed}
-          dropDatabaseHint={dropState.hint}
-          canManageUsers={manageUsers.allowed}
-          manageUsersHint={manageUsers.hint}
-          onSelectDatabase={handleSelectDatabase}
-          onChangeExecutionMode={handleChangeExecutionMode}
-          onDropDatabase={handleOpenDropDatabase}
-          onManageUsers={databaseUsers.handleOpenDatabaseUsers}
-          onRun={handleRun}
-          onEstimatedPlan={handleEstimatedPlan}
-          onDisconnect={() => closeSession(session.connectionId)}
-          onShowShortcuts={onShowShortcuts}
-        />
+        {headerCollapsed ? null : (
+          <WorkspaceHeader
+            session={session}
+            activeDatabase={session.activeDatabase}
+            running={running}
+            queryExecutionMode={settings.queryExecutionMode}
+            canDropDatabase={dropState.allowed}
+            dropDatabaseHint={dropState.hint}
+            canManageUsers={manageUsers.allowed}
+            manageUsersHint={manageUsers.hint}
+            onSelectDatabase={handleSelectDatabase}
+            onChangeExecutionMode={handleChangeExecutionMode}
+            onDropDatabase={handleOpenDropDatabase}
+            onManageUsers={databaseUsers.handleOpenDatabaseUsers}
+            onRun={handleRun}
+            onEstimatedPlan={handleEstimatedPlan}
+            onDisconnect={() => closeSession(session.connectionId)}
+            onShowShortcuts={onShowShortcuts}
+          />
+        )}
 
         <TabBar
           tabs={session.tabs}
@@ -223,6 +227,8 @@ export default function WorkspaceView({
           onOpenSavedQueries={savedQueries.handleOpenSavedQueries}
           onOpenQueryHistory={history.handleOpenQueryHistory}
           onCopyQuery={handleCopyQuery}
+          headerCollapsed={headerCollapsed}
+          onToggleHeader={toggleHeaderCollapsed}
         />
 
         {activeTab?.kind === 'design' ? (

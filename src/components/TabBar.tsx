@@ -25,6 +25,8 @@ export interface TabBarProps {
   onOpenSavedQueries?: () => void
   onOpenQueryHistory?: () => void
   onCopyQuery?: () => void
+  headerCollapsed?: boolean
+  onToggleHeader?: () => void
 }
 
 export default function TabBar({
@@ -38,6 +40,8 @@ export default function TabBar({
   onOpenSavedQueries,
   onOpenQueryHistory,
   onCopyQuery,
+  headerCollapsed = false,
+  onToggleHeader,
 }: TabBarProps) {
   return (
     <div className="flex h-9 shrink-0 items-stretch border-b border-line bg-panel">
@@ -140,6 +144,17 @@ export default function TabBar({
         >
           <Icon name="history" size={13} />
         </button>
+        {onToggleHeader ? (
+          <button
+            type="button"
+            onClick={onToggleHeader}
+            title={headerCollapsed ? 'Show toolbar' : 'Hide toolbar'}
+            aria-label={headerCollapsed ? 'Show toolbar' : 'Hide toolbar'}
+            className={`icon-btn mr-1 h-6 w-6 ${headerCollapsed ? 'text-text-muted' : ''}`}
+          >
+            <Icon name="panel-top" size={13} />
+          </button>
+        ) : null}
       </div>
     </div>
   )
