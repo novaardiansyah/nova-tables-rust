@@ -2,11 +2,11 @@
 
 Hi Future Developer,
 
-Welcome to **Nova Tables**, a modern, high-performance desktop SQL client for **Microsoft SQL Server** built with **Tauri v2** and **Rust 2021**. It brings your connections, databases, tables, queries and results together in one calm workspace, so you can focus on the work instead of the tooling.
+Welcome to **Nova Tables**, a modern, high-performance desktop SQL client for **Microsoft SQL Server** and **MySQL** built with **Tauri v2** and **Rust 2021**. It brings your connections, databases, tables, queries and results together in one calm workspace, so you can focus on the work instead of the tooling.
 
-Nova Tables is made for people who work with Microsoft SQL Server every day and simply want a tidy place to look something up, write a query and read the answer. By moving from Electron to Tauri and Rust, it delivers lightweight binary sizes, lower memory consumption (~60–80MB), and instant native startup.
+Nova Tables is made for people who work with Microsoft SQL Server and MySQL every day and simply want a tidy place to look something up, write a query and read the answer. By moving from Electron to Tauri and Rust, it delivers lightweight binary sizes, lower memory consumption (~60–80MB), and instant native startup.
 
-> **Note:** Nova Tables works with Microsoft SQL Server only. It is a local desktop application - nothing is uploaded anywhere, and neither your data nor your credentials ever leave your computer.
+> **Note:** Nova Tables supports Microsoft SQL Server and MySQL (including MariaDB). It is a local desktop application - nothing is uploaded anywhere, and neither your data nor your credentials ever leave your computer.
 
 ---
 
@@ -109,15 +109,16 @@ Preferences cover light and dark palettes, app, grid, JSON and editor fonts, siz
 - [Vite 5](https://vitejs.dev/) - Fast frontend build tool and dev server
 - [Tailwind CSS](https://tailwindcss.com/) - Clean, semantic styling tokens
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/) - Editor engine, the same one behind VS Code
-- [rusqlite](https://github.com/rusqlite/rusqlite) - Embedded SQLite store with WAL journal mode
-- [tiberius](https://github.com/prisma/tiberius) & [tokio](https://tokio.rs/) - Native asynchronous TDS protocol for SQL Server
-- [Microsoft SQL Server](https://www.microsoft.com/en-us/sql-server/) - Supported database engine
+- [Rusqlite](https://github.com/rusqlite/rusqlite) - Embedded SQLite store with WAL journal mode
+- [Tiberius](https://github.com/prisma/tiberius) & [tokio](https://tokio.rs/) - Native asynchronous TDS protocol for SQL Server
+- [Mysql Async](https://github.com/blackbeam/mysql_async) - Native asynchronous driver for MySQL and MariaDB
+- [Microsoft SQL Server](https://www.microsoft.com/en-us/sql-server/) & [MySQL](https://www.mysql.com/) - Supported database engines
 
 ---
 
 ## What You Can Do
 
-- **Connection Management**: Organize SQL Server connections with environment badges and collapsible, nested folders.
+- **Connection Management**: Organize SQL Server and MySQL connections with driver badges, environment badges, and collapsible, nested folders.
 - **Recent Sessions & Quick Connect**: Jump back into recent connections with timestamp badges and dedicated quick-connect actions.
 - **Encrypted Export & Import**: Password-protect your connection tree using AES-256-GCM and PBKDF2 encryption.
 - **Tree Deletion Safety**: Safely delete entire folders and connection subtrees with atomic cascading in SQLite.
@@ -193,6 +194,7 @@ Need to chat? Feel free to drop me a line via [Email](mailto:novaardiansyah78@gm
 ![Rust](https://img.shields.io/badge/Rust-2021-orange)
 ![React](https://img.shields.io/badge/React-18-blue)
 ![SQL Server](https://img.shields.io/badge/SQL%20Server-^2022-blue)
+![MySQL](https://img.shields.io/badge/MySQL-^8.0-blue)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
