@@ -36,6 +36,8 @@ export function useSessionManager({
   const [deleting, setDeleting] = useState(false)
   const [databaseDrop, setDatabaseDrop] = useState<{ database: string; error?: string | null } | null>(null)
   const [databaseDropBusy, setDatabaseDropBusy] = useState(false)
+  const [databaseCreate, setDatabaseCreate] = useState<{ error?: string | null } | null>(null)
+  const [databaseCreateBusy, setDatabaseCreateBusy] = useState(false)
   const [appVersion, setAppVersion] = useState('')
 
   const sessionsRef = useRef<Record<string, SessionData>>({})
@@ -433,6 +435,63 @@ export function useSessionManager({
     [activeConnectionId, databaseDrop, loadColumns, loadModules, loadTables, patchSession, showBanner],
   )
 
+  const handleOpenCreateDatabase = useCallback(() => {
+    const current = activeSession()
+    if (!current) return
+    setDatabaseCreate({ error: null })
+  }, [activeSession])
+
+  const handleCreateDatabaseConfirm = useCallback(
+    async (databaseName: string) => {
+      const target = databaseName.trim()
+      if (!target || !activeConnectionId) return
+
+      setDatabaseCreateBusy(true)
+      setDatabaseCreate((prev) => (prev ? { ...prev, error: null } : prev))
+
+      try {
+        await api.createDatabase({ connectionId: activeConnectionId, database: target })
+      } catch (error: any) {
+        setDatabaseCreate((prev) => (prev ? { ...prev, error: error.message } : prev))
+        setDatabaseCreateBusy(false)
+        return
+      }
+
+      setDatabaseCreate(null)
+      setDatabaseCreateBusy(false)
+      showBanner('success', `Created database “${target}”.`)
+
+      try {
+        const databases = await api.listDatabases(activeConnectionId)
+        const current = sessionsRef.current[activeConnectionId]
+        if (!current) return
+        patchSession(activeConnectionId, { databases, activeDatabase: target })
+        try {
+          await api.updateLastDatabase(activeConnectionId, target)
+          setConnections((prev) =>
+            prev.map((c) =>
+              c.id === activeConnectionId
+                ? {
+                    ...c,
+                    lastDatabaseUsed: target,
+                    database: target,
+                  }
+                : c,
+            ),
+          )
+        } catch {
+          // Ignore failure
+        }
+        await loadTables(activeConnectionId, target)
+        await loadColumns(activeConnectionId, target)
+        await loadModules(activeConnectionId, target)
+      } catch (error: any) {
+        showBanner('error', `Database created, but the list could not refresh. ${error.message}`)
+      }
+    },
+    [activeConnectionId, loadColumns, loadModules, loadTables, patchSession, showBanner],
+  )
+
   const handleSaveConnection = useCallback(
     async (input: any) => {
       const saved = await api.saveConnection(input)
@@ -567,6 +626,9 @@ export function useSessionManager({
     databaseDrop,
     setDatabaseDrop,
     databaseDropBusy,
+    databaseCreate,
+    setDatabaseCreate,
+    databaseCreateBusy,
     appVersion,
     sessionsRef,
     activeIdRef,
@@ -583,6 +645,8 @@ export function useSessionManager({
     handleConnect,
     handleSelectDatabase,
     handleRefreshDatabases,
+    handleOpenCreateDatabase,
+    handleCreateDatabaseConfirm,
     handleOpenDropDatabase,
     handleDropDatabaseConfirm,
     handleSaveConnection,

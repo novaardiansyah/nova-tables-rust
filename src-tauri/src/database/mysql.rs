@@ -68,6 +68,22 @@ pub async fn list_databases(conn: &mut Conn) -> Result<Vec<Value>, String> {
     Ok(databases)
 }
 
+/// Creates an empty database on the server.
+pub async fn create_database(conn: &mut Conn, database: &str) -> Result<Value, String> {
+    let name = database.trim();
+    if name.is_empty() {
+        return Err("Enter a database name.".to_string());
+    }
+
+    let sql = format!("CREATE DATABASE {}", quote_name(name));
+    conn.query_drop(sql).await.map_err(|e| e.to_string())?;
+
+    Ok(json!({
+      "ok": true,
+      "database": name
+    }))
+}
+
 /// Reads server information (version, name, edition).
 pub async fn read_server_info(conn: &mut Conn) -> (String, String, String) {
     let rows: Vec<Row> = conn

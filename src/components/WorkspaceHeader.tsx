@@ -26,10 +26,13 @@ export interface WorkspaceHeaderProps {
   queryExecutionMode: ExecutionModeId | string
   canDropDatabase?: boolean
   dropDatabaseHint?: string
+  canCreateDatabase?: boolean
+  createDatabaseHint?: string
   canManageUsers?: boolean
   manageUsersHint?: string
   onSelectDatabase?: (databaseName: string) => void
   onChangeExecutionMode: (modeId: ExecutionModeId) => void
+  onCreateDatabase?: () => void
   onDropDatabase?: () => void
   onManageUsers?: () => void
   onRun?: () => void
@@ -51,10 +54,13 @@ export default function WorkspaceHeader({
   queryExecutionMode,
   canDropDatabase = false,
   dropDatabaseHint,
+  canCreateDatabase = false,
+  createDatabaseHint,
   canManageUsers = false,
   manageUsersHint,
   onSelectDatabase,
   onChangeExecutionMode,
+  onCreateDatabase,
   onDropDatabase,
   onManageUsers,
   onRun,
@@ -92,6 +98,18 @@ export default function WorkspaceHeader({
               aria-label="Users and permissions"
             >
               <Icon name="users" size={14} />
+            </button>
+          </span>
+          <span className="inline-flex" title={createDatabaseHint}>
+            <button
+              type="button"
+              className="icon-btn hover:text-accent disabled:pointer-events-none disabled:opacity-40"
+              onClick={onCreateDatabase}
+              disabled={!canCreateDatabase}
+              title={createDatabaseHint}
+              aria-label="New database"
+            >
+              <Icon name="plus" size={14} />
             </button>
           </span>
           <span className="inline-flex" title={dropDatabaseHint}>

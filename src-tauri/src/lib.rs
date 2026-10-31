@@ -56,6 +56,7 @@ pub fn run() {
             commands::query::save_saved_query,
             commands::query::rename_saved_query,
             commands::query::delete_saved_query,
+            commands::query::create_database,
             commands::query::drop_database,
             commands::query::list_database_users,
             commands::query::create_database_user,
