@@ -327,6 +327,42 @@ pub async fn table_structure(
             }
         }
     }
+
+    // Then try MySQL
+    if let Some(id) = connection_id.as_deref() {
+        if let Ok(db_path) = FileSystem::get_database_path() {
+            if let Ok(conn) = LocalStore::init(&db_path) {
+                if let Ok(Some(item)) = LocalStore::get_connection(&conn, id) {
+                    let driver_type = item.driver_type.as_deref().unwrap_or("sqlserver");
+                    if driver_type == "mysql" {
+                        let db_to_use = database
+                            .as_deref()
+                            .filter(|value| !value.is_empty())
+                            .unwrap_or(&s);
+                        let password = item.password.or(item.password_cipher).unwrap_or_default();
+                        if let Ok(mut client) = mysql::create_client(
+                            &item.host,
+                            item.port,
+                            &item.username,
+                            &password,
+                            Some(db_to_use),
+                            item.encrypt,
+                            item.trust_server_certificate,
+                        )
+                        .await
+                        {
+                            if let Ok(res) =
+                                mysql::table_structure(&mut client, Some(db_to_use), &s, &t).await
+                            {
+                                return Ok(res);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Ok(json!({
       "ok": true,
       "database": database,

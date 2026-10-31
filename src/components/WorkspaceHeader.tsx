@@ -74,11 +74,6 @@ export default function WorkspaceHeader({
     <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line bg-panel px-4">
       {session ? (
         <>
-          <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-success shadow-[0_0_6px_rgba(52,211,153,0.6)]" />
-          <span className="max-w-[220px] truncate text-[length:var(--app-text-13)] font-medium text-text-strong" title={session.name}>
-            {session.name}
-          </span>
-          <span className="text-text-faint">/</span>
           <Select
             value={activeDatabase ?? ''}
             options={options}
@@ -110,9 +105,6 @@ export default function WorkspaceHeader({
             >
               <Icon name="trash" size={14} />
             </button>
-          </span>
-          <span className="hidden truncate text-[length:var(--app-text-11)] text-text-faint lg:block">
-            {session.host}:{session.port}
           </span>
         </>
       ) : (
