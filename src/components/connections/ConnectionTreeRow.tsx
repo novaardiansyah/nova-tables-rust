@@ -65,8 +65,8 @@ export interface ConnectionRowProps {
   onOpenRowMenu: (event: MouseEvent<HTMLButtonElement | HTMLDivElement>, kind: 'connection', item: ConnectionItem) => void
   onSelectClick: (event: MouseEvent<HTMLButtonElement>, kind: 'connection', id: string) => void
   onModifierClick: (event: MouseEvent<HTMLButtonElement>, kind: 'connection', id: string) => boolean
-  onDragStart: (event: DragEvent<HTMLButtonElement>, kind: 'connection', id: string) => void
-  onDragEnd: (event: DragEvent<HTMLButtonElement>) => void
+  onDragStart: (event: DragEvent<HTMLElement>, kind: 'connection', id: string) => void
+  onDragEnd: (event: DragEvent<HTMLElement>) => void
   onRowDragOver: (event: DragEvent<HTMLDivElement>, kind: 'connection', item: ConnectionItem) => void
   onRowDrop: (event: DragEvent<HTMLDivElement>, kind: 'connection', item: ConnectionItem) => void
 }
@@ -105,10 +105,13 @@ export function ConnectionRow({
       {isDropLine('before') ? <DropLine depth={depth} /> : null}
       <div
         style={{ marginLeft: depth * 14 }}
-        className={`group/row group/conn flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors ${
+        draggable
+        className={`group/row group/conn flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors cursor-grab active:cursor-grabbing ${
           isSelected ? 'bg-accent/[0.08]' : 'hover:bg-tint/[0.04]'
         } ${isDragged ? 'opacity-40' : ''}`}
         onContextMenu={(event) => onOpenRowMenu(event, 'connection', connection)}
+        onDragStart={(event) => onDragStart(event, 'connection', connection.id)}
+        onDragEnd={onDragEnd}
         onDragOver={(event) => onRowDragOver(event, 'connection', connection)}
         onDrop={(event) => onRowDrop(event, 'connection', connection)}
       >
@@ -229,8 +232,8 @@ export interface FolderRowProps {
   onOpenRowMenu: (event: MouseEvent<HTMLButtonElement | HTMLDivElement>, kind: 'folder', item: FolderItem) => void
   onSelectClick: (event: MouseEvent<HTMLButtonElement>, kind: 'folder', id: string) => void
   onModifierClick: (event: MouseEvent<HTMLButtonElement>, kind: 'folder', id: string) => boolean
-  onDragStart: (event: DragEvent<HTMLButtonElement>, kind: 'folder', id: string) => void
-  onDragEnd: (event: DragEvent<HTMLButtonElement>) => void
+  onDragStart: (event: DragEvent<HTMLElement>, kind: 'folder', id: string) => void
+  onDragEnd: (event: DragEvent<HTMLElement>) => void
   onRowDragOver: (event: DragEvent<HTMLDivElement>, kind: 'folder', item: FolderItem) => void
   onRowDrop: (event: DragEvent<HTMLDivElement>, kind: 'folder', item: FolderItem) => void
   renderConnection: (conn: ConnectionItem, depth: number) => React.ReactNode
@@ -276,10 +279,13 @@ export function FolderRow({
       {isDropLine('before') ? <DropLine depth={depth} /> : null}
       <div
         style={{ marginLeft: depth * 14 }}
-        className={`group/row group/folder flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors ${
+        draggable
+        className={`group/row group/folder flex items-center gap-1.5 rounded-md px-2 py-1.5 transition-colors cursor-grab active:cursor-grabbing ${
           isSelected ? 'bg-accent/[0.08]' : 'hover:bg-tint/[0.03]'
         } ${isDropInside ? 'bg-accent/10 ring-1 ring-accent/40' : ''} ${isDragged ? 'opacity-40' : ''}`}
         onContextMenu={(event) => onOpenRowMenu(event, 'folder', folder)}
+        onDragStart={(event) => onDragStart(event, 'folder', folder.id)}
+        onDragEnd={onDragEnd}
         onDragOver={(event) => onRowDragOver(event, 'folder', folder)}
         onDrop={(event) => onRowDrop(event, 'folder', folder)}
       >

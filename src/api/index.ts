@@ -609,6 +609,9 @@ export const api = {
       trustServerCertificate: connection.trustServerCertificate !== false,
       driverType: connection.driverType,
     }
+    // Remove `database` to avoid duplicate field error in Rust serde
+    // (field has both `rename = "databaseName"` and `alias = "database"`)
+    delete payload.database
     const res = await callCommand<{ connection?: ConnectionModel }>('save_connection', {
       connection: payload,
     })

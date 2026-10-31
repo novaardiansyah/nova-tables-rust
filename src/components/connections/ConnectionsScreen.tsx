@@ -350,7 +350,7 @@ export default function ConnectionsScreen({
   }
 
   const handleDragStart = (
-    event: DragEvent<HTMLButtonElement>,
+    event: DragEvent<HTMLElement>,
     kind: DragKind,
     id: string,
   ) => {

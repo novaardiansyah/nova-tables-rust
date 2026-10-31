@@ -1,6 +1,7 @@
 use rusqlite::{params, Connection as SqliteConnection, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashSet, VecDeque};
+use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -190,6 +191,16 @@ impl LocalStore {
         for item in rows {
             result.push(item?);
         }
+
+        let (connection_order, _) = Self::read_tree_order(conn)?;
+        let rank = Self::order_rank(&connection_order);
+        result.sort_by(|left, right| {
+            let left_rank = rank.get(&left.id).copied().unwrap_or(usize::MAX);
+            let right_rank = rank.get(&right.id).copied().unwrap_or(usize::MAX);
+            left_rank
+                .cmp(&right_rank)
+                .then_with(|| left.name.cmp(&right.name))
+        });
         Ok(result)
     }
 
@@ -305,6 +316,16 @@ impl LocalStore {
         for item in rows {
             result.push(item?);
         }
+
+        let (_, folder_order) = Self::read_tree_order(conn)?;
+        let rank = Self::order_rank(&folder_order);
+        result.sort_by(|left, right| {
+            let left_rank = rank.get(&left.id).copied().unwrap_or(usize::MAX);
+            let right_rank = rank.get(&right.id).copied().unwrap_or(usize::MAX);
+            left_rank
+                .cmp(&right_rank)
+                .then_with(|| left.name.cmp(&right.name))
+        });
         Ok(result)
     }
 
@@ -416,6 +437,121 @@ impl LocalStore {
         id: &str,
     ) -> Result<(Vec<String>, Vec<String>)> {
         Self::delete_tree(conn, &[id.to_string()], &[])
+    }
+
+    pub fn read_tree_order(conn: &SqliteConnection) -> Result<(Vec<String>, Vec<String>)> {
+        let raw = Self::get_meta(conn, "tree_order")?;
+        let Some(raw) = raw else {
+            return Ok((Vec::new(), Vec::new()));
+        };
+        let parsed: Value = match serde_json::from_str(&raw) {
+            Ok(value) => value,
+            Err(_) => return Ok((Vec::new(), Vec::new())),
+        };
+        let read_ids = |key: &str| -> Vec<String> {
+            parsed
+                .get(key)
+                .and_then(|value| value.as_array())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str().map(|value| value.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        Ok((read_ids("connections"), read_ids("folders")))
+    }
+
+    pub fn order_rank(ids: &[String]) -> HashMap<String, usize> {
+        ids.iter()
+            .enumerate()
+            .map(|(index, id)| (id.clone(), index))
+            .collect()
+    }
+
+    pub fn normalize_order(
+        conn: &SqliteConnection,
+        table: &str,
+        ids: &[String],
+    ) -> Result<Vec<String>> {
+        let sql = match table {
+            "connections" => "SELECT id, name FROM connections",
+            "folders" => "SELECT id, name FROM folders",
+            _ => return Ok(Vec::new()),
+        };
+
+        let mut rows: Vec<(String, String)> = Vec::new();
+        {
+            let mut stmt = conn.prepare(sql)?;
+            let mapped = stmt
+                .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?;
+            for row in mapped {
+                rows.push(row?);
+            }
+        }
+
+        let known: HashSet<String> = rows.iter().map(|(id, _)| id.clone()).collect();
+        let mut ordered: Vec<String> = Vec::new();
+        for id in ids {
+            if known.contains(id) && !ordered.contains(id) {
+                ordered.push(id.clone());
+            }
+        }
+
+        let mut rest: Vec<(String, String)> = rows
+            .into_iter()
+            .filter(|(id, _)| !ordered.contains(id))
+            .collect();
+        rest.sort_by(|left, right| left.1.cmp(&right.1));
+        ordered.extend(rest.into_iter().map(|(id, _)| id));
+
+        Ok(ordered)
+    }
+
+    pub fn update_tree_order(
+        conn: &mut SqliteConnection,
+        connections: &[String],
+        folders: &[String],
+        connection_folders: &HashMap<String, Option<String>>,
+        folder_parents: &HashMap<String, Option<String>>,
+    ) -> Result<()> {
+        let connection_order = Self::normalize_order(conn, "connections", connections)?;
+        let folder_order = Self::normalize_order(conn, "folders", folders)?;
+
+        let tx = conn.transaction()?;
+
+        for (connection_id, folder_id) in connection_folders {
+            tx.execute(
+                "UPDATE connections SET folder_id = ?1, updated_at = datetime('now') WHERE id = ?2",
+                params![folder_id.as_deref(), connection_id],
+            )?;
+        }
+
+        for (folder_id, parent_id) in folder_parents {
+            if parent_id.as_deref() == Some(folder_id.as_str()) {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    "Folder cannot be moved into itself".to_string(),
+                ));
+            }
+            tx.execute(
+                "UPDATE folders SET parent_id = ?1 WHERE id = ?2",
+                params![parent_id.as_deref(), folder_id],
+            )?;
+        }
+
+        Self::set_meta(
+            &tx,
+            "tree_order",
+            &serde_json::to_string(&json!({
+              "connections": connection_order,
+              "folders": folder_order
+            }))
+            .unwrap_or_default(),
+        )?;
+
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn add_query_history(conn: &SqliteConnection, item: &QueryHistoryItem) -> Result<()> {
