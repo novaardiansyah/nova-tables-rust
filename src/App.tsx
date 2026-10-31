@@ -37,7 +37,7 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (!banner) return undefined
+    if (!banner || banner.type !== 'success') return undefined
     const timer = setTimeout(() => setBanner(null), 2500)
     return () => clearTimeout(timer)
   }, [banner])

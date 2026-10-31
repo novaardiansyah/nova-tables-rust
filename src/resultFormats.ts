@@ -16,7 +16,7 @@ export function quoteIdentifier(name: string | number, driverType?: string | nul
   return `[${String(name).replace(/]/g, ']]')}]`
 }
 
-export function sqlLiteral(value: unknown): string {
+export function sqlLiteral(value: unknown, driverType?: string | null): string {
   if (value === null || value === undefined) return 'NULL'
   if (typeof value === 'number') return String(value)
   if (typeof value === 'boolean') return value ? '1' : '0'
@@ -24,15 +24,23 @@ export function sqlLiteral(value: unknown): string {
     return String((value as SpecialValue).special)
   }
   if (value instanceof Date) return `N'${value.toISOString().replace('T', ' ').slice(0, 23)}'`
+  if (driverType === 'mysql') {
+    return `'${String(value).replace(/\\/g, '\\\\').replace(/'/g, "''")}'`
+  }
   return `N'${String(value).replace(/'/g, "''")}'`
 }
 
-export function rowCondition(primaryKey: string[], keyIndexes: number[], row: unknown[]): string {
+export function rowCondition(
+  primaryKey: string[],
+  keyIndexes: number[],
+  row: unknown[],
+  driverType?: string | null,
+): string {
   return primaryKey
     .map((name, position) => {
       const value = row[keyIndexes[position]]
-      if (value === null || value === undefined) return `${quoteIdentifier(name)} IS NULL`
-      return `${quoteIdentifier(name)} = ${sqlLiteral(value)}`
+      if (value === null || value === undefined) return `${quoteIdentifier(name, driverType)} IS NULL`
+      return `${quoteIdentifier(name, driverType)} = ${sqlLiteral(value, driverType)}`
     })
     .join('\n   AND ')
 }
@@ -185,7 +193,7 @@ export function sqlInsertRows(
   return matrix
     .map(
       (cells) =>
-        `INSERT INTO ${target} (${columns})\nVALUES (${cells.map(sqlLiteral).join(', ')});`
+        `INSERT INTO ${target} (${columns})\nVALUES (${cells.map((cell) => sqlLiteral(cell)).join(', ')});`
     )
     .join('\n\n')
 }

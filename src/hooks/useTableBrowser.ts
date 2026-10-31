@@ -82,7 +82,7 @@ export function useTableBrowser({
         relation.referencedSchema,
         relation.referencedTable,
       )
-      const editSource = table ? buildEditSource(table, sql) : null
+      const editSource = table ? buildEditSource(table, sql, driverType) : null
       const tabId = openTab(current.connectionId, relation.referencedTable, sql, editSource)
       patchSession(current.connectionId, {
         selectedTable: `${relation.referencedSchema}.${relation.referencedTable}`,
@@ -102,7 +102,7 @@ export function useTableBrowser({
       if (!current) return
       const driverType = current.connection?.driverType
       const sql = browseSql(table, driverType)
-      const editSource = buildEditSource(table, sql)
+      const editSource = buildEditSource(table, sql, driverType)
       const tabId = openTab(current.connectionId, table.name, sql, editSource)
       patchSession(current.connectionId, { selectedTable: `${table.schema}.${table.name}` })
       execute(sql, tabId)
