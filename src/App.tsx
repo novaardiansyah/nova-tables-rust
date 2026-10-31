@@ -258,7 +258,13 @@ export default function App() {
     setSettingsOpen,
     setDialog: sessionManager.setDialog,
     handleRun: queryExecution.handleRun,
-    handleSaveQuery: savedQueries.handleSaveQuery,
+    handleSaveQuery: () => {
+      if (activeTab && Object.keys(activeTab.edits || {}).length > 0) {
+        queryExecution.handleReRun()
+      } else {
+        savedQueries.handleSaveQuery()
+      }
+    },
     openConnectionScreen: sessionManager.openConnectionScreen,
     handleCloseActiveTab: tabManager.handleCloseActiveTab,
     handleNewTab: tabManager.handleNewTab,

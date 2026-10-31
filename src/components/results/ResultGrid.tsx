@@ -248,7 +248,7 @@ export default function ResultGrid({
   )
 
   const columnEditable = (columnIndex: number) => {
-    if (!editable || columnRelations[columnIndex]) return false
+    if (!editable) return false
     if (!editableColumns) return true
     const column = columns[columnIndex]
     return Boolean(column && editableColumns.has(column.name))
