@@ -299,15 +299,48 @@ pub fn quote_name(value: &str) -> String {
     format!("`{}`", value.replace('`', "``"))
 }
 
-/// Gets table relations (foreign keys) - simplified MySQL implementation.
+/// Gets table relations (foreign keys) via information_schema.
 pub async fn table_relations(
-    _conn: &mut Conn,
-    _database: Option<&str>,
-    _schema: &str,
-    _table: &str,
+    conn: &mut Conn,
+    database: Option<&str>,
+    schema: &str,
+    table: &str,
 ) -> Result<Value, String> {
-    // MySQL foreign keys via information_schema - simplified
-    Err("Not yet implemented for MySQL".to_string())
+    let db = database.as_deref().filter(|value| !value.is_empty()).unwrap_or(schema);
+    let query = format!(
+        "SELECT k.COLUMN_NAME AS column_name,
+                k.REFERENCED_TABLE_SCHEMA AS referenced_schema,
+                k.REFERENCED_TABLE_NAME AS referenced_table,
+                k.REFERENCED_COLUMN_NAME AS referenced_column
+         FROM information_schema.KEY_COLUMN_USAGE k
+         WHERE k.TABLE_SCHEMA = '{db}' AND k.TABLE_NAME = '{table}'
+           AND k.REFERENCED_TABLE_NAME IS NOT NULL
+         ORDER BY k.CONSTRAINT_NAME, k.ORDINAL_POSITION"
+    );
+
+    let rows: Vec<Row> = conn.query(query).await.map_err(|e| e.to_string())?;
+    let mut relations = Vec::new();
+
+    for row in rows {
+        let column = opt_string(&row, 0).unwrap_or_default();
+        let referenced_schema = opt_string(&row, 1).unwrap_or_default();
+        let referenced_table = opt_string(&row, 2).unwrap_or_default();
+        let referenced_column = opt_string(&row, 3).unwrap_or_default();
+        if column.is_empty() || referenced_table.is_empty() || referenced_column.is_empty() {
+            continue;
+        }
+        relations.push(json!({
+          "column": column,
+          "referencedSchema": referenced_schema,
+          "referencedTable": referenced_table,
+          "referencedColumn": referenced_column,
+        }));
+    }
+
+    Ok(json!({
+      "ok": true,
+      "relations": relations
+    }))
 }
 
 /// Gets table structure via information_schema + SHOW CREATE TABLE.
