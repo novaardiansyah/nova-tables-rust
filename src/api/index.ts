@@ -225,6 +225,27 @@ function cleanText(value: unknown, fallback = ''): string {
   return String(value).trim()
 }
 
+function legacyCopyText(text: string): boolean {
+  if (typeof document === 'undefined' || !document.body) return false
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.top = '0'
+  textarea.style.left = '-9999px'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  textarea.setSelectionRange(0, textarea.value.length)
+  try {
+    return document.execCommand('copy')
+  } catch {
+    return false
+  } finally {
+    document.body.removeChild(textarea)
+  }
+}
+
 function exportFolderChain(folderId: string, folderById: Map<string, FolderModel>): string[] {
   const chain: string[] = []
   let current: FolderModel | null = folderId ? folderById.get(folderId) ?? null : null
@@ -538,10 +559,18 @@ export const api = {
   },
 
   copyText: async (text: string): Promise<boolean> => {
+    const value = String(text ?? '')
+    // Try the modern Clipboard API first (works in most browsers and Tauri)
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      await navigator.clipboard.writeText(text)
+      try {
+        await navigator.clipboard.writeText(value)
+        return true
+      } catch {
+        // Clipboard API failed, fall back to execCommand
+      }
     }
-    return true
+    // Fallback: use document.execCommand('copy') with a hidden textarea
+    return legacyCopyText(value)
   },
 
   saveFile: async (input: unknown): Promise<{ saved?: boolean; filePath?: string; [key: string]: unknown }> => {
