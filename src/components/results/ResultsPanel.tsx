@@ -862,6 +862,23 @@ function IdleState() {
 }
 
 function ErrorState({ error }: { error?: QueryErrorData | null }) {
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (!copied) return undefined
+    const timer = setTimeout(() => setCopied(false), 1400)
+    return () => clearTimeout(timer)
+  }, [copied])
+
+  const handleCopy = async () => {
+    try {
+      await api.copyText(error?.message || 'Unknown error')
+      setCopied(true)
+    } catch {
+      // Keep the message visible even if the clipboard is unavailable.
+    }
+  }
+
   const details = [
     error?.number ? `Error ${error.number}` : null,
     error?.severity ? `Level ${error.severity}` : null,
@@ -890,6 +907,19 @@ function ErrorState({ error }: { error?: QueryErrorData | null }) {
                 ))}
               </div>
             ) : null}
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="icon-btn h-5 w-5 shrink-0 text-danger/60 hover:text-danger"
+                title={copied ? 'Copied' : 'Copy error'}
+              >
+                <Icon name={copied ? 'check' : 'copy'} size={13} />
+              </button>
+              {copied ? (
+                <p className="text-[length:var(--app-text-10)] text-danger/60">Copied</p>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
