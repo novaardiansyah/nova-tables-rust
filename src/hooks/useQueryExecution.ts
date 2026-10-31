@@ -62,10 +62,10 @@ export function useQueryExecution({
     return resultSets[tab.activeSet ?? 0] ?? null
   }
 
-  const describeEditSource = useCallback(async (connectionId: string, database: string, sql: string, tables: any[]) => {
+  const describeEditSource = useCallback(async (connectionId: string, database: string, sql: string, tables: any[], driverType?: string | null) => {
     try {
       const columns = await api.describeResult(connectionId, database, sql)
-      return buildQueryEditSource({ sql, columns, tables })
+      return buildQueryEditSource({ sql, columns, tables, driverType })
     } catch {
       return null
     }
@@ -94,7 +94,7 @@ export function useQueryExecution({
       const source = tab?.editSource && tab.editSource.sql === sql ? tab.editSource : null
       if (tab && !source) {
         const table = editTableFromSql(sql, current.tables?.tables ?? [])
-        patch.editSource = table ? buildEditSource(table, sql) : null
+        patch.editSource = table ? buildEditSource(table, sql, current.connection?.driverType) : null
       }
       const requestId = (editSourceRequestsRef.current[tabId] ?? 0) + 1
       editSourceRequestsRef.current[tabId] = requestId
@@ -124,6 +124,7 @@ export function useQueryExecution({
             current.activeDatabase,
             sql,
             current.tables?.tables ?? [],
+            current.connection?.driverType,
           )
           if (editSource && editSourceRequestsRef.current[tabId] === requestId) {
             updateTab(current.connectionId, tabId, (latest) =>
@@ -390,6 +391,7 @@ export function useQueryExecution({
           current.activeDatabase || 'master',
           sql,
           current.tables?.tables ?? [],
+          current.connection?.driverType,
         ))
       const column = conditions[0]?.column ?? null
       const tabId = openTab(

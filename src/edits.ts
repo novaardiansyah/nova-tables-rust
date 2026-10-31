@@ -13,6 +13,7 @@ export interface EditSource {
   sql: string
   joined: boolean
   inferred: boolean
+  driverType?: string | null
   tables: EditTableTarget[]
 }
 
@@ -45,35 +46,47 @@ export interface CellEdit {
 }
 
 const UNSUPPORTED_EDIT_SOURCE = /\b(join|union|into|group\s+by|having)\b/i
-const TABLE_REFERENCE =
-  /\bfrom\s+(\[[^\]]+\]|[A-Za-z_][\w$#@]*)(?:\s*\.\s*(\[[^\]]+\]|[A-Za-z_][\w$#@]*))?/i
+const IDENTIFIER = '(?:\\[[^\\]]+\\]|`[^`]+`|[A-Za-z_][\\w$#@]*)'
+const TABLE_REFERENCE = new RegExp(
+  `\\bfrom\\s+(${IDENTIFIER})(?:\\s*\\.\\s*(${IDENTIFIER}))?`,
+  'i',
+)
 
 function unquoteIdentifier(value: string): string {
   const bracketed = /^\[([^\]]+)\]$/.exec(value)
-  return bracketed ? bracketed[1] : value
+  if (bracketed) return bracketed[1]
+  const backticked = /^`([^`]+)`$/.exec(value)
+  if (backticked) return backticked[1]
+  return value
 }
 
-const PLAIN_COLUMN = /^(\[[^\]]+\]|[A-Za-z_][\w$#@]*)(\s*\.\s*(\[[^\]]+\]|[A-Za-z_][\w$#@]*))?$/
+const PLAIN_COLUMN = new RegExp(`^(${IDENTIFIER})(\\s*\\.\\s*(${IDENTIFIER}))?$`)
 
 function plainProjection(text: string): boolean {
   const match = /^select\s+([\s\S]*?)\s+from\b/i.exec(text)
   if (!match) return false
   const items = match[1].split(',')
   if (!items.length) return false
+  const qualifiedStar = new RegExp(`^${IDENTIFIER}\\s*\\.\\s*\\*$`)
   return items.every((item) => {
     const value = item.trim()
     if (value === '*') return true
-    if (/^(\[[^\]]+\]|[A-Za-z_][\w$#@]*)\s*\.\s*\*$/.test(value)) return true
+    if (qualifiedStar.test(value)) return true
     return PLAIN_COLUMN.test(value)
   })
 }
 
-export function buildEditSource(table: SourceTable, sql: string): EditSource {
+export function buildEditSource(
+  table: SourceTable,
+  sql: string,
+  driverType?: string | null,
+): EditSource {
   const primaryKey = table.primaryKey ?? []
   return {
     sql,
     joined: false,
     inferred: false,
+    driverType,
     tables: [
       {
         schema: table.schema,
@@ -114,10 +127,12 @@ export function buildQueryEditSource({
   sql,
   columns,
   tables,
+  driverType,
 }: {
   sql: string | null | undefined
   columns: QueryColumnMeta[] | null | undefined
   tables: SourceTable[]
+  driverType?: string | null
 }): EditSource | null {
   if (!sql || !Array.isArray(columns) || !columns.length) return null
 
@@ -185,6 +200,7 @@ export function buildQueryEditSource({
     sql,
     joined: byTable.size > 1,
     inferred: true,
+    driverType,
     tables: sources,
   }
 }
@@ -287,13 +303,14 @@ export function buildUpdateStatements(
   }
 
   const statements: string[] = []
+  const driverType = editSource.driverType ?? null
   for (const group of groups.values()) {
     for (const { row, assignments } of group.rows.values()) {
       const setText = Array.from(assignments)
-        .map(([column, value]) => `${quoteIdentifier(column)} = ${sqlLiteral(value)}`)
+        .map(([column, value]) => `${quoteIdentifier(column, driverType)} = ${sqlLiteral(value, driverType)}`)
         .join(',\n       ')
       statements.push(
-        `UPDATE ${quoteIdentifier(group.target.schema)}.${quoteIdentifier(group.target.table)}\n   SET ${setText}\n WHERE ${rowCondition(group.target.primaryKey, group.positions, row)};`,
+        `UPDATE ${quoteIdentifier(group.target.schema, driverType)}.${quoteIdentifier(group.target.table, driverType)}\n   SET ${setText}\n WHERE ${rowCondition(group.target.primaryKey, group.positions, row, driverType)};`,
       )
     }
   }
@@ -312,11 +329,12 @@ export function buildDeleteStatementsForRows(
   if (!positions) return []
 
   const statements: string[] = []
+  const driverType = editSource.driverType ?? null
   for (const rowIndex of rowIndexes) {
     const row = resultSet.rows[rowIndex]
     if (!row) continue
     statements.push(
-      `DELETE FROM ${quoteIdentifier(target.schema)}.${quoteIdentifier(target.table)}\n WHERE ${rowCondition(target.primaryKey, positions, row)};`,
+      `DELETE FROM ${quoteIdentifier(target.schema, driverType)}.${quoteIdentifier(target.table, driverType)}\n WHERE ${rowCondition(target.primaryKey, positions, row, driverType)};`,
     )
   }
   return statements
@@ -335,11 +353,12 @@ export function buildDeleteStatements(
   if (!positions) return []
 
   const statements: string[] = []
+  const driverType = editSource.driverType ?? null
   for (let rowIndex = rowStart; rowIndex <= rowEnd; rowIndex += 1) {
     const row = resultSet.rows[rowIndex]
     if (!row) continue
     statements.push(
-      `DELETE FROM ${quoteIdentifier(target.schema)}.${quoteIdentifier(target.table)}\n WHERE ${rowCondition(target.primaryKey, positions, row)};`,
+      `DELETE FROM ${quoteIdentifier(target.schema, driverType)}.${quoteIdentifier(target.table, driverType)}\n WHERE ${rowCondition(target.primaryKey, positions, row, driverType)};`,
     )
   }
   return statements
