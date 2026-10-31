@@ -7,7 +7,7 @@ import QueryEditor from '@/components/QueryEditor'
 import ResultsPanel from '@/components/results/ResultsPanel'
 import StatusBar from '@/components/common/StatusBar'
 import JsonPanel from '@/components/results/JsonPanel'
-import { SessionData, dropDatabaseState, manageUsersState, IDLE_QUERY } from '@/utils/sessionHelpers'
+import { SessionData, createDatabaseState, dropDatabaseState, manageUsersState, IDLE_QUERY } from '@/utils/sessionHelpers'
 import { Settings } from '@/settings'
 
 export interface WorkspaceViewProps {
@@ -125,6 +125,7 @@ export default function WorkspaceView({
     openConnectionScreen,
     handleSelectDatabase,
     handleRefreshDatabases,
+    handleOpenCreateDatabase,
     handleOpenDropDatabase,
   } = sessionManager
 
@@ -137,6 +138,7 @@ export default function WorkspaceView({
     ? (session.databases ?? []).find((database) => database.name === session.activeDatabase) ?? null
     : null
   const dropState = dropDatabaseState(session, activeDatabaseInfo, Boolean(running))
+  const createState = createDatabaseState(session, Boolean(running))
   const manageUsers = manageUsersState(session, activeDatabaseInfo)
 
   const completionCatalog = useMemo(
@@ -201,12 +203,15 @@ export default function WorkspaceView({
             activeDatabase={session.activeDatabase}
             running={running}
             queryExecutionMode={settings.queryExecutionMode}
+            canCreateDatabase={createState.allowed}
+            createDatabaseHint={createState.hint}
             canDropDatabase={dropState.allowed}
             dropDatabaseHint={dropState.hint}
             canManageUsers={manageUsers.allowed}
             manageUsersHint={manageUsers.hint}
             onSelectDatabase={handleSelectDatabase}
             onChangeExecutionMode={handleChangeExecutionMode}
+            onCreateDatabase={handleOpenCreateDatabase}
             onDropDatabase={handleOpenDropDatabase}
             onManageUsers={databaseUsers.handleOpenDatabaseUsers}
             onRun={handleRun}

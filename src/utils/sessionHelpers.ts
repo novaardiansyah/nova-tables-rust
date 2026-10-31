@@ -125,6 +125,12 @@ export function pickDatabase(databases: DatabaseInfo[], configured?: string | nu
   return online?.name || names[0] || configured || 'master'
 }
 
+export function createDatabaseState(session: SessionData | null, running: boolean) {
+  if (!session) return { allowed: false, hint: 'Open a connection first.' }
+  if (running) return { allowed: false, hint: 'Wait for the running query to finish.' }
+  return { allowed: true, hint: 'New database' }
+}
+
 export function dropDatabaseState(session: SessionData | null, database: DatabaseInfo | null, running: boolean) {
   if (!session) return { allowed: false, hint: 'Open a connection first.' }
   if (!database) return { allowed: false, hint: 'Select a database first.' }

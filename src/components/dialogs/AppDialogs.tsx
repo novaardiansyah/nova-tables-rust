@@ -11,6 +11,7 @@ import QueryGuardDialog from '@/components/dialogs/QueryGuardDialog'
 import UpdateConfirmDialog from '@/components/results/UpdateConfirmDialog'
 import DeleteConfirmDialog from '@/components/results/DeleteConfirmDialog'
 import ConfirmDialog from '@/components/common/ConfirmDialog'
+import CreateDatabaseDialog from '@/components/dialogs/CreateDatabaseDialog'
 import DropDatabaseDialog from '@/components/dialogs/DropDatabaseDialog'
 import DatabaseUsersDialog from '@/components/dialogs/DatabaseUsersDialog'
 import { Settings, normalizeSettings } from '@/settings'
@@ -64,6 +65,10 @@ export default function AppDialogs({
     dialog,
     setDialog,
     handleSaveConnection,
+    databaseCreate,
+    setDatabaseCreate,
+    databaseCreateBusy,
+    handleCreateDatabaseConfirm,
     databaseDrop,
     setDatabaseDrop,
     databaseDropBusy,
@@ -355,6 +360,19 @@ export default function AppDialogs({
         busy={tableBusy}
         onCancel={() => setDropTarget(null)}
         onConfirm={handleDropConfirm}
+      />
+
+      <CreateDatabaseDialog
+        open={Boolean(databaseCreate)}
+        connectionName={session?.name ?? ''}
+        server={session ? `${session.host}:${session.port}` : ''}
+        driverType={session?.connection?.driverType ?? null}
+        error={databaseCreate?.error ?? null}
+        busy={databaseCreateBusy}
+        onCancel={() => {
+          if (!databaseCreateBusy) setDatabaseCreate(null)
+        }}
+        onConfirm={handleCreateDatabaseConfirm}
       />
 
       <DropDatabaseDialog

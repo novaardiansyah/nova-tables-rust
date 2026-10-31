@@ -779,6 +779,33 @@ pub fn delete_saved_query(id: String) -> Result<Value, String> {
 }
 
 #[tauri::command]
+pub async fn create_database(input: Value) -> Result<Value, String> {
+    let connection_id = input_text(&input, "connectionId");
+    let database = input_text(&input, "database").trim().to_string();
+
+    if connection_id.is_empty() {
+        return Err("Open a connection first.".to_string());
+    }
+    if database.is_empty() {
+        return Err("Enter a database name.".to_string());
+    }
+
+    if connection_driver_type(&connection_id) == "mysql" {
+        let mut client = mysql_client_for_connection(&connection_id, None).await?;
+        return mysql::create_database(&mut client, &database).await;
+    } else {
+        let mut client = mssql::get_client_for_connection(&connection_id, Some("master")).await?;
+        let sql = format!("CREATE DATABASE [{}]", database.replace(']', "]]"));
+        client.simple_query(sql).await.map_err(|e| e.to_string())?;
+    }
+
+    Ok(json!({
+      "ok": true,
+      "database": database
+    }))
+}
+
+#[tauri::command]
 pub async fn drop_database(input: Value) -> Result<Value, String> {
     let conn_id = input
         .get("connectionId")

@@ -1067,6 +1067,10 @@ export const api = {
     )
   },
 
+  createDatabase: async (input: { connectionId: string; database: string; [key: string]: unknown }): Promise<unknown> => {
+    return callCommand('create_database', { input })
+  },
+
   dropDatabase: async (input: { connectionId: string; database: string; confirmName?: string; acknowledged?: boolean; [key: string]: unknown }): Promise<unknown> => {
     return callCommand('drop_database', { input })
   },
