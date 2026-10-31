@@ -521,7 +521,13 @@ pub async fn connect(input: Value) -> Result<Value, String> {
                 .filter(|s| !s.is_empty())
                 .map(|s| s.to_string())
         })
-        .unwrap_or_else(|| "master".to_string());
+        .unwrap_or_else(|| {
+            if driver_type == "mysql" {
+                String::new()
+            } else {
+                "master".to_string()
+            }
+        });
 
     let encrypt = input
         .get("encrypt")
