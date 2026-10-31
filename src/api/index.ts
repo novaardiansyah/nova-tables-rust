@@ -494,7 +494,7 @@ export const api = {
     const res = await callCommand<{ version?: string }>('get_system_info')
     return {
       name: 'Nova Tables',
-      version: res?.version || '2.1.0',
+      version: res?.version || '2.1.1',
     }
   },
 

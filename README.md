@@ -12,7 +12,7 @@ Nova Tables is made for people who work with Microsoft SQL Server every day and 
 
 ## Screenshots
 
-Every image below is captured from Nova Tables 2.1.0 connected to a local SQL Server test database.
+Every image below is captured from Nova Tables connected to a local SQL Server test database.
 
 ### Your connections, recent sessions and folders in one place
 
@@ -157,6 +157,9 @@ make build
 
 # Build the Windows NSIS installer from Linux (cargo-xwin + makensis)
 make build-win
+
+# Build all 4 release installers (Linux + Windows) and collect into build/v<version>/
+make build-all
 
 # Copy the generated installers into build/<version>/
 make artifacts

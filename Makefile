@@ -17,7 +17,7 @@ IMAGE_MAGICK := $(shell command -v magick || command -v convert)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install dev run compile build build-linux build-win artifacts package deploy uninstall lint verify clean distclean
+.PHONY: help install dev run compile build build-linux build-win build-all artifacts package deploy uninstall lint verify clean distclean
 
 help:
 	@echo
@@ -31,6 +31,7 @@ help:
 		build 'Build and package the Tauri app for Linux and Windows' \
 		build-linux 'Build and package the Linux AppImage and deb' \
 		build-win 'Cross-compile the Windows NSIS installer (cargo-xwin + makensis)' \
+		build-all 'Build all 4 release installers (Linux + Windows) and collect into build/v<version>/' \
 		artifacts 'Copy the installers into build/<version>/' \
 		package 'Build release binary via Tauri' \
 		deploy 'Build, remove any previous install, then install for the current user' \
@@ -62,6 +63,10 @@ build-linux:
 build-win:
 	@command -v makensis >/dev/null 2>&1 || { echo "Missing makensis (NSIS) — install it before cross-compiling the Windows installer."; exit 1; }
 	$(NPM) run tauri build -- --runner cargo-xwin --target $(WIN_TARGET) --bundles nsis
+
+build-all: build build-win artifacts
+	@echo "All 4 release installers generated in $(ARTIFACTS):"
+	@ls -la "$(ARTIFACTS)"
 
 artifacts:
 	@mkdir -p "$(ARTIFACTS)"
