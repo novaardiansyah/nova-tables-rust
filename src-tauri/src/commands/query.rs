@@ -807,22 +807,28 @@ pub async fn create_database(input: Value) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn drop_database(input: Value) -> Result<Value, String> {
-    let conn_id = input
-        .get("connectionId")
-        .or_else(|| input.get("connection_id"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let database = input.get("database").and_then(|v| v.as_str()).unwrap_or("");
+    let connection_id = input_text(&input, "connectionId");
+    let database = input_text(&input, "database");
 
-    if !conn_id.is_empty() && !database.is_empty() {
-        let mut client = mssql::get_client_for_connection(conn_id, Some("master")).await?;
-        let sql = format!(
-            "ALTER DATABASE [{}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{}]",
-            database.replace(']', "]]"),
-            database.replace(']', "]]")
-        );
-        client.simple_query(sql).await.map_err(|e| e.to_string())?;
+    if connection_id.is_empty() {
+        return Err("Choose a connection first.".to_string());
     }
+    if database.is_empty() {
+        return Err("Enter a database name.".to_string());
+    }
+
+    if connection_driver_type(&connection_id) == "mysql" {
+        let mut client = mysql_client_for_connection(&connection_id, None).await?;
+        return mysql::drop_database(&mut client, &database).await;
+    }
+
+    let mut client = mssql::get_client_for_connection(&connection_id, Some("master")).await?;
+    let sql = format!(
+        "ALTER DATABASE [{}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{}]",
+        database.replace(']', "]]"),
+        database.replace(']', "]]")
+    );
+    client.simple_query(sql).await.map_err(|e| e.to_string())?;
 
     Ok(json!({
       "ok": true,

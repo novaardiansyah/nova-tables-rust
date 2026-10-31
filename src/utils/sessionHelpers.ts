@@ -136,7 +136,7 @@ export function dropDatabaseState(session: SessionData | null, database: Databas
   if (!database) return { allowed: false, hint: 'Select a database first.' }
   if (database.isSystem) return { allowed: false, hint: 'System databases cannot be dropped.' }
   if (!database.isOnline) return { allowed: false, hint: 'The database must be online.' }
-  if (String(database.name).toLowerCase() === String(session.activeDatabase || '').toLowerCase()) {
+  if (String(database.name).toLowerCase() === String(session.connection?.database || session.connection?.databaseName || '').toLowerCase()) {
     return { allowed: false, hint: 'The connection default database cannot be dropped.' }
   }
   if (running) return { allowed: false, hint: 'Wait for the running query to finish.' }

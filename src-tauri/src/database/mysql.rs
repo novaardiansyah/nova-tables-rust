@@ -84,6 +84,22 @@ pub async fn create_database(conn: &mut Conn, database: &str) -> Result<Value, S
     }))
 }
 
+/// Drops a database on the MySQL/MariaDB server.
+pub async fn drop_database(conn: &mut Conn, database: &str) -> Result<Value, String> {
+    let name = database.trim();
+    if name.is_empty() {
+        return Err("Enter a database name.".to_string());
+    }
+
+    let sql = format!("DROP DATABASE {}", quote_name(name));
+    conn.query_drop(sql).await.map_err(|e| e.to_string())?;
+
+    Ok(json!({
+      "ok": true,
+      "database": name
+    }))
+}
+
 /// Reads server information (version, name, edition).
 pub async fn read_server_info(conn: &mut Conn) -> (String, String, String) {
     let rows: Vec<Row> = conn
