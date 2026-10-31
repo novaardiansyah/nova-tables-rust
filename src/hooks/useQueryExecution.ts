@@ -92,9 +92,14 @@ export function useQueryExecution({
         lastExecutedSql: sql,
       }
       const source = tab?.editSource && tab.editSource.sql === sql ? tab.editSource : null
+      const inferredTable = !source ? editTableFromSql(sql, current.tables?.tables ?? []) : null
       if (tab && !source) {
-        const table = editTableFromSql(sql, current.tables?.tables ?? [])
-        patch.editSource = table ? buildEditSource(table, sql, current.connection?.driverType) : null
+        patch.editSource = inferredTable
+          ? buildEditSource(inferredTable, sql, current.connection?.driverType)
+          : null
+      }
+      if (!source && !inferredTable) {
+        patch.relations = []
       }
       const requestId = (editSourceRequestsRef.current[tabId] ?? 0) + 1
       editSourceRequestsRef.current[tabId] = requestId
@@ -112,6 +117,19 @@ export function useQueryExecution({
           state: { status: 'success', result, error: null },
           activeSet: firstFilled === -1 ? 0 : firstFilled,
         })
+        if (inferredTable) {
+          const relations = await api
+            .tableRelations(
+              current.connectionId,
+              current.activeDatabase,
+              inferredTable.schema,
+              inferredTable.name,
+            )
+            .catch(() => [])
+          if (editSourceRequestsRef.current[tabId] === requestId) {
+            updateTab(current.connectionId, tabId, { relations })
+          }
+        }
         if (
           tab &&
           !source &&
