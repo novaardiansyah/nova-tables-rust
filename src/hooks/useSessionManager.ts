@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, MutableRefObject } from 'react'
 import { api, DatabaseInfo } from '@/api'
-import { SessionData, SessionTab, createTab, createSession, pickDatabase, STARTER_SQL, queryTitle, EMPTY_TABLES, EMPTY_COLUMNS, EMPTY_MODULES } from '@/utils/sessionHelpers'
+import { SessionData, SessionTab, createTab, createSession, pickDatabase, starterSql, queryTitle, EMPTY_TABLES, EMPTY_COLUMNS, EMPTY_MODULES } from '@/utils/sessionHelpers'
 import { ConnectionDialogConnection, ConnectionDialogMode } from '@/components/connections/ConnectionDialog'
 import { Settings, applySettings } from '@/settings'
 import { PersistedSessionTabs, tabsFromPersisted } from '@/workspaceState'
@@ -283,7 +283,8 @@ export function useSessionManager({
             if (Number.isFinite(numeric) && numeric > tabIdRef.current) tabIdRef.current = numeric
           })
         } else {
-          tabs = [createTab(`tab-${tabIdRef.current}`, queryTitle(1), STARTER_SQL)]
+          const initialSql = starterSql(connection?.driverType)
+          tabs = [createTab(`tab-${tabIdRef.current}`, queryTitle(1), initialSql)]
         }
 
         const activeTabId =
