@@ -295,10 +295,7 @@ export default function ResultGrid({
 
   const handleCellDoubleClick = (event: React.MouseEvent, origIndex: number, columnIndex: number) => {
     if (draggedRef.current || event.shiftKey) return
-    if (!onCellChange || !columnEditable(columnIndex)) {
-      onInspectCell?.(columnIndex, origIndex)
-      return
-    }
+    if (!onCellChange || !columnEditable(columnIndex)) return
     const captured = preClickBoundsRef.current
     preClickBoundsRef.current = null
     const block =
