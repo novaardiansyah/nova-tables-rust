@@ -1,23 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
-import { api, DatabaseInfo } from '@/api'
+import { api, DatabaseUserDetail, ServerLoginItem, DatabaseInfo } from '@/api'
 
-export interface DatabaseUserDetail {
-  name: string
-  type: string
-  defaultSchema?: string | null
-  canManage: boolean
-  reason?: string | null
-  loginName?: string | null
-  roles: string[]
-}
-
-export interface ServerLoginItem {
-  name: string
-  type: string
-  isDisabled?: boolean
-  isLocked?: boolean
-}
-
+export type { DatabaseUserDetail, ServerLoginItem }
 export interface DatabaseUserStateData {
   status: 'idle' | 'loading' | 'ready' | 'error'
   users: DatabaseUserDetail[]
@@ -54,7 +38,7 @@ export function useDatabaseUsers({ activeSession, showBanner }: UseDatabaseUsers
     databaseUsersRequestRef.current = requestId
     setDatabaseUsers((current) => ({ ...current, status: 'loading', error: null }))
     try {
-      const data = await api.listDatabaseUsers(connectionId, database) as any
+      const data = await api.listDatabaseUsers(connectionId, database)
       if (databaseUsersRequestRef.current !== requestId) return
       setDatabaseUsers({
         status: 'ready',

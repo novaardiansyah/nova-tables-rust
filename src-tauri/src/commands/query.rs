@@ -4,6 +4,69 @@ use crate::database::mysql;
 use crate::file_system::FileSystem;
 use serde_json::{json, Value};
 
+// Reads the driver type stored for a connection, defaulting to SQL Server.
+fn connection_driver_type(connection_id: &str) -> String {
+    let Ok(db_path) = FileSystem::get_database_path() else {
+        return "sqlserver".to_string();
+    };
+    let Ok(conn) = LocalStore::init(&db_path) else {
+        return "sqlserver".to_string();
+    };
+    match LocalStore::get_connection(&conn, connection_id) {
+        Ok(Some(item)) => item.driver_type.unwrap_or_else(|| "sqlserver".to_string()),
+        _ => "sqlserver".to_string(),
+    }
+}
+
+// Creates a MySQL client for a saved connection.
+async fn mysql_client_for_connection(
+    connection_id: &str,
+    database: Option<&str>,
+) -> Result<mysql::MySqlConn, String> {
+    let db_path = FileSystem::get_database_path()?;
+    let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
+    let item = LocalStore::get_connection(&conn, connection_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("Connection {} not found", connection_id))?;
+    let password = item.password.or(item.password_cipher).unwrap_or_default();
+    let db_to_use = database
+        .filter(|value| !value.is_empty())
+        .or(item.database_name.as_deref());
+
+    mysql::create_client(
+        &item.host,
+        item.port,
+        &item.username,
+        &password,
+        db_to_use,
+        item.encrypt,
+        item.trust_server_certificate,
+    )
+    .await
+}
+
+fn input_text(input: &Value, key: &str) -> String {
+    input
+        .get(key)
+        .and_then(|value| value.as_str())
+        .unwrap_or("")
+        .to_string()
+}
+
+fn input_roles(input: &Value) -> Vec<String> {
+    input
+        .get("roles")
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str())
+                .map(|item| item.to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn record_query_history(
     connection_id: Option<&str>,
     database: Option<&str>,
@@ -745,54 +808,79 @@ pub async fn list_database_users(
     connection_id: Option<String>,
     database: Option<String>,
 ) -> Result<Value, String> {
-    if let Some(id) = connection_id.as_deref() {
-        if let Ok(mut client) = mssql::get_client_for_connection(id, database.as_deref()).await {
-            let sql = "SELECT dp.name AS userName, dp.type_desc AS userType, dp.default_schema_name AS defaultSchema, sp.name AS loginName
-                 FROM sys.database_principals dp
-                 LEFT JOIN sys.server_principals sp ON sp.sid = dp.sid
-                 WHERE dp.type IN ('S', 'U', 'G') AND dp.name NOT IN ('guest', 'INFORMATION_SCHEMA', 'sys')
-                 ORDER BY dp.name";
-            if let Ok(stream) = client.query(sql, &[]).await {
-                if let Ok(rows) = stream.into_first_result().await {
-                    let mut users = Vec::new();
-                    for row in rows {
-                        let user_name: &str = row.get(0).unwrap_or("");
-                        let user_type: &str = row.get(1).unwrap_or("");
-                        let default_schema: &str = row.get(2).unwrap_or("");
-                        let login_name: &str = row.get(3).unwrap_or("");
-                        users.push(json!({
-                          "userName": user_name,
-                          "userType": user_type,
-                          "defaultSchema": default_schema,
-                          "loginName": login_name,
-                          "roles": []
-                        }));
-                    }
-                    return Ok(json!({ "ok": true, "users": users }));
-                }
-            }
-        }
+    let Some(id) = connection_id.as_deref().filter(|value| !value.is_empty()) else {
+        return Ok(json!({
+          "ok": true,
+          "users": [],
+          "roles": [],
+          "logins": []
+        }));
+    };
+
+    if connection_driver_type(id) == "mysql" {
+        let mut client = mysql_client_for_connection(id, database.as_deref()).await?;
+        return mysql::list_database_users(&mut client, database.as_deref()).await;
     }
-    Ok(json!({
-      "ok": true,
-      "users": []
-    }))
+
+    let mut client = mssql::get_client_for_connection(id, database.as_deref()).await?;
+    mssql::list_database_users(&mut client, database.as_deref()).await
 }
 
 #[tauri::command]
-pub fn create_database_user(input: Value) -> Result<Value, String> {
-    let _ = input;
-    Ok(json!({ "ok": true }))
+pub async fn create_database_user(input: Value) -> Result<Value, String> {
+    let connection_id = input_text(&input, "connectionId");
+    let database = input_text(&input, "database");
+    let name = input_text(&input, "name");
+    let roles = input_roles(&input);
+
+    if connection_id.is_empty() || name.is_empty() {
+        return Err("Choose a login to map.".to_string());
+    }
+
+    if connection_driver_type(&connection_id) == "mysql" {
+        let mut client = mysql_client_for_connection(&connection_id, Some(&database)).await?;
+        return mysql::create_database_user(&mut client, Some(&database), &name, &roles).await;
+    }
+
+    let mut client = mssql::get_client_for_connection(&connection_id, Some(&database)).await?;
+    mssql::create_database_user(&mut client, Some(&database), &name, &roles).await
 }
 
 #[tauri::command]
-pub fn update_database_user_roles(input: Value) -> Result<Value, String> {
-    let _ = input;
-    Ok(json!({ "ok": true }))
+pub async fn update_database_user_roles(input: Value) -> Result<Value, String> {
+    let connection_id = input_text(&input, "connectionId");
+    let database = input_text(&input, "database");
+    let name = input_text(&input, "name");
+    let roles = input_roles(&input);
+
+    if connection_id.is_empty() || name.is_empty() {
+        return Err("Choose a database user.".to_string());
+    }
+
+    if connection_driver_type(&connection_id) == "mysql" {
+        let mut client = mysql_client_for_connection(&connection_id, Some(&database)).await?;
+        return mysql::update_database_user_roles(&mut client, Some(&database), &name, &roles).await;
+    }
+
+    let mut client = mssql::get_client_for_connection(&connection_id, Some(&database)).await?;
+    mssql::update_database_user_roles(&mut client, Some(&database), &name, &roles).await
 }
 
 #[tauri::command]
-pub fn drop_database_user(input: Value) -> Result<Value, String> {
-    let _ = input;
-    Ok(json!({ "ok": true }))
+pub async fn drop_database_user(input: Value) -> Result<Value, String> {
+    let connection_id = input_text(&input, "connectionId");
+    let database = input_text(&input, "database");
+    let name = input_text(&input, "name");
+
+    if connection_id.is_empty() || name.is_empty() {
+        return Err("Choose a database user.".to_string());
+    }
+
+    if connection_driver_type(&connection_id) == "mysql" {
+        let mut client = mysql_client_for_connection(&connection_id, Some(&database)).await?;
+        return mysql::drop_database_user(&mut client, Some(&database), &name).await;
+    }
+
+    let mut client = mssql::get_client_for_connection(&connection_id, Some(&database)).await?;
+    mssql::drop_database_user(&mut client, Some(&database), &name).await
 }

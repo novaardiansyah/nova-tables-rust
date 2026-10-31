@@ -1089,6 +1089,306 @@ pub async fn get_execution_plan(
     }))
 }
 
+pub async fn list_database_users(
+    client: &mut MssqlClient,
+    database: Option<&str>,
+) -> Result<Value, String> {
+    if let Some(db) = database {
+        if !db.is_empty() {
+            let switch_query = format!("USE [{}]", db.replace(']', "]]"));
+            let _ = client.simple_query(switch_query).await;
+        }
+    }
+
+    let users_stream = client
+        .query(
+            "SELECT dp.principal_id AS id,
+                    dp.name,
+                    dp.type_desc AS typeDesc,
+                    dp.default_schema_name AS defaultSchema,
+                    sp.name AS loginName,
+                    USER_NAME() AS currentUser
+               FROM sys.database_principals dp
+               LEFT JOIN sys.server_principals sp ON sp.sid = dp.sid
+              WHERE dp.type IN ('S', 'U', 'G', 'E', 'X')
+                AND dp.name NOT IN ('sys', 'INFORMATION_SCHEMA')
+                AND dp.name NOT LIKE '##%'
+              ORDER BY dp.name",
+            &[],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    let user_rows = users_stream
+        .into_first_result()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let roles_stream = client
+        .query(
+            "SELECT name
+               FROM sys.database_principals
+              WHERE type = 'R' AND is_fixed_role = 1 AND name <> 'public'
+              ORDER BY name",
+            &[],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    let role_rows = roles_stream
+        .into_first_result()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let logins_stream = client
+        .query(
+            "SELECT sp.name, sp.type_desc AS typeDesc
+               FROM sys.server_principals sp
+              WHERE sp.type IN ('S', 'U', 'G')
+                AND sp.is_disabled = 0
+                AND sp.name NOT LIKE '##%'
+                AND NOT EXISTS (
+                  SELECT 1
+                    FROM sys.database_principals dp
+                   WHERE dp.sid = sp.sid OR dp.name = sp.name
+                )
+              ORDER BY sp.name",
+            &[],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    let login_rows = logins_stream
+        .into_first_result()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let membership_stream = client
+        .query(
+            "SELECT rm.member_principal_id AS userId, r.name AS roleName
+               FROM sys.database_role_members rm
+               JOIN sys.database_principals r ON r.principal_id = rm.role_principal_id
+              WHERE r.is_fixed_role = 1 AND r.name <> 'public'",
+            &[],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    let membership_rows = membership_stream
+        .into_first_result()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut memberships: HashMap<i32, Vec<String>> = HashMap::new();
+    for row in membership_rows {
+        let user_id: i32 = row.get(0).unwrap_or(0);
+        let role_name: &str = row.get(1).unwrap_or("");
+        if !role_name.is_empty() {
+            memberships
+                .entry(user_id)
+                .or_default()
+                .push(role_name.to_string());
+        }
+    }
+
+    let current_user = user_rows
+        .first()
+        .and_then(|row| row.get::<&str, _>(5))
+        .unwrap_or("")
+        .to_lowercase();
+    let system_users = ["dbo", "guest", "sys", "information_schema"];
+
+    let mut users = Vec::new();
+    for row in user_rows {
+        let principal_id: i32 = row.get(0).unwrap_or(0);
+        let name: &str = row.get(1).unwrap_or("");
+        let type_desc: &str = row.get(2).unwrap_or("");
+        let default_schema: Option<&str> = row.get(3);
+        let login_name: Option<&str> = row.get(4);
+
+        let lower = name.to_lowercase();
+        let is_system = system_users.contains(&lower.as_str());
+        let is_current = lower == current_user;
+
+        let mut user_roles = memberships.remove(&principal_id).unwrap_or_default();
+        user_roles.sort();
+
+        users.push(json!({
+          "id": principal_id,
+          "name": name,
+          "type": type_desc,
+          "defaultSchema": default_schema,
+          "loginName": login_name,
+          "roles": user_roles,
+          "canManage": !is_system && !is_current,
+          "reason": if is_system { Some("system") } else if is_current { Some("current") } else { None }
+        }));
+    }
+
+    let roles: Vec<String> = role_rows
+        .iter()
+        .filter_map(|row| row.get::<&str, _>(0))
+        .map(|s| s.to_string())
+        .collect();
+
+    let logins: Vec<Value> = login_rows
+        .iter()
+        .map(|row| {
+            let name: &str = row.get(0).unwrap_or("");
+            let type_desc: &str = row.get(1).unwrap_or("");
+            json!({
+              "name": name,
+              "type": type_desc
+            })
+        })
+        .collect();
+
+    Ok(json!({
+      "ok": true,
+      "users": users,
+      "roles": roles,
+      "logins": logins
+    }))
+}
+
+pub async fn create_database_user(
+    client: &mut MssqlClient,
+    database: Option<&str>,
+    login: &str,
+    roles: &[String],
+) -> Result<Value, String> {
+    let name = login.trim();
+    if name.is_empty() {
+        return Err("Choose a login to map.".to_string());
+    }
+
+    if let Some(db) = database {
+        if !db.is_empty() {
+            let switch_query = format!("USE [{}]", db.replace(']', "]]"));
+            let _ = client.simple_query(switch_query).await;
+        }
+    }
+
+    let create_sql = format!(
+        "CREATE USER [{}] FOR LOGIN [{}]",
+        name.replace(']', "]]"),
+        name.replace(']', "]]")
+    );
+    client
+        .simple_query(create_sql)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    for role in roles {
+        let alter_sql = format!(
+            "ALTER ROLE [{}] ADD MEMBER [{}]",
+            role.replace(']', "]]"),
+            name.replace(']', "]]")
+        );
+        let _ = client.simple_query(alter_sql).await;
+    }
+
+    Ok(json!({
+      "ok": true,
+      "user": name,
+      "roles": roles
+    }))
+}
+
+pub async fn update_database_user_roles(
+    client: &mut MssqlClient,
+    database: Option<&str>,
+    user: &str,
+    roles: &[String],
+) -> Result<Value, String> {
+    let name = user.trim();
+    if name.is_empty() {
+        return Err("Choose a database user.".to_string());
+    }
+
+    if let Some(db) = database {
+        if !db.is_empty() {
+            let switch_query = format!("USE [{}]", db.replace(']', "]]"));
+            let _ = client.simple_query(switch_query).await;
+        }
+    }
+
+    let stream = client
+        .query(
+            "SELECT r.name
+               FROM sys.database_role_members rm
+               JOIN sys.database_principals r ON r.principal_id = rm.role_principal_id
+               JOIN sys.database_principals m ON m.principal_id = rm.member_principal_id
+              WHERE m.name = @P1 AND r.is_fixed_role = 1 AND r.name <> 'public'",
+            &[&name],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    let rows = stream
+        .into_first_result()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let current_roles: Vec<String> = rows
+        .iter()
+        .filter_map(|row| row.get::<&str, _>(0))
+        .map(|s| s.to_string())
+        .collect();
+
+    for cur in &current_roles {
+        if !roles.iter().any(|r| r.eq_ignore_ascii_case(cur)) {
+            let drop_sql = format!(
+                "ALTER ROLE [{}] DROP MEMBER [{}]",
+                cur.replace(']', "]]"),
+                name.replace(']', "]]")
+            );
+            let _ = client.simple_query(drop_sql).await;
+        }
+    }
+
+    for desired in roles {
+        if !current_roles.iter().any(|r| r.eq_ignore_ascii_case(desired)) {
+            let add_sql = format!(
+                "ALTER ROLE [{}] ADD MEMBER [{}]",
+                desired.replace(']', "]]"),
+                name.replace(']', "]]")
+            );
+            let _ = client.simple_query(add_sql).await;
+        }
+    }
+
+    Ok(json!({
+      "ok": true,
+      "user": name,
+      "roles": roles
+    }))
+}
+
+pub async fn drop_database_user(
+    client: &mut MssqlClient,
+    database: Option<&str>,
+    user: &str,
+) -> Result<Value, String> {
+    let name = user.trim();
+    if name.is_empty() {
+        return Err("Choose a database user.".to_string());
+    }
+
+    if let Some(db) = database {
+        if !db.is_empty() {
+            let switch_query = format!("USE [{}]", db.replace(']', "]]"));
+            let _ = client.simple_query(switch_query).await;
+        }
+    }
+
+    let drop_sql = format!("DROP USER [{}]", name.replace(']', "]]"));
+    client
+        .simple_query(drop_sql)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(json!({
+      "ok": true,
+      "user": name
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

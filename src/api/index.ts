@@ -66,11 +66,23 @@ export interface DatabaseInfo {
   [key: string]: unknown
 }
 
-export interface DatabaseUser {
+export interface DatabaseUserDetail {
   name: string
-  typeDesc?: string
+  type: string
+  defaultSchema?: string | null
+  canManage: boolean
+  reason?: string | null
+  loginName?: string | null
   roles: string[]
-  isFixedRole?: boolean
+}
+
+export type DatabaseUser = DatabaseUserDetail
+
+export interface ServerLoginItem {
+  name: string
+  type: string
+  isDisabled?: boolean
+  isLocked?: boolean
 }
 
 export interface TableSummary {
@@ -1062,12 +1074,20 @@ export const api = {
   listDatabaseUsers: async (
     connectionId: string,
     database: string
-  ): Promise<DatabaseUser[]> => {
-    const res = await callCommand<{ users?: DatabaseUser[] }>('list_database_users', {
+  ): Promise<{ users: DatabaseUserDetail[]; roles: string[]; logins: ServerLoginItem[] }> => {
+    const res = await callCommand<{
+      users?: DatabaseUserDetail[]
+      roles?: string[]
+      logins?: ServerLoginItem[]
+    }>('list_database_users', {
       connectionId,
       database,
     })
-    return res?.users || []
+    return {
+      users: res?.users || [],
+      roles: res?.roles || [],
+      logins: res?.logins || [],
+    }
   },
 
   createDatabaseUser: async (input: {
