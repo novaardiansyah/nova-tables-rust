@@ -124,14 +124,16 @@ export default function ConnectionDialog({
       host: form.host.trim(),
       port: Number(form.port),
       username: form.username.trim(),
-      database: form.database.trim(),
       databaseName: form.database.trim(),
       environment: form.environment,
       encrypt: form.encrypt,
       trustServerCertificate: form.trustServerCertificate,
       driverType: form.driverType,
     }
-    if (isEdit && connection?.id) data.id = connection.id
+    if (isEdit && connection?.id) {
+      data.id = connection.id
+      data.folderId = connection.folderId ?? null
+    }
     if (!isEdit || form.password !== '') data.password = form.password
     return data
   }

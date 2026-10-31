@@ -38,6 +38,7 @@ pub fn run() {
             commands::connection::test_connection,
             commands::connection::connect,
             commands::connection::disconnect_database,
+            commands::connection::reorder_tree,
             commands::query::execute_query,
             commands::query::list_databases,
             commands::query::list_tables,

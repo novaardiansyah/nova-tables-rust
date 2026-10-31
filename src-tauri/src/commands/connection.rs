@@ -4,6 +4,7 @@ use crate::database::mysql;
 use crate::file_system::FileSystem;
 use rusqlite::params;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 
 #[tauri::command]
 pub fn list_connections() -> Result<Value, String> {
@@ -102,6 +103,39 @@ pub fn delete_tree(input: DeleteTreeInput) -> Result<Value, String> {
       "ok": true,
       "folderIds": deleted_folder_ids,
       "connectionIds": deleted_connection_ids,
+      "connections": connections,
+      "folders": folders
+    }))
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct ReorderTreeInput {
+    #[serde(default)]
+    pub connections: Vec<String>,
+    #[serde(default)]
+    pub folders: Vec<String>,
+    #[serde(rename = "connectionFolders", default)]
+    pub connection_folders: HashMap<String, Option<String>>,
+    #[serde(rename = "folderParents", default)]
+    pub folder_parents: HashMap<String, Option<String>>,
+}
+
+#[tauri::command]
+pub fn reorder_tree(input: ReorderTreeInput) -> Result<Value, String> {
+    let db_path = FileSystem::get_database_path()?;
+    let mut conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
+    LocalStore::update_tree_order(
+        &mut conn,
+        &input.connections,
+        &input.folders,
+        &input.connection_folders,
+        &input.folder_parents,
+    )
+    .map_err(|e| e.to_string())?;
+    let connections = LocalStore::list_connections(&conn).map_err(|e| e.to_string())?;
+    let folders = LocalStore::list_folders(&conn).map_err(|e| e.to_string())?;
+    Ok(json!({
+      "ok": true,
       "connections": connections,
       "folders": folders
     }))
