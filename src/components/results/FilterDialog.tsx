@@ -29,6 +29,7 @@ export interface FilterDialogProps {
   initialColumn?: string
   onCancel: () => void
   onApply: (conditions: FilterCondition[]) => void
+  driverType?: string | null
 }
 
 export default function FilterDialog({
@@ -37,6 +38,7 @@ export default function FilterDialog({
   initialColumn = '',
   onCancel,
   onApply,
+  driverType = null,
 }: FilterDialogProps) {
   const [conditions, setConditions] = useState<FilterCondition[]>(() => [createCondition(initialColumn)])
 
@@ -58,7 +60,7 @@ export default function FilterDialog({
     [columns],
   )
 
-  const where = useMemo(() => buildFilterWhere(conditions), [conditions])
+  const where = useMemo(() => buildFilterWhere(conditions, driverType), [conditions, driverType])
 
   if (!open) return null
 

@@ -54,17 +54,21 @@ export const FILTER_LOGICS: FilterLogicOption[] = [
   { id: 'OR', label: 'OR' },
 ]
 
-const BUILDERS: Record<FilterOperatorId, (column: string, value: string | number) => string> = {
-  contains: (column, value) => `${column} LIKE ${likeLiteral(value, '%', '%')}`,
-  'not-contains': (column, value) => `${column} NOT LIKE ${likeLiteral(value, '%', '%')}`,
-  'starts-with': (column, value) => `${column} LIKE ${likeLiteral(value, '', '%')}`,
-  'ends-with': (column, value) => `${column} LIKE ${likeLiteral(value, '%', '')}`,
-  equals: (column, value) => `${column} = ${comparisonLiteral(value)}`,
-  'not-equals': (column, value) => `${column} <> ${comparisonLiteral(value)}`,
-  greater: (column, value) => `${column} > ${comparisonLiteral(value)}`,
-  'greater-equal': (column, value) => `${column} >= ${comparisonLiteral(value)}`,
-  less: (column, value) => `${column} < ${comparisonLiteral(value)}`,
-  'less-equal': (column, value) => `${column} <= ${comparisonLiteral(value)}`,
+const BUILDERS: Record<
+  FilterOperatorId,
+  (column: string, value: string | number, driverType?: string | null) => string
+> = {
+  contains: (column, value, driverType) => `${column} LIKE ${likeLiteral(value, '%', '%', driverType)}`,
+  'not-contains': (column, value, driverType) =>
+    `${column} NOT LIKE ${likeLiteral(value, '%', '%', driverType)}`,
+  'starts-with': (column, value, driverType) => `${column} LIKE ${likeLiteral(value, '', '%', driverType)}`,
+  'ends-with': (column, value, driverType) => `${column} LIKE ${likeLiteral(value, '%', '', driverType)}`,
+  equals: (column, value, driverType) => `${column} = ${comparisonLiteral(value, driverType)}`,
+  'not-equals': (column, value, driverType) => `${column} <> ${comparisonLiteral(value, driverType)}`,
+  greater: (column, value, driverType) => `${column} > ${comparisonLiteral(value, driverType)}`,
+  'greater-equal': (column, value, driverType) => `${column} >= ${comparisonLiteral(value, driverType)}`,
+  less: (column, value, driverType) => `${column} < ${comparisonLiteral(value, driverType)}`,
+  'less-equal': (column, value, driverType) => `${column} <= ${comparisonLiteral(value, driverType)}`,
   'is-null': (column) => `${column} IS NULL`,
   'is-not-null': (column) => `${column} IS NOT NULL`,
 }
@@ -73,15 +77,23 @@ function escapeLike(value: string | number): string {
   return String(value).replace(/[\\%_]/g, (match) => `\\${match}`)
 }
 
-function likeLiteral(value: string | number, prefix: string, suffix: string): string {
+function likeLiteral(
+  value: string | number,
+  prefix: string,
+  suffix: string,
+  driverType?: string | null,
+): string {
   const text = escapeLike(value).replace(/'/g, "''")
+  if (driverType === 'mysql') {
+    return `'${prefix}${text}${suffix}'`
+  }
   return `N'${prefix}${text}${suffix}' ESCAPE '\\'`
 }
 
-function comparisonLiteral(value: string | number): string {
+function comparisonLiteral(value: string | number, driverType?: string | null): string {
   const text = String(value).trim()
   if (text !== '' && !Number.isNaN(Number(text))) return text
-  return sqlLiteral(text)
+  return sqlLiteral(text, driverType)
 }
 
 export function filterOperatorById(id: string | null | undefined): FilterOperator | null {
@@ -89,19 +101,26 @@ export function filterOperatorById(id: string | null | undefined): FilterOperato
   return FILTER_OPERATORS.find((item) => item.id === id) ?? null
 }
 
-export function buildFilterCondition(condition: FilterCondition): string | null {
+export function buildFilterCondition(
+  condition: FilterCondition,
+  driverType?: string | null,
+): string | null {
   const operator = filterOperatorById(condition.operator)
   if (!operator) return null
-  return BUILDERS[operator.id](quoteIdentifier(condition.column), condition.value ?? '')
+  return BUILDERS[operator.id](
+    quoteIdentifier(condition.column, driverType),
+    condition.value ?? '',
+    driverType,
+  )
 }
 
-export function buildFilterWhere(conditions: FilterCondition[]): string {
+export function buildFilterWhere(conditions: FilterCondition[], driverType?: string | null): string {
   const parts: string[] = []
   for (const condition of conditions) {
     const operator = filterOperatorById(condition.operator)
     if (!operator) continue
     if (operator.needsValue && String(condition.value ?? '').trim() === '') continue
-    const text = buildFilterCondition(condition)
+    const text = buildFilterCondition(condition, driverType)
     if (!text) continue
     parts.push(parts.length === 0 ? text : `${condition.logic ?? 'AND'} ${text}`)
   }

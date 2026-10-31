@@ -397,7 +397,8 @@ export function useQueryExecution({
         showBanner('warn', 'There is no query to filter.')
         return
       }
-      const where = buildFilterWhere(conditions)
+      const driverType = current.connection?.driverType ?? null
+      const where = buildFilterWhere(conditions, driverType)
       if (!where) return
       const tab = activeQueryTab()?.tab ?? null
       const inherited = tab?.editSource && tab.editSource.sql === source ? tab.editSource : null
@@ -409,7 +410,7 @@ export function useQueryExecution({
           current.activeDatabase || 'master',
           sql,
           current.tables?.tables ?? [],
-          current.connection?.driverType,
+          driverType,
         ))
       const column = conditions[0]?.column ?? null
       const tabId = openTab(

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { api } from '@/api'
 import Icon, { Spinner } from '@/components/common/Icon'
 import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu'
 import FilterDialog from '@/components/results/FilterDialog'
@@ -75,6 +76,7 @@ export interface ResultsPanelProps {
   onRelationClick?: (relation: ResultRelation, value: unknown) => void
   onCopyText?: (payload: string, message?: string) => void
   timezone?: string
+  driverType?: string | null
   editSource?: EditSource | null
   edits?: Record<string, { value: unknown; original?: unknown }>
   deletingRows?: number[]
@@ -100,6 +102,7 @@ export default function ResultsPanel({
   onRelationClick,
   onCopyText,
   timezone = 'UTC',
+  driverType = null,
   editSource,
   edits = {},
   deletingRows = [],
@@ -775,6 +778,7 @@ export default function ResultsPanel({
         open={filterColumn !== null}
         columns={activeResultSet?.columns ?? []}
         initialColumn={filterColumn ?? ''}
+        driverType={driverType}
         onCancel={() => setFilterColumn(null)}
         onApply={(conditions) => {
           setFilterColumn(null)
@@ -872,8 +876,8 @@ function ErrorState({ error }: { error?: QueryErrorData | null }) {
 
   const handleCopy = async () => {
     try {
-      await api.copyText(error?.message || 'Unknown error')
-      setCopied(true)
+      const ok = await api.copyText(error?.message || 'Unknown error')
+      setCopied(ok)
     } catch {
       // Keep the message visible even if the clipboard is unavailable.
     }
