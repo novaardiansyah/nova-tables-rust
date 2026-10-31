@@ -12,6 +12,18 @@ SELECT TOP (100) *
 FROM sys.databases;
 `
 
+export const MYSQL_STARTER_SQL = `-- Nova Tables
+-- Pick a table in the sidebar or write a query, then press Ctrl+Enter to run it.
+
+SELECT *
+FROM information_schema.tables
+LIMIT 100;
+`
+
+export function starterSql(driverType?: string | null): string {
+  return driverType === 'mysql' ? MYSQL_STARTER_SQL : STARTER_SQL
+}
+
 export const NEW_FUNCTION_SQL = `CREATE FUNCTION dbo.fn_name()
 RETURNS INT
 AS
@@ -133,17 +145,21 @@ export function manageUsersState(session: SessionData | null, database: Database
   return { allowed: true, hint: 'Users & permissions' }
 }
 
-export function qualifiedName(table: SidebarTable): string {
-  return `${quoteIdentifier(table.schema)}.${quoteIdentifier(table.name)}`
+export function qualifiedName(table: SidebarTable, driverType?: string | null): string {
+  return `${quoteIdentifier(table.schema, driverType)}.${quoteIdentifier(table.name, driverType)}`
 }
 
 import { quoteIdentifier, sqlLiteral } from '@/resultFormats'
 
-export function browseSql(table: SidebarTable & { primaryKey?: string[] }): string {
+export function browseSql(table: SidebarTable & { primaryKey?: string[] }, driverType?: string | null): string {
   const pk = table.primaryKey || []
-  const order = pk.map((column) => `${quoteIdentifier(column)} DESC`).join(', ')
+  const order = pk.map((column) => `${quoteIdentifier(column, driverType)} DESC`).join(', ')
   const orderBy = order ? `\nORDER BY ${order}` : ''
-  return `SELECT TOP (${BROWSE_ROWS}) *\nFROM ${qualifiedName(table)}${orderBy};`
+  const qualified = qualifiedName(table, driverType)
+  if (driverType === 'mysql') {
+    return `SELECT *\nFROM ${qualified}${orderBy}\nLIMIT ${BROWSE_ROWS};`
+  }
+  return `SELECT TOP (${BROWSE_ROWS}) *\nFROM ${qualified}${orderBy};`
 }
 
 export function sessionTableFor(session: SessionData, schema: string, name: string): SidebarTable | null {
@@ -151,13 +167,18 @@ export function sessionTableFor(session: SessionData, schema: string, name: stri
   return tables.find((table: SidebarTable) => table.schema === schema && table.name === name) ?? null
 }
 
-export function relatedSql(relation: { referencedColumn: string; referencedSchema: string; referencedTable: string }, value: unknown): string {
-  const column = quoteIdentifier(relation.referencedColumn)
+export function relatedSql(relation: { referencedColumn: string; referencedSchema: string; referencedTable: string }, value: unknown, driverType?: string | null): string {
+  const column = quoteIdentifier(relation.referencedColumn, driverType)
   const filter =
     value === null || value === undefined
       ? `${column} IS NULL`
       : `${column} = ${sqlLiteral(value)}`
-  return `SELECT TOP (${BROWSE_ROWS}) *\nFROM ${quoteIdentifier(relation.referencedSchema)}.${quoteIdentifier(relation.referencedTable)}\nWHERE ${filter};`
+  const schema = quoteIdentifier(relation.referencedSchema, driverType)
+  const table = quoteIdentifier(relation.referencedTable, driverType)
+  if (driverType === 'mysql') {
+    return `SELECT *\nFROM ${schema}.${table}\nWHERE ${filter}\nLIMIT ${BROWSE_ROWS};`
+  }
+  return `SELECT TOP (${BROWSE_ROWS}) *\nFROM ${schema}.${table}\nWHERE ${filter};`
 }
 
 export function queryTitle(index: number): string {

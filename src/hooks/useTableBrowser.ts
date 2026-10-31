@@ -75,7 +75,8 @@ export function useTableBrowser({
     (relation: any, value: unknown) => {
       const current = activeSession()
       if (!current) return
-      const sql = relatedSql(relation, value)
+      const driverType = current.connection?.driverType
+      const sql = relatedSql(relation, value, driverType)
       const table = sessionTableFor(
         current,
         relation.referencedSchema,
@@ -99,7 +100,8 @@ export function useTableBrowser({
     (table: SidebarTable) => {
       const current = activeSession()
       if (!current) return
-      const sql = browseSql(table)
+      const driverType = current.connection?.driverType
+      const sql = browseSql(table, driverType)
       const editSource = buildEditSource(table, sql)
       const tabId = openTab(current.connectionId, table.name, sql, editSource)
       patchSession(current.connectionId, { selectedTable: `${table.schema}.${table.name}` })

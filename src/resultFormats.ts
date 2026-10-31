@@ -9,7 +9,10 @@ export interface TableReference {
   name: string
 }
 
-export function quoteIdentifier(name: string | number): string {
+export function quoteIdentifier(name: string | number, driverType?: string | null): string {
+  if (driverType === 'mysql') {
+    return `\`${String(name).replace(/`/g, '``')}\``
+  }
   return `[${String(name).replace(/]/g, ']]')}]`
 }
 
@@ -178,7 +181,7 @@ export function sqlInsertRows(
   matrix: unknown[][]
 ): string {
   const target = `${quoteIdentifier(table.schema)}.${quoteIdentifier(table.name)}`
-  const columns = columnNames.map(quoteIdentifier).join(', ')
+  const columns = columnNames.map((name) => quoteIdentifier(name)).join(', ')
   return matrix
     .map(
       (cells) =>
