@@ -88,7 +88,7 @@ export interface ResultsPanelProps {
   onExport?: (data: ExportDataPayload) => void
   tabTitle?: string
   executionPlan?: ParsedPlan | null
-  onCopyXml?: ((rawXml: string) => void) | null
+  onCopyPlan?: ((raw: string) => void) | null
   onOpenStructure?: (table: { schema: string; name: string }) => void
 }
 
@@ -113,7 +113,7 @@ export default function ResultsPanel({
   onExport,
   tabTitle,
   executionPlan = null,
-  onCopyXml = null,
+  onCopyPlan = null,
   onOpenStructure,
 }: ResultsPanelProps) {
   const { status, result, error } = state
@@ -673,7 +673,7 @@ export default function ResultsPanel({
 
       <div className="col-start-1 row-start-3 min-h-0 overflow-hidden">
         {view === 'plan' && executionPlan ? (
-          <ExecutionPlanView plan={executionPlan} onCopyXml={onCopyXml ?? undefined} />
+          <ExecutionPlanView plan={executionPlan} onCopyPlan={onCopyPlan ?? undefined} />
         ) : null}
         {view !== 'plan' && status === 'idle' ? <IdleState /> : null}
         {view !== 'plan' && status === 'running' ? (

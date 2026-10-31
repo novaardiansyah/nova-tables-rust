@@ -583,14 +583,30 @@ pub async fn module_definition(
     Err("Not yet implemented for MySQL".to_string())
 }
 
-/// Gets execution plan for a SQL statement - MySQL uses EXPLAIN.
+/// Gets the estimated execution plan via EXPLAIN FORMAT=JSON.
 pub async fn get_execution_plan(
-    _conn: &mut Conn,
+    conn: &mut Conn,
     _database: Option<&str>,
-    _sql: &str,
+    sql: &str,
 ) -> Result<Value, String> {
-    // MySQL uses EXPLAIN statement
-    Err("Not yet implemented for MySQL".to_string())
+    let statement = sql.trim().trim_end_matches(';').trim();
+    if statement.is_empty() {
+        return Err("Nothing to analyze".to_string());
+    }
+
+    let query = format!("EXPLAIN FORMAT=JSON {statement}");
+    let rows: Vec<Row> = conn.query(query).await.map_err(|e| e.to_string())?;
+    let plan = rows
+        .first()
+        .and_then(|row| opt_string(row, 0))
+        .unwrap_or_default();
+    if plan.is_empty() {
+        return Err("MySQL returned an empty execution plan".to_string());
+    }
+
+    Ok(json!({
+      "plan": plan
+    }))
 }
 
 #[cfg(test)]

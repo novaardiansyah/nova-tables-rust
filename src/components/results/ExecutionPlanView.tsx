@@ -71,12 +71,12 @@ function OperatorCard({ node, selected, onSelect }: OperatorCardProps) {
 
 export interface ExecutionPlanViewProps {
   plan?: ParsedPlan | null
-  onCopyXml?: (rawXml: string) => void
+  onCopyPlan?: (raw: string) => void
 }
 
-export default function ExecutionPlanView({ plan, onCopyXml }: ExecutionPlanViewProps) {
+export default function ExecutionPlanView({ plan, onCopyPlan }: ExecutionPlanViewProps) {
   const [selectedNode, setSelectedNode] = useState<PlanNode | null>(plan?.rootNode ?? null)
-  const [tab, setTab] = useState<'tree' | 'xml'>('tree')
+  const [tab, setTab] = useState<'tree' | 'raw'>('tree')
 
   if (!plan) {
     return (
@@ -86,7 +86,8 @@ export default function ExecutionPlanView({ plan, onCopyXml }: ExecutionPlanView
     )
   }
 
-  const { summary, rootNode, rawXml } = plan
+  const { summary, rootNode, raw, format } = plan
+  const rawLabel = format === 'json' ? 'Raw JSON' : 'Raw XML'
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-surface">
@@ -122,28 +123,28 @@ export default function ExecutionPlanView({ plan, onCopyXml }: ExecutionPlanView
           <button
             type="button"
             className={`h-6 rounded px-2 text-[length:var(--app-text-11)] font-medium transition-colors ${
-              tab === 'xml' ? 'bg-tint/[0.08] text-text-strong' : 'text-text-muted hover:text-text'
+              tab === 'raw' ? 'bg-tint/[0.08] text-text-strong' : 'text-text-muted hover:text-text'
             }`}
-            onClick={() => setTab('xml')}
+            onClick={() => setTab('raw')}
           >
-            Raw XML
+            {rawLabel}
           </button>
         </div>
       </div>
 
-      {tab === 'xml' ? (
+      {tab === 'raw' ? (
         <div className="relative flex-1 overflow-auto p-4 font-mono text-[length:var(--app-text-11)] text-text">
-          {onCopyXml ? (
+          {onCopyPlan ? (
             <button
               type="button"
               className="btn-soft absolute right-6 top-6 h-7 px-2.5 text-[length:var(--app-text-11)]"
-              onClick={() => onCopyXml(rawXml)}
+              onClick={() => onCopyPlan(raw)}
             >
               <Icon name="copy" size={12} />
-              Copy XML
+              Copy {format === 'json' ? 'JSON' : 'XML'}
             </button>
           ) : null}
-          <pre className="whitespace-pre-wrap break-all">{rawXml}</pre>
+          <pre className="whitespace-pre-wrap break-all">{raw}</pre>
         </div>
       ) : (
         <div className="grid min-h-0 flex-1 grid-cols-[1fr_280px] overflow-hidden">

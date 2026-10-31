@@ -583,6 +583,33 @@ pub async fn get_execution_plan(
     });
 
     if let Some(id) = conn_id.as_deref() {
+        if let Ok(db_path) = FileSystem::get_database_path() {
+            if let Ok(conn) = LocalStore::init(&db_path) {
+                if let Ok(Some(item)) = LocalStore::get_connection(&conn, id) {
+                    if item.driver_type.as_deref() == Some("mysql") {
+                        let db_to_use = db
+                            .as_deref()
+                            .filter(|value| !value.is_empty())
+                            .or(item.database_name.as_deref());
+                        let password = item.password.or(item.password_cipher).unwrap_or_default();
+                        let mut client = mysql::create_client(
+                            &item.host,
+                            item.port,
+                            &item.username,
+                            &password,
+                            db_to_use,
+                            item.encrypt,
+                            item.trust_server_certificate,
+                        )
+                        .await?;
+                        return mysql::get_execution_plan(&mut client, db_to_use, &query).await;
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(id) = conn_id.as_deref() {
         if let Ok(mut client) = mssql::get_client_for_connection(id, db.as_deref()).await {
             if let Ok(res) = mssql::get_execution_plan(&mut client, db.as_deref(), &query).await {
                 return Ok(res);

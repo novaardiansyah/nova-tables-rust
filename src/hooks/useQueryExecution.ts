@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react'
 import { api } from '@/api'
 import { SessionTab, SessionData } from '@/utils/sessionHelpers'
 import { executionGuard, ExecutionModeId } from '@/queryModes'
-import { parseShowPlanXml } from '@/planParser'
+import { parseExecutionPlan, parseShowPlanXml } from '@/planParser'
 import { FilterCondition, buildFilterWhere, buildFilteredSql } from '@/filters'
 import {
   buildDeleteStatementsForRows,
@@ -250,7 +250,7 @@ export function useQueryExecution({
         database: current.activeDatabase || 'master',
         sql,
       })
-      const parsed = parseShowPlanXml(res.xml)
+      const parsed = parseExecutionPlan(res.plan ?? '', current.connection?.driverType)
       updateTab(current.connectionId, target.tab.id, { executionPlan: parsed, busy: false })
       showBanner('success', 'Generated estimated execution plan.')
     } catch (error: any) {
