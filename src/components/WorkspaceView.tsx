@@ -299,7 +299,7 @@ export default function WorkspaceView({
               onExport={handleExportResult}
               tabTitle={activeTab?.title}
               executionPlan={activeTab?.executionPlan ?? null}
-              onCopyXml={(xml) => handleCopyText(xml, 'Copied execution plan XML.')}
+              onCopyPlan={(raw) => handleCopyText(raw, 'Copied execution plan XML.')}
               onOpenStructure={handleOpenStructure}
             />
           </div>
