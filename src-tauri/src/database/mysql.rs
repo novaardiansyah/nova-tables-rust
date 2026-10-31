@@ -5,6 +5,16 @@ use std::collections::HashMap;
 pub type MySqlConn = Conn;
 pub type MySqlPool = Pool;
 
+// Reads a nullable text column without panicking on NULL values.
+fn opt_string(row: &Row, index: usize) -> Option<String> {
+    row.get::<Option<String>, _>(index).flatten()
+}
+
+// Reads a nullable integer column without panicking on NULL values.
+fn opt_i64(row: &Row, index: usize) -> Option<i64> {
+    row.get::<Option<i64>, _>(index).flatten()
+}
+
 // Creates a MySQL/MariaDB client connection.
 pub async fn create_client(
     host: &str,
@@ -86,29 +96,61 @@ pub async fn read_server_info(conn: &mut Conn) -> (String, String, String) {
 /// Lists all tables from the specified database.
 pub async fn list_tables(conn: &mut Conn, database: Option<&str>) -> Result<Value, String> {
     let db = database.unwrap_or("");
-    let query = if db.is_empty() {
-        "SELECT TABLE_SCHEMA AS table_schema, TABLE_NAME AS table_name FROM information_schema.TABLES WHERE TABLE_TYPE = 'BASE TABLE'".to_string()
+    let schema_filter = if db.is_empty() {
+        "".to_string()
     } else {
-        format!("SELECT TABLE_SCHEMA AS table_schema, TABLE_NAME AS table_name FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{}'", db)
+        format!(" AND t.TABLE_SCHEMA = '{db}'")
     };
+    let query = format!(
+        "SELECT t.TABLE_SCHEMA AS table_schema, t.TABLE_NAME AS table_name, k.COLUMN_NAME AS pk_column
+         FROM information_schema.TABLES t
+         LEFT JOIN information_schema.KEY_COLUMN_USAGE k
+           ON k.TABLE_SCHEMA = t.TABLE_SCHEMA
+            AND k.TABLE_NAME = t.TABLE_NAME
+            AND k.CONSTRAINT_NAME = 'PRIMARY'
+         WHERE t.TABLE_TYPE = 'BASE TABLE'{}
+         ORDER BY t.TABLE_SCHEMA, t.TABLE_NAME, k.ORDINAL_POSITION",
+        schema_filter
+    );
 
     let rows: Vec<Row> = conn.query(query).await.map_err(|e| e.to_string())?;
-    let mut tables = Vec::new();
-    let mut seen: HashMap<(String, String), bool> = HashMap::new();
+    let mut map: HashMap<(String, String), Vec<String>> = HashMap::new();
+    let mut order: Vec<(String, String)> = Vec::new();
 
     for row in rows {
-        let schema: String = row.get(0).unwrap_or_default();
-        let name: String = row.get(1).unwrap_or_default();
-        let key = (schema.clone(), name.clone());
+        let schema = opt_string(&row, 0);
+        let name = opt_string(&row, 1);
+        let pk = opt_string(&row, 2);
+        let (s, n) = (schema.unwrap_or_default(), name.unwrap_or_default());
+        if s.is_empty() || n.is_empty() {
+            continue;
+        }
+        let key = (s.clone(), n.clone());
 
-        if !seen.contains_key(&key) {
-            seen.insert(key.clone(), true);
-            tables.push(json!({
-              "schema": schema,
-              "name": name
-            }));
+        if !map.contains_key(&key) {
+            order.push(key.clone());
+            map.insert(key.clone(), Vec::new());
+        }
+        if let Some(pk_col) = pk {
+            if !pk_col.is_empty() {
+                if let Some(pks) = map.get_mut(&key) {
+                    pks.push(pk_col);
+                }
+            }
         }
     }
+
+    let tables: Vec<Value> = order
+        .into_iter()
+        .map(|(schema, name)| {
+            let pk = map.remove(&(schema.clone(), name.clone())).unwrap_or_default();
+            json!({
+              "schema": schema,
+              "name": name,
+              "primaryKey": pk
+            })
+        })
+        .collect();
 
     Ok(json!({
       "database": database,
@@ -268,15 +310,234 @@ pub async fn table_relations(
     Err("Not yet implemented for MySQL".to_string())
 }
 
-/// Gets table structure (DDL) - simplified MySQL implementation.
+/// Gets table structure via information_schema + SHOW CREATE TABLE.
 pub async fn table_structure(
-    _conn: &mut Conn,
-    _database: Option<&str>,
-    _schema: &str,
-    _table: &str,
+    conn: &mut Conn,
+    database: Option<&str>,
+    schema: &str,
+    table: &str,
 ) -> Result<Value, String> {
-    // MySQL table DDL via SHOW CREATE TABLE - simplified
-    Err("Not yet implemented for MySQL".to_string())
+    let db = database.as_deref().unwrap_or(schema);
+
+    // 1. Columns
+    let col_query = format!(
+        "SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE,
+                 IS_NULLABLE, COLUMN_DEFAULT, COLUMN_KEY, EXTRA, COLLATION_NAME, GENERATION_EXPRESSION
+          FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = '{db}' AND TABLE_NAME = '{table}'
+          ORDER BY ORDINAL_POSITION"
+    );
+
+    let columns_rows: Vec<Row> = conn.query(&col_query).await.map_err(|e| e.to_string())?;
+    let mut columns: Vec<Value> = Vec::new();
+
+    for row in columns_rows {
+        let name = opt_string(&row, 0).unwrap_or_default();
+        let type_name = opt_string(&row, 1).unwrap_or_default();
+        let char_max_len = opt_i64(&row, 2);
+        let num_prec = opt_i64(&row, 3);
+        let num_scale = opt_i64(&row, 4);
+        let is_nullable = opt_string(&row, 5);
+        let column_default = opt_string(&row, 6);
+        let extra = opt_string(&row, 8);
+        let collation_name = opt_string(&row, 9);
+        let generation_expr = opt_string(&row, 10);
+
+        let is_identity = extra.as_ref().map(|e| e.contains("auto_increment")).unwrap_or(false);
+        let is_computed = generation_expr.as_ref().map(|e| !e.is_empty()).unwrap_or(false);
+
+        let max_length = char_max_len.map(|v| if v == -1 { 0 } else { v }).unwrap_or(0) as u32;
+
+        columns.push(json!({
+          "name": name,
+          "typeName": type_name,
+          "maxLength": max_length,
+          "precision": num_prec.map(|v| v as u32).unwrap_or(0),
+          "scale": num_scale.map(|v| v as u8).unwrap_or(0),
+          "isNullable": is_nullable.as_deref() == Some("YES"),
+          "isIdentity": is_identity,
+          "isComputed": is_computed,
+          "computedDefinition": generation_expr.filter(|_| is_computed),
+          "seedValue": if is_identity { Some(1) } else { None },
+          "incrementValue": if is_identity { Some(1) } else { None },
+          "collation": collation_name,
+          "databaseCollation": None::<String>,
+          "defaultDefinition": column_default,
+          "defaultName": None::<String>
+        }));
+    }
+
+    // 2. Primary key via KEY_COLUMN_USAGE
+    let pk_query = format!(
+        "SELECT COLUMN_NAME
+         FROM information_schema.KEY_COLUMN_USAGE
+         WHERE TABLE_SCHEMA = '{db}' AND TABLE_NAME = '{table}'
+           AND CONSTRAINT_NAME = 'PRIMARY'
+         ORDER BY ORDINAL_POSITION"
+    );
+    let pk_rows: Vec<Row> = conn.query(&pk_query).await.map_err(|e| e.to_string())?;
+    let pk_columns: Vec<String> = pk_rows
+        .iter()
+        .filter_map(|row| opt_string(row, 0))
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let primary_key = if !pk_columns.is_empty() {
+        vec![json!({
+          "name": "PRIMARY",
+          "columns": pk_columns,
+          "descending": pk_columns.iter().map(|_| false).collect::<Vec<bool>>(),
+          "clustered": false
+        })]
+    } else {
+        vec![]
+    };
+
+    // 3. Indexes and unique keys via STATISTICS
+    let idx_query = format!(
+        "SELECT INDEX_NAME, NON_UNIQUE, SEQ_IN_INDEX, COLUMN_NAME, COLLATION
+         FROM information_schema.STATISTICS
+         WHERE TABLE_SCHEMA = '{db}' AND TABLE_NAME = '{table}'
+         ORDER BY INDEX_NAME, SEQ_IN_INDEX"
+    );
+    let idx_rows: Vec<Row> = conn.query(&idx_query).await.map_err(|e| e.to_string())?;
+
+    let mut idx_map: HashMap<String, (bool, Vec<String>, Vec<bool>)> = HashMap::new();
+    let mut idx_order: Vec<String> = Vec::new();
+
+    for row in idx_rows {
+        let index_name = opt_string(&row, 0);
+        let non_unique = opt_i64(&row, 1);
+        let column_name = opt_string(&row, 3);
+        let collation = opt_string(&row, 4);
+
+        let name = index_name.unwrap_or_default();
+        if name.is_empty() {
+            continue;
+        }
+        if !idx_map.contains_key(&name) {
+            idx_order.push(name.clone());
+            idx_map.insert(name.clone(), (false, Vec::new(), Vec::new()));
+        }
+        if let Some(col) = column_name {
+            if let Some((_, cols, desc)) = idx_map.get_mut(&name) {
+                cols.push(col);
+                desc.push(collation.as_deref() == Some("D"));
+            }
+        }
+        if let Some(unique_flag) = non_unique {
+            if let Some((u, _, _)) = idx_map.get_mut(&name) {
+                *u = unique_flag == 0;
+            }
+        }
+    }
+
+    let mut unique_keys: Vec<Value> = Vec::new();
+    let mut indexes: Vec<Value> = Vec::new();
+
+    for name in idx_order {
+        if name == "PRIMARY" {
+            continue;
+        }
+        if let Some((is_unique, cols, desc)) = idx_map.remove(&name) {
+            if is_unique {
+                unique_keys.push(json!({
+                  "name": name,
+                  "columns": cols,
+                  "descending": desc,
+                  "clustered": false,
+                  "unique": true
+                }));
+            } else {
+                indexes.push(json!({
+                  "name": name,
+                  "columns": cols,
+                  "descending": desc,
+                  "clustered": false,
+                  "unique": false
+                }));
+            }
+        }
+    }
+
+    // 4. Foreign keys via KEY_COLUMN_USAGE
+    let fk_query = format!(
+        "SELECT CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_SCHEMA, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
+         FROM information_schema.KEY_COLUMN_USAGE
+         WHERE TABLE_SCHEMA = '{db}' AND TABLE_NAME = '{table}'
+           AND REFERENCED_TABLE_NAME IS NOT NULL
+         ORDER BY CONSTRAINT_NAME, ORDINAL_POSITION"
+    );
+    let fk_rows: Vec<Row> = conn.query(&fk_query).await.map_err(|e| e.to_string())?;
+
+    let mut fk_map: HashMap<String, (String, String, Vec<(String, String)>)> = HashMap::new();
+    let mut fk_order: Vec<String> = Vec::new();
+
+    for row in fk_rows {
+        let constraint_name = opt_string(&row, 0);
+        let column_name = opt_string(&row, 1);
+        let ref_schema = opt_string(&row, 2);
+        let ref_table = opt_string(&row, 3);
+        let ref_column = opt_string(&row, 4);
+
+        let name = constraint_name.unwrap_or_default();
+        if name.is_empty() {
+            continue;
+        }
+        if !fk_map.contains_key(&name) {
+            fk_order.push(name.clone());
+            fk_map.insert(name.clone(), (
+                ref_schema.unwrap_or_default(),
+                ref_table.unwrap_or_default(),
+                Vec::new()
+            ));
+        }
+        if let (Some(col), Some(ref_col)) = (column_name, ref_column) {
+            if let Some((_, _, cols)) = fk_map.get_mut(&name) {
+                cols.push((col, ref_col));
+            }
+        }
+    }
+
+    let foreign_keys: Vec<Value> = fk_order
+        .into_iter()
+        .map(|name| {
+            let (ref_schema, ref_table, cols) = fk_map.remove(&name).unwrap_or_default();
+            json!({
+              "name": name,
+              "referencedSchema": ref_schema,
+              "referencedTable": ref_table,
+              "columns": cols
+                .iter()
+                .map(|(c, rc)| json!({
+                  "column": c,
+                  "referencedColumn": rc
+                }))
+                .collect::<Vec<Value>>()
+            })
+        })
+        .collect();
+
+    // 5. DDL statement via SHOW CREATE TABLE
+    let create_query = format!("SHOW CREATE TABLE `{schema}`.`{table}`");
+    let stmt_rows: Vec<Row> = conn.query(&create_query).await.map_err(|e| e.to_string())?;
+    let statement: String = stmt_rows
+        .first()
+        .and_then(|row| opt_string(row, 1))
+        .unwrap_or_default();
+
+    Ok(json!({
+      "database": database,
+      "schema": schema,
+      "table": table,
+      "objectName": format!("`{schema}`.`{table}`"),
+      "statement": statement,
+      "columns": columns,
+      "foreignKeys": foreign_keys,
+      "primaryKey": primary_key,
+      "uniqueKeys": unique_keys,
+      "indexes": indexes,
+    }))
 }
 
 /// Gets module definition - simplified MySQL implementation.
