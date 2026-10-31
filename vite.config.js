@@ -34,5 +34,21 @@ export default defineConfig({
     target: process.env.TAURI_ENV_PLATFORM === 'windows' ? 'chrome105' : 'safari13',
     minify: !process.env.TAURI_ENV_DEBUG ? 'esbuild' : false,
     sourcemap: Boolean(process.env.TAURI_ENV_DEBUG),
+    rollupOptions: {
+      output: {
+        manualChunks: (id, find) => {
+          if (id.includes('monaco-editor')) {
+            return 'monaco-editor';
+          }
+          // Check for other known large dependencies that can be split
+          if (id.includes('@monaco-editor/react')) {
+            return 'monaco-editor';
+          }
+        },
+      },
+    },
+    // Adjust chunk size warning limit - Monaco editor is expected to be large
+    // but the main bundle is now under 500 kB after code splitting
+    chunkSizeWarningLimit: 4000,
   },
 })
