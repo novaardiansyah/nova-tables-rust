@@ -299,6 +299,323 @@ pub fn quote_name(value: &str) -> String {
     format!("`{}`", value.replace('`', "``"))
 }
 
+/// Database-level privileges that can be managed from the permissions dialog.
+const DATABASE_PRIVILEGES: [&str; 18] = [
+    "SELECT",
+    "INSERT",
+    "UPDATE",
+    "DELETE",
+    "CREATE",
+    "DROP",
+    "REFERENCES",
+    "INDEX",
+    "ALTER",
+    "CREATE VIEW",
+    "SHOW VIEW",
+    "CREATE ROUTINE",
+    "ALTER ROUTINE",
+    "EXECUTE",
+    "CREATE TEMPORARY TABLES",
+    "LOCK TABLES",
+    "TRIGGER",
+    "EVENT",
+];
+
+// MySQL accounts are stored as `'user'@'host'`.
+fn parse_account(account: &str) -> Option<(String, String)> {
+    let inner = account.trim().strip_prefix('\'')?.strip_suffix('\'')?;
+    let separator = inner.find("'@'")?;
+    let user = inner[..separator].replace("''", "'");
+    let host = inner[separator + 3..].replace("''", "'");
+    Some((user, host))
+}
+
+fn escape_literal(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('\'', "''")
+}
+
+fn quote_account(user: &str, host: &str) -> String {
+    format!("'{}'@'{}'", escape_literal(user), escape_literal(host))
+}
+
+fn is_system_user(user: &str) -> bool {
+    let lower = user.to_lowercase();
+    lower == "root" || lower.starts_with("mysql.") || lower == "mysql.sys" || lower == "mysql.session"
+}
+
+// Validates the requested privileges and returns them in canonical form.
+fn normalize_privileges(roles: &[String]) -> Result<Vec<String>, String> {
+    let mut result: Vec<String> = Vec::new();
+    for role in roles {
+        let upper = role.trim().to_uppercase();
+        if upper.is_empty() {
+            continue;
+        }
+        if !DATABASE_PRIVILEGES.contains(&upper.as_str()) {
+            return Err(format!("Privilege \"{}\" cannot be managed here.", role));
+        }
+        if !result.contains(&upper) {
+            result.push(upper);
+        }
+    }
+    Ok(result)
+}
+
+// Returns the lowercased (user, host) of the current connection account.
+async fn current_account(conn: &mut Conn) -> Result<(String, String), String> {
+    let rows: Vec<Row> = conn
+        .query("SELECT CURRENT_USER()")
+        .await
+        .map_err(|e| e.to_string())?;
+    let current = rows
+        .first()
+        .and_then(|row| opt_string(row, 0))
+        .unwrap_or_default();
+    let (user, host) = parse_account(&current).unwrap_or_default();
+    Ok((user.to_lowercase(), host.to_lowercase()))
+}
+
+// Ensures the account exists, is not a system account and is not the current connection account.
+async fn assert_manageable(conn: &mut Conn, account: &str) -> Result<(String, String), String> {
+    let (user, host) = parse_account(account)
+        .ok_or_else(|| format!("Invalid MySQL account \"{}\".", account))?;
+    if is_system_user(&user) {
+        return Err("This system user cannot be changed.".to_string());
+    }
+    let (current_user, current_host) = current_account(conn).await?;
+    if current_user == user.to_lowercase() && current_host == host.to_lowercase() {
+        return Err("The current connection user cannot be changed.".to_string());
+    }
+    Ok((user, host))
+}
+
+/// Lists MySQL accounts that have privileges on the specified database.
+pub async fn list_database_users(
+    conn: &mut Conn,
+    database: Option<&str>,
+) -> Result<Value, String> {
+    let db = database.unwrap_or("").trim();
+    if db.is_empty() {
+        return Err("Choose a database first.".to_string());
+    }
+
+    let (current_user, current_host) = current_account(conn).await?;
+
+    let rows: Vec<Row> = conn
+        .exec(
+            "SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.SCHEMA_PRIVILEGES \
+             WHERE TABLE_SCHEMA = ? ORDER BY GRANTEE, PRIVILEGE_TYPE",
+            (db,),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut order: Vec<String> = Vec::new();
+    let mut privileges: HashMap<String, Vec<String>> = HashMap::new();
+
+    for row in rows {
+        let grantee = opt_string(&row, 0).unwrap_or_default();
+        let privilege = opt_string(&row, 1).unwrap_or_default();
+        if grantee.is_empty() || privilege.is_empty() {
+            continue;
+        }
+        if !privileges.contains_key(&grantee) {
+            order.push(grantee.clone());
+            privileges.insert(grantee.clone(), Vec::new());
+        }
+        if let Some(list) = privileges.get_mut(&grantee) {
+            list.push(privilege);
+        }
+    }
+
+    let mut users = Vec::new();
+    for grantee in &order {
+        let Some((user, host)) = parse_account(grantee) else {
+            continue;
+        };
+        let is_current =
+            user.to_lowercase() == current_user && host.to_lowercase() == current_host;
+        let is_system = is_system_user(&user);
+        let roles = privileges.remove(grantee).unwrap_or_default();
+        users.push(json!({
+          "name": grantee,
+          "type": "MYSQL_USER",
+          "defaultSchema": db,
+          "loginName": null,
+          "roles": roles,
+          "canManage": !is_current && !is_system,
+          "reason": if is_system { Some("system") } else if is_current { Some("current") } else { None }
+        }));
+    }
+
+    // Existing accounts that can still be granted access to this database.
+    let mut logins = Vec::new();
+    if let Ok(login_rows) = conn
+        .query::<Row, _>("SELECT User, Host FROM mysql.user ORDER BY User, Host")
+        .await
+    {
+        for row in login_rows {
+            let user = opt_string(&row, 0).unwrap_or_default();
+            let host = opt_string(&row, 1).unwrap_or_default();
+            if user.is_empty() || is_system_user(&user) {
+                continue;
+            }
+            if user.to_lowercase() == current_user && host.to_lowercase() == current_host {
+                continue;
+            }
+            let grantee = quote_account(&user, &host);
+            if order
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(&grantee))
+            {
+                continue;
+            }
+            logins.push(json!({
+              "name": grantee,
+              "type": "MYSQL_USER"
+            }));
+        }
+    }
+
+    Ok(json!({
+      "ok": true,
+      "users": users,
+      "roles": DATABASE_PRIVILEGES,
+      "logins": logins
+    }))
+}
+
+/// Grants database-level privileges to an existing MySQL account.
+pub async fn create_database_user(
+    conn: &mut Conn,
+    database: Option<&str>,
+    name: &str,
+    roles: &[String],
+) -> Result<Value, String> {
+    let db = database.unwrap_or("").trim();
+    if db.is_empty() {
+        return Err("Choose a database first.".to_string());
+    }
+    let (user, host) = parse_account(name)
+        .ok_or_else(|| format!("Invalid MySQL account \"{}\".", name))?;
+    let account = quote_account(&user, &host);
+    let privileges = normalize_privileges(roles)?;
+
+    if !privileges.is_empty() {
+        let sql = format!(
+            "GRANT {} ON {}.* TO {}",
+            privileges.join(", "),
+            quote_name(db),
+            account
+        );
+        conn.query_drop(sql).await.map_err(|e| e.to_string())?;
+    }
+
+    Ok(json!({
+      "ok": true,
+      "user": account,
+      "roles": privileges
+    }))
+}
+
+/// Replaces the database-level privileges of a MySQL account.
+pub async fn update_database_user_roles(
+    conn: &mut Conn,
+    database: Option<&str>,
+    name: &str,
+    roles: &[String],
+) -> Result<Value, String> {
+    let db = database.unwrap_or("").trim();
+    if db.is_empty() {
+        return Err("Choose a database first.".to_string());
+    }
+    let (user, host) = assert_manageable(conn, name).await?;
+    let account = quote_account(&user, &host);
+    let desired = normalize_privileges(roles)?;
+
+    let rows: Vec<Row> = conn
+        .exec(
+            "SELECT PRIVILEGE_TYPE FROM information_schema.SCHEMA_PRIVILEGES \
+             WHERE TABLE_SCHEMA = ? AND GRANTEE = ?",
+            (db, account.as_str()),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    let current: Vec<String> = rows.iter().filter_map(|row| opt_string(row, 0)).collect();
+
+    let to_revoke: Vec<String> = current
+        .iter()
+        .filter(|privilege| !desired.contains(privilege))
+        .cloned()
+        .collect();
+    let to_grant: Vec<String> = desired
+        .iter()
+        .filter(|privilege| !current.contains(privilege))
+        .cloned()
+        .collect();
+
+    if !to_revoke.is_empty() {
+        let sql = format!(
+            "REVOKE {} ON {}.* FROM {}",
+            to_revoke.join(", "),
+            quote_name(db),
+            account
+        );
+        conn.query_drop(sql).await.map_err(|e| e.to_string())?;
+    }
+    if !to_grant.is_empty() {
+        let sql = format!(
+            "GRANT {} ON {}.* TO {}",
+            to_grant.join(", "),
+            quote_name(db),
+            account
+        );
+        conn.query_drop(sql).await.map_err(|e| e.to_string())?;
+    }
+
+    Ok(json!({
+      "ok": true,
+      "user": account,
+      "roles": desired
+    }))
+}
+
+/// Revokes every database-level privilege from a MySQL account (the account itself stays).
+pub async fn drop_database_user(
+    conn: &mut Conn,
+    database: Option<&str>,
+    name: &str,
+) -> Result<Value, String> {
+    let db = database.unwrap_or("").trim();
+    if db.is_empty() {
+        return Err("Choose a database first.".to_string());
+    }
+    let (user, host) = assert_manageable(conn, name).await?;
+    let account = quote_account(&user, &host);
+
+    let rows: Vec<Row> = conn
+        .exec(
+            "SELECT PRIVILEGE_TYPE FROM information_schema.SCHEMA_PRIVILEGES \
+             WHERE TABLE_SCHEMA = ? AND GRANTEE = ? LIMIT 1",
+            (db, account.as_str()),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    if !rows.is_empty() {
+        let sql = format!(
+            "REVOKE ALL PRIVILEGES ON {}.* FROM {}",
+            quote_name(db),
+            account
+        );
+        conn.query_drop(sql).await.map_err(|e| e.to_string())?;
+    }
+
+    Ok(json!({
+      "ok": true,
+      "user": account
+    }))
+}
+
 /// Gets table relations (foreign keys) via information_schema.
 pub async fn table_relations(
     conn: &mut Conn,

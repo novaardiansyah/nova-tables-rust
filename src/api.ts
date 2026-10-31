@@ -4,6 +4,8 @@ export type {
   FolderModel,
   DatabaseInfo,
   DatabaseUser,
+  DatabaseUserDetail,
+  ServerLoginItem,
   TableSummary,
   ColumnSummary,
   TableStructureResult,
