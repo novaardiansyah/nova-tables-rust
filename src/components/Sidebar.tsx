@@ -26,6 +26,7 @@ export interface SidebarSessionItem {
     name: string
     host: string
     port: number
+    driverType?: string
     [key: string]: unknown
   }
   activeDatabase?: string | null
@@ -204,6 +205,15 @@ export default function Sidebar({
   const matchesFilter = (schema: string, name: string) =>
     filterText === '' || `${schema}.${name}`.toLowerCase().includes(filterText)
 
+  const shouldShowSchemaPrefix = (
+    item: SidebarSessionItem,
+    schema: string | undefined | null,
+  ) => {
+    if (!schema || schema === 'dbo') return false
+    if (item.connection.driverType === 'mysql' && schema === item.activeDatabase) return false
+    return true
+  }
+
   const handleTableContextMenu = (event: React.MouseEvent, table: SidebarTable) => {
     event.preventDefault()
     onSelectTable(`${table.schema}.${table.name}`)
@@ -218,8 +228,9 @@ export default function Sidebar({
 
   const pinned = new Set(pinnedTables)
 
-  const renderTable = (table: SidebarTable) => {
+  const renderTable = (item: SidebarSessionItem, table: SidebarTable) => {
     const key = `${table.schema}.${table.name}`
+    const showSchema = shouldShowSchemaPrefix(item, table.schema)
     return (
       <div
         key={key}
@@ -236,7 +247,7 @@ export default function Sidebar({
           }`}
           title={`${table.schema}.${table.name}`}
         >
-          {table.schema !== 'dbo' ? <span className="text-text-faint">{table.schema}.</span> : null}
+          {showSchema ? <span className="text-text-faint">{table.schema}.</span> : null}
           <span className="truncate">{table.name}</span>
         </button>
         <button
@@ -253,8 +264,9 @@ export default function Sidebar({
     )
   }
 
-  const renderModule = (module: SidebarModule) => {
+  const renderModule = (item: SidebarSessionItem, module: SidebarModule) => {
     const key = `${module.schema}.${module.name}`
+    const showSchema = shouldShowSchemaPrefix(item, module.schema)
     return (
       <div
         key={key}
@@ -275,7 +287,7 @@ export default function Sidebar({
           }`}
           title={`${module.schema}.${module.name}`}
         >
-          {module.schema !== 'dbo' ? <span className="text-text-faint">{module.schema}.</span> : null}
+          {showSchema ? <span className="text-text-faint">{module.schema}.</span> : null}
           <span className="truncate">{module.name}</span>
         </button>
         <span className="shrink-0 text-[length:var(--app-text-9)] uppercase tracking-wider text-text-faint">
@@ -352,9 +364,9 @@ export default function Sidebar({
 
             {state.status === 'ready' ? (
               group === 'tables' ? (
-                orderedTablesFor(visible as SidebarTable[]).map(renderTable)
+                orderedTablesFor(visible as SidebarTable[]).map((table) => renderTable(item, table))
               ) : (
-                (visible as SidebarModule[]).map(renderModule)
+                (visible as SidebarModule[]).map((module) => renderModule(item, module))
               )
             ) : null}
           </div>
