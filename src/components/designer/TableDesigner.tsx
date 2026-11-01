@@ -98,7 +98,7 @@ export interface TableDesignerProps {
   availableColumns?: { schema: string; name: string; columns: string[] }[]
   driverType?: string | null
   onRenameTable?: (nextName: string) => void
-  onGenerate: (sql: string) => void
+  onGenerate: (sql: string, draft?: TableDesign) => void
   onApply: (sql: string, draft: TableDesign) => void
 }
 
@@ -126,8 +126,10 @@ export default function TableDesigner({
   const originalRef = useRef<TableDesign | null>(design ?? null)
 
   useEffect(() => {
-    originalRef.current = design ?? null
-    setDraft(design ?? (NEW_TABLE_TEMPLATE as unknown as TableDesign))
+    if (design) {
+      originalRef.current = design
+      setDraft(design)
+    }
     setNotice(null)
   }, [design])
 

@@ -421,12 +421,14 @@ export function useTableBrowser({
   )
 
   const handleDesignGenerate = useCallback(
-    (sql: string) => {
+    (sql: string, draft: TableDesign) => {
       const current = activeSession()
       if (!current) return
+      // Persist the current draft into the design tab so switching back does not reset the form.
+      updateTab(current.connectionId, current.activeTabId, { design: draft })
       openTab(current.connectionId, 'Generated SQL', sql)
     },
-    [activeSession, openTab],
+    [activeSession, openTab, updateTab],
   )
 
   const handleDesignApply = useCallback(
