@@ -1,5 +1,6 @@
 import { useEffect, useState, FormEvent } from 'react'
 import Icon from '@/components/common/Icon'
+import ConfirmDialog from '@/components/common/ConfirmDialog'
 
 export interface DropDatabaseDialogProps {
   open: boolean
@@ -27,30 +28,32 @@ export default function DropDatabaseDialog({
   const handleCancel = onCancel || onClose || (() => {})
   const [typed, setTyped] = useState('')
   const [acknowledged, setAcknowledged] = useState(false)
+  const [confirmFinalOpen, setConfirmFinalOpen] = useState(false)
 
   useEffect(() => {
     if (!open) return
     setTyped('')
     setAcknowledged(false)
+    setConfirmFinalOpen(false)
   }, [open, database])
 
   useEffect(() => {
     if (!open) return undefined
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) handleCancel()
+      if (event.key === 'Escape' && !busy && !confirmFinalOpen) handleCancel()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, busy, handleCancel])
+  }, [open, busy, confirmFinalOpen, handleCancel])
 
   if (!open) return null
 
   const matches = typed.trim() === database
   const ready = matches && acknowledged && !busy
 
-  const submit = (event: FormEvent) => {
+  const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
-    if (ready) onConfirm(typed.trim())
+    if (ready) setConfirmFinalOpen(true)
   }
 
   return (
@@ -61,7 +64,7 @@ export default function DropDatabaseDialog({
       }}
     >
       <form
-        onSubmit={submit}
+        onSubmit={handleSubmit}
         onClick={(event) => event.stopPropagation()}
         className="animate-fade-in w-full max-w-lg overflow-hidden rounded-xl border border-danger/40 bg-surface shadow-2xl shadow-black/70"
       >
@@ -74,7 +77,7 @@ export default function DropDatabaseDialog({
               Drop database
             </h2>
             <p className="mt-1 text-[length:var(--app-text-12)] leading-[calc(var(--app-text-12)+8px)] text-text-soft">
-              This permanently deletes the database and everything inside it.
+              Permanently deletes the database.
             </p>
           </div>
           <button
@@ -89,24 +92,41 @@ export default function DropDatabaseDialog({
         </div>
 
         <div className="space-y-4 border-t border-line px-5 py-4">
-          <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2.5 text-[length:var(--app-text-11)] leading-[calc(var(--app-text-11)+5px)] text-danger">
-            <Icon name="alert-triangle" size={13} className="mt-px shrink-0" />
-            <div className="min-w-0">
-              <p className="font-semibold">This action cannot be undone.</p>
-              <p className="mt-1">
-                You are about to drop{' '}
-                <span className="font-mono font-semibold">{database}</span>. All tables, data,
-                functions, stored procedures, users and permissions in this database will be
-                deleted.
-              </p>
-            </div>
-          </div>
-
           <div className="flex items-center gap-2 rounded-lg border border-line bg-panel px-3 py-2 text-[length:var(--app-text-11)] text-text-muted">
             <Icon name="database" size={12} className="shrink-0 text-danger" />
             <span className="truncate font-medium text-text-soft">{connectionName}</span>
             <span className="text-text-faint">/</span>
             <span className="truncate">{server}</span>
+          </div>
+
+          <div>
+            <label className="field-label block" htmlFor="drop-database-name">
+              Type{' '}
+              <span className="font-mono normal-case tracking-normal text-text-soft">{database}</span>{' '}
+              to confirm
+            </label>
+            <input
+              id="drop-database-name"
+              className="field font-mono"
+              value={typed}
+              autoFocus
+              autoComplete="off"
+              spellCheck={false}
+              disabled={busy}
+              placeholder="Type database name to confirm"
+              onChange={(event) => setTyped(event.target.value)}
+            />
+            {typed && !matches ? (
+              <p className="mt-2 flex items-start gap-1.5 text-[length:var(--app-text-11)] text-danger">
+                <Icon name="alert-triangle" size={11} className="mt-px shrink-0" />
+                <span>The name must match exactly, including letter case.</span>
+              </p>
+            ) : (
+              <p className="mt-2 flex items-start gap-1.5 text-[length:var(--app-text-11)] text-text-faint">
+                <Icon name="lock" size={11} className="mt-px shrink-0" />
+                <span>Open connections to this database can block the drop.</span>
+              </p>
+            )}
           </div>
 
           <label
@@ -124,36 +144,6 @@ export default function DropDatabaseDialog({
             <span>I understand that this database and all of its data will be permanently deleted.</span>
           </label>
 
-          <div>
-            <label className="field-label block" htmlFor="drop-database-name">
-              Type{' '}
-              <span className="font-mono normal-case tracking-normal text-text-soft">{database}</span>{' '}
-              to confirm
-            </label>
-            <input
-              id="drop-database-name"
-              className="field font-mono"
-              value={typed}
-              autoFocus
-              autoComplete="off"
-              spellCheck={false}
-              disabled={busy}
-              placeholder={database}
-              onChange={(event) => setTyped(event.target.value)}
-            />
-            {typed && !matches ? (
-              <p className="mt-2 flex items-start gap-1.5 text-[length:var(--app-text-11)] text-danger">
-                <Icon name="alert-triangle" size={11} className="mt-px shrink-0" />
-                <span>The name must match exactly, including letter case.</span>
-              </p>
-            ) : (
-              <p className="mt-2 flex items-start gap-1.5 text-[length:var(--app-text-11)] text-text-faint">
-                <Icon name="lock" size={11} className="mt-px shrink-0" />
-                <span>Open connections to this database can block the drop.</span>
-              </p>
-            )}
-          </div>
-
           {error ? (
             <p className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-[length:var(--app-text-11)] leading-[calc(var(--app-text-11)+5px)] text-danger">
               {error}
@@ -170,6 +160,22 @@ export default function DropDatabaseDialog({
           </button>
         </div>
       </form>
+
+      {confirmFinalOpen && (
+        <ConfirmDialog
+          open={confirmFinalOpen}
+          title="This action cannot be undone"
+          message={`You are about to drop ${database}. All tables, data, functions, stored procedures, users and permissions in this database will be deleted.`}
+          confirmLabel="Drop database"
+          danger
+          busy={busy}
+          onCancel={() => setConfirmFinalOpen(false)}
+          onConfirm={() => {
+            setConfirmFinalOpen(false)
+            onConfirm(typed.trim())
+          }}
+        />
+      )}
     </div>
   )
 }
