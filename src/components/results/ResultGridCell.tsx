@@ -6,7 +6,7 @@ export interface SpecialValueOption {
   value: unknown
 }
 
-const SPECIAL_VALUES: SpecialValueOption[] = [
+export const SPECIAL_VALUES: SpecialValueOption[] = [
   { label: 'NULL', hint: 'null', value: null },
   { label: 'DEFAULT', hint: 'column default', value: { special: 'DEFAULT' } },
   { label: 'GETDATE()', hint: 'now', value: { special: 'GETDATE()' } },

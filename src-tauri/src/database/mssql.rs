@@ -76,6 +76,43 @@ pub async fn detect_server_timezone(client: &mut MssqlClient) -> Option<(i32, St
     None
 }
 
+pub fn column_type_to_string(col_type: tiberius::ColumnType) -> &'static str {
+    match col_type {
+        tiberius::ColumnType::Null => "null",
+        tiberius::ColumnType::Bit | tiberius::ColumnType::Bitn => "bit",
+        tiberius::ColumnType::Int1 => "tinyint",
+        tiberius::ColumnType::Int2 => "smallint",
+        tiberius::ColumnType::Int4 => "int",
+        tiberius::ColumnType::Int8 => "bigint",
+        tiberius::ColumnType::Intn => "int",
+        tiberius::ColumnType::Datetime4 => "smalldatetime",
+        tiberius::ColumnType::Datetime | tiberius::ColumnType::Datetimen => "datetime",
+        tiberius::ColumnType::Datetime2 => "datetime2",
+        tiberius::ColumnType::DatetimeOffsetn => "datetimeoffset",
+        tiberius::ColumnType::Daten => "date",
+        tiberius::ColumnType::Timen => "time",
+        tiberius::ColumnType::Float4 => "real",
+        tiberius::ColumnType::Float8 | tiberius::ColumnType::Floatn => "float",
+        tiberius::ColumnType::Money => "money",
+        tiberius::ColumnType::Money4 => "smallmoney",
+        tiberius::ColumnType::Guid => "uniqueidentifier",
+        tiberius::ColumnType::Decimaln => "decimal",
+        tiberius::ColumnType::Numericn => "numeric",
+        tiberius::ColumnType::BigVarBin => "varbinary",
+        tiberius::ColumnType::BigVarChar => "varchar",
+        tiberius::ColumnType::BigBinary => "binary",
+        tiberius::ColumnType::BigChar => "char",
+        tiberius::ColumnType::NVarchar => "nvarchar",
+        tiberius::ColumnType::NChar => "nchar",
+        tiberius::ColumnType::Xml => "xml",
+        tiberius::ColumnType::Udt => "udt",
+        tiberius::ColumnType::Text => "text",
+        tiberius::ColumnType::Image => "image",
+        tiberius::ColumnType::NText => "ntext",
+        tiberius::ColumnType::SSVariant => "sql_variant",
+    }
+}
+
 pub fn column_data_to_json(data: &ColumnData<'static>) -> Value {
     match data {
         ColumnData::Bit(opt) => opt
@@ -430,7 +467,7 @@ pub async fn execute_sql(client: &mut MssqlClient, sql: &str) -> Result<Value, S
         let columns: Vec<Value> = first
             .columns()
             .iter()
-            .map(|col| json!({ "name": col.name() }))
+            .map(|col| json!({ "name": col.name(), "type": column_type_to_string(col.column_type()) }))
             .collect();
 
         let row_count = rows.len();
