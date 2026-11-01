@@ -21,19 +21,19 @@ const FONT_OPTIONS = FONT_FAMILIES.map((family) => ({ value: family.id, label: f
 
 const TIMEZONE_OPTIONS = TIMEZONES.map((tz) => ({ value: tz.id, label: tz.label }))
 
+// Shared control width (256px). Font rows split it: 152px select + 8px gap + 96px size input.
+const CONTROL_WIDTH = 'w-64'
+const FONT_SELECT_WIDTH = 'w-[152px]'
+
 interface RowProps {
   label: string
-  hint?: string
   children: React.ReactNode
 }
 
-function Row({ label, hint, children }: RowProps) {
+function Row({ label, children }: RowProps) {
   return (
-    <div className="grid grid-cols-[240px_minmax(0,1fr)] items-center gap-4 py-2.5">
-      <div className="min-w-0 pr-2">
-        <p className="text-[length:var(--app-text-12)] font-medium text-text">{label}</p>
-        {hint ? <p className="text-[length:var(--app-text-11)] text-text-muted leading-relaxed">{hint}</p> : null}
-      </div>
+    <div className="grid grid-cols-[180px_minmax(0,1fr)] items-center gap-4 py-2.5">
+      <p className="min-w-0 pr-2 text-[length:var(--app-text-12)] font-medium text-text">{label}</p>
       <div className="flex min-w-0 items-center justify-end gap-2">{children}</div>
     </div>
   )
@@ -73,11 +73,8 @@ function SizeInput({ label, value, min, max, onChange }: SizeInputProps) {
   return (
     <div className="relative w-24 shrink-0">
       <input
-        type="number"
+        type="text"
         inputMode="numeric"
-        min={min}
-        max={max}
-        step={1}
         autoComplete="off"
         aria-label={label}
         value={text}
@@ -86,7 +83,7 @@ function SizeInput({ label, value, min, max, onChange }: SizeInputProps) {
           commit(event.target.value)
         }}
         onBlur={handleBlur}
-        className="field appearance-none pr-7 text-right"
+        className="field pr-7 text-right"
       />
       <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[length:var(--app-text-10)] text-text-faint">
         px
@@ -193,7 +190,7 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
         if (event.target === event.currentTarget && !saving) handleCancel()
       }}
     >
-      <div className="max-h-[92vh] w-full max-w-4xl animate-fade-in overflow-y-auto overflow-x-hidden rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70">
+      <div className="max-h-[92vh] w-full max-w-xl animate-fade-in overflow-y-auto overflow-x-hidden rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70">
         <div className="flex items-center gap-3 border-b border-line px-5 py-4">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-soft text-accent">
             <Icon name="settings" size={16} />
@@ -210,7 +207,7 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
         <form onSubmit={handleSubmit} className="space-y-5 px-5 py-4">
           <section>
             <p className="field-label">Appearance</p>
-            <Row label="Color theme" hint="Workspace color palette">
+            <Row label="Color theme">
               <Select
                 value={draft.theme}
                 options={THEME_OPTIONS}
@@ -219,14 +216,14 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
                 placeholder="Select theme"
                 emptyLabel="No themes"
                 panelAlign="right"
-                className="w-56"
+                className={CONTROL_WIDTH}
               />
             </Row>
           </section>
 
           <section className="border-t border-line pt-4">
             <p className="field-label">App</p>
-            <Row label="Font" hint="Sidebar, tabs, headers, and dialogs">
+            <Row label="Font">
               <div className="flex items-center gap-2">
                 <Select
                   value={draft.appFontFamily}
@@ -236,7 +233,7 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
                   placeholder="Select font"
                   emptyLabel="No fonts"
                   panelAlign="right"
-                  className="w-44"
+                  className={FONT_SELECT_WIDTH}
                 />
                 <SizeInput
                   label="App font size"
@@ -251,7 +248,7 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
 
           <section className="border-t border-line pt-4">
             <p className="field-label">Editor, Result Grid & JSON Viewer</p>
-            <Row label="Font" hint="SQL editor, query results grid, and JSON viewer typography">
+            <Row label="Font">
               <div className="flex items-center gap-2">
                 <Select
                   value={draft.contentFontFamily}
@@ -261,7 +258,7 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
                   placeholder="Select font"
                   emptyLabel="No fonts"
                   panelAlign="right"
-                  className="w-60"
+                  className={FONT_SELECT_WIDTH}
                 />
                 <SizeInput
                   label="Content font size"
@@ -272,7 +269,7 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
                 />
               </div>
             </Row>
-            <Row label="System Timezone" hint="Timezone of the database connection">
+            <Row label="System Timezone">
               <Select
                 value={draft.systemTimezone || 'UTC'}
                 options={TIMEZONE_OPTIONS}
@@ -281,11 +278,11 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
                 placeholder="Select system timezone"
                 emptyLabel="No timezones"
                 panelAlign="right"
-                className="w-60"
+                className={CONTROL_WIDTH}
                 searchable
               />
             </Row>
-            <Row label="User Timezone" hint="Display timezone for query datetime results">
+            <Row label="User Timezone">
               <Select
                 value={draft.timezone}
                 options={TIMEZONE_OPTIONS}
@@ -294,11 +291,11 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
                 placeholder="Select timezone"
                 emptyLabel="No timezones"
                 panelAlign="right"
-                className="w-60"
+                className={CONTROL_WIDTH}
                 searchable
               />
             </Row>
-            <Row label="Word wrap" hint="Wrap long SQL lines instead of scrolling horizontally">
+            <Row label="Word wrap">
               <span className="text-[length:var(--app-text-11)] text-text-muted">
                 {draft.queryWordWrap ? 'On' : 'Off'}
               </span>
