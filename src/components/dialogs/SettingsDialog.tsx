@@ -282,6 +282,7 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
                 emptyLabel="No timezones"
                 panelAlign="right"
                 className="w-60"
+                searchable
               />
             </Row>
           </section>
