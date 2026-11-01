@@ -21,6 +21,8 @@ pub struct DbConnectionItem {
     pub encrypt: bool,
     #[serde(rename = "trustServerCertificate")]
     pub trust_server_certificate: bool,
+    #[serde(rename = "timezone")]
+    pub timezone: Option<String>,
     #[serde(rename = "passwordCipher")]
     pub password_cipher: Option<String>,
     #[serde(rename = "driverType")]
@@ -108,15 +110,16 @@ impl LocalStore {
          database_name TEXT NOT NULL DEFAULT '',
          folder_id TEXT REFERENCES folders(id) ON DELETE CASCADE,
          environment TEXT NOT NULL DEFAULT '',
-         encrypt INTEGER NOT NULL DEFAULT 1,
-         trust_server_certificate INTEGER NOT NULL DEFAULT 1,
-         driver_type TEXT NOT NULL DEFAULT 'sqlserver',
-         password_cipher TEXT,
-         last_connected_at TEXT,
-         last_database_used TEXT,
-         created_at TEXT NOT NULL,
-         updated_at TEXT NOT NULL
-       );
+encrypt INTEGER NOT NULL DEFAULT 1,
+          trust_server_certificate INTEGER NOT NULL DEFAULT 1,
+          driver_type TEXT NOT NULL DEFAULT 'sqlserver',
+          timezone TEXT,
+          password_cipher TEXT,
+          last_connected_at TEXT,
+          last_database_used TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
 
        CREATE TABLE IF NOT EXISTS saved_queries (
          id TEXT PRIMARY KEY,
@@ -144,6 +147,10 @@ impl LocalStore {
          ON query_history (connection_id, database_name, created_at DESC);",
         )?;
         let _ = conn.execute(
+            "ALTER TABLE connections ADD COLUMN timezone TEXT",
+            [],
+        );
+        let _ = conn.execute(
             "ALTER TABLE connections ADD COLUMN last_database_used TEXT",
             [],
         );
@@ -157,7 +164,7 @@ impl LocalStore {
     pub fn list_connections(conn: &SqliteConnection) -> Result<Vec<DbConnectionItem>> {
         let mut stmt = conn.prepare(
       "SELECT id, name, host, port, username, database_name, folder_id, environment,
-              encrypt, trust_server_certificate, driver_type, last_connected_at, last_database_used, created_at, updated_at, password_cipher
+              encrypt, trust_server_certificate, driver_type, last_connected_at, last_database_used, created_at, updated_at, password_cipher, timezone
        FROM connections ORDER BY name ASC",
     )?;
         let rows = stmt.query_map([], |row| {
@@ -166,6 +173,7 @@ impl LocalStore {
             let driver_type: Option<String> = row.get(10)?;
             let port_int: i32 = row.get(3)?;
             let cipher: Option<String> = row.get(15)?;
+            let tz: Option<String> = row.get(16)?;
             Ok(DbConnectionItem {
                 id: row.get(0)?,
                 name: row.get(1)?,
@@ -179,6 +187,7 @@ impl LocalStore {
                 encrypt: encrypt_int != 0,
                 trust_server_certificate: trust_cert_int != 0,
                 driver_type,
+                timezone: tz,
                 password_cipher: cipher,
                 last_connected_at: row.get(11)?,
                 last_database_used: row.get(12)?,
@@ -207,7 +216,7 @@ impl LocalStore {
     pub fn get_connection(conn: &SqliteConnection, id: &str) -> Result<Option<DbConnectionItem>> {
         let mut stmt = conn.prepare(
       "SELECT id, name, host, port, username, database_name, folder_id, environment,
-              encrypt, trust_server_certificate, driver_type, last_connected_at, last_database_used, created_at, updated_at, password_cipher
+              encrypt, trust_server_certificate, driver_type, last_connected_at, last_database_used, created_at, updated_at, password_cipher, timezone
        FROM connections WHERE id = ?1 LIMIT 1",
     )?;
         let mut rows = stmt.query_map(params![id], |row| {
@@ -216,6 +225,7 @@ impl LocalStore {
             let driver_type: Option<String> = row.get(10)?;
             let port_int: i32 = row.get(3)?;
             let cipher: Option<String> = row.get(15)?;
+            let tz: Option<String> = row.get(16)?;
             Ok(DbConnectionItem {
                 id: row.get(0)?,
                 name: row.get(1)?,
@@ -229,6 +239,7 @@ impl LocalStore {
                 encrypt: encrypt_int != 0,
                 trust_server_certificate: trust_cert_int != 0,
                 driver_type,
+                timezone: tz,
                 password_cipher: cipher,
                 last_connected_at: row.get(11)?,
                 last_database_used: row.get(12)?,
@@ -248,8 +259,8 @@ impl LocalStore {
         let password = item.password.as_deref().or(item.password_cipher.as_deref());
         let driver_type = item.driver_type.as_deref().unwrap_or("sqlserver");
         conn.execute(
-      "INSERT INTO connections (id, name, host, port, username, database_name, folder_id, environment, encrypt, trust_server_certificate, driver_type, password_cipher, last_database_used, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, datetime('now'), datetime('now'))
+      "INSERT INTO connections (id, name, host, port, username, database_name, folder_id, environment, encrypt, trust_server_certificate, driver_type, timezone, password_cipher, last_database_used, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, datetime('now'), datetime('now'))
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name,
          host = excluded.host,
@@ -261,25 +272,27 @@ impl LocalStore {
          encrypt = excluded.encrypt,
          trust_server_certificate = excluded.trust_server_certificate,
          driver_type = excluded.driver_type,
+         timezone = excluded.timezone,
          password_cipher = COALESCE(excluded.password_cipher, connections.password_cipher),
          last_database_used = COALESCE(excluded.last_database_used, connections.last_database_used),
          updated_at = datetime('now')",
-      params![
-        item.id,
-        item.name,
-        item.host,
-        item.port as i32,
-        item.username,
-        item.database_name.as_deref().unwrap_or(""),
-        item.folder_id,
-        item.environment.as_deref().unwrap_or(""),
-        if item.encrypt { 1 } else { 0 },
-        if item.trust_server_certificate { 1 } else { 0 },
-        driver_type,
-        password,
-        item.last_database_used.as_deref(),
-      ],
-    )?;
+       params![
+         item.id,
+         item.name,
+         item.host,
+         item.port as i32,
+         item.username,
+         item.database_name.as_deref().unwrap_or(""),
+         item.folder_id,
+         item.environment.as_deref().unwrap_or(""),
+         if item.encrypt { 1 } else { 0 },
+         if item.trust_server_certificate { 1 } else { 0 },
+         driver_type,
+         item.timezone.as_deref(),
+         password,
+         item.last_database_used.as_deref(),
+       ],
+     )?;
         Ok(())
     }
 

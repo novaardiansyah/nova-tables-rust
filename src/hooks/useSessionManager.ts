@@ -260,6 +260,7 @@ export function useSessionManager({
       try {
         const result = await api.connect({ id: connection.id })
         const database = pickDatabase(result.databases, result.database)
+        const detectedTz = result?.timezone || (connection as any)?.timezone
 
         setLastConnectedId(connection.id)
         setConnections((prev) =>
@@ -296,6 +297,12 @@ export function useSessionManager({
         const created = createSession(result, connection, database, tabs[0])
         created.tabs = tabs
         created.activeTabId = activeTabId
+        if (detectedTz) {
+          created.timezone = detectedTz
+          const nextSettings = applySettings({ ...settings, timezone: detectedTz })
+          setSettings(nextSettings)
+          void api.saveSettings(nextSettings)
+        }
 
         setSessions((prev) => ({ ...prev, [connection.id]: created }))
         setActiveConnectionId(connection.id)

@@ -229,13 +229,18 @@ pub async fn test_connection(connection: Value) -> Result<Value, String> {
         {
             Ok(mut client) => {
                 let (server_name, version, edition) = mssql::read_server_info(&mut client).await;
+                let tz_info = mssql::detect_server_timezone(&mut client).await;
+                let detected_timezone = tz_info.as_ref().map(|(_, iana)| iana.clone());
+                let detected_offset_minutes = tz_info.as_ref().map(|(min, _)| *min);
                 return Ok(json!({
                   "ok": true,
                   "serverName": server_name,
                   "productVersion": version,
                   "edition": edition,
                   "elapsedMs": started.elapsed().as_millis(),
-                  "message": "Connection successful"
+                  "message": "Connection successful",
+                  "timezone": detected_timezone,
+                  "timezoneOffsetMinutes": detected_offset_minutes
                 }));
             }
             Err(err) => {
@@ -264,14 +269,19 @@ pub async fn test_connection(connection: Value) -> Result<Value, String> {
         {
             Ok(mut client) => {
                 let databases = mysql::list_databases(&mut client).await;
+                let tz_info = mysql::detect_server_timezone(&mut client).await;
+                let detected_timezone = tz_info.as_ref().map(|(_, iana)| iana.clone());
+                let detected_offset_minutes = tz_info.as_ref().map(|(min, _)| *min);
                 return Ok(json!({
                   "ok": true,
                   "serverName": host,
-                  "productVersion": "8.0", // simplified
+                  "productVersion": "8.0",
                   "edition": "Community Edition",
                   "elapsedMs": started.elapsed().as_millis(),
                   "message": "MySQL connection successful",
-                  "databases": databases.unwrap_or_default()
+                  "databases": databases.unwrap_or_default(),
+                  "timezone": detected_timezone,
+                  "timezoneOffsetMinutes": detected_offset_minutes
                 }));
             }
             Err(err) => {
@@ -574,6 +584,15 @@ pub async fn connect(input: Value) -> Result<Value, String> {
             json!({ "name": "sys", "isSystem": true, "isOnline": true }),
           ]
         });
+                let tz_info = mysql::detect_server_timezone(&mut client).await;
+                let detected_timezone = tz_info.as_ref().map(|(_, iana)| iana.clone());
+                let detected_offset_minutes = tz_info.as_ref().map(|(min, _)| *min);
+
+                // Update last_connected_at and last_database_used
+                let _ = conn.execute(
+            "UPDATE connections SET last_connected_at = datetime('now'), last_database_used = ?1, timezone = COALESCE(timezone, ?2) WHERE id = ?3",
+            params![database, detected_timezone.as_deref(), id],
+        );
 
                 Ok(json!({
                   "ok": true,
@@ -585,7 +604,9 @@ pub async fn connect(input: Value) -> Result<Value, String> {
                   "databases": databases,
                   "serverVersion": "MySQL 8.0",
                   "serverName": host,
-                  "edition": "Community Edition"
+                  "edition": "Community Edition",
+                  "timezone": detected_timezone,
+                  "timezoneOffsetMinutes": detected_offset_minutes
                 }))
             }
             Err(e) => {
@@ -633,12 +654,15 @@ pub async fn connect(input: Value) -> Result<Value, String> {
                         ]
                     });
 
-                let (server_name, version, edition) = mssql::read_server_info(&mut client).await;
+                let (_server_name, _version, _edition) = mssql::read_server_info(&mut client).await;
+                let tz_info = mssql::detect_server_timezone(&mut client).await;
+                let detected_timezone = tz_info.as_ref().map(|(_, iana)| iana.clone());
+                let detected_offset_minutes = tz_info.as_ref().map(|(min, _)| *min);
 
                 // Update last_connected_at and last_database_used
                 let _ = conn.execute(
-          "UPDATE connections SET last_connected_at = datetime('now'), last_database_used = ?1 WHERE id = ?2",
-          params![database, id],
+            "UPDATE connections SET last_connected_at = datetime('now'), last_database_used = ?1, timezone = COALESCE(timezone, ?2) WHERE id = ?3",
+            params![database, detected_timezone.as_deref(), id],
         );
 
                 Ok(json!({
@@ -649,9 +673,11 @@ pub async fn connect(input: Value) -> Result<Value, String> {
                   "port": port,
                   "database": database,
                   "databases": databases,
-                  "serverVersion": version,
-                  "serverName": server_name,
-                  "edition": edition
+                  "serverVersion": "MySQL 8.0",
+                  "serverName": host,
+                  "edition": "Community Edition",
+                  "timezone": detected_timezone,
+                  "timezoneOffsetMinutes": detected_offset_minutes
                 }))
             }
             Err(e) => {

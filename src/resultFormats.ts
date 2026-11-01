@@ -82,9 +82,8 @@ export function parseDateTime(value: unknown): Date | null {
 
   if (ISO_DATE_TIME_RE.test(trimmed)) {
     let iso = trimmed.replace(' ', 'T')
-    if (!/(?:Z|[+-]\d{2}:?\d{2})$/i.test(iso)) {
-      iso += 'Z'
-    }
+    // Preserve original timezone context; do not append 'Z' as SQL Server
+    // DATETIME values are naive local times in the connection's default timezone.
     const date = new Date(iso)
     return Number.isNaN(date.getTime()) ? null : date
   }

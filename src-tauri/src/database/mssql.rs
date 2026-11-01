@@ -8,6 +8,74 @@ use tokio_util::compat::{Compat, TokioAsyncWriteCompatExt};
 
 pub type MssqlClient = Client<Compat<TcpStream>>;
 
+fn offset_minutes_to_iana(minutes: i32) -> &'static str {
+    match minutes {
+        -720 => "Etc/GMT+12",
+        -660 => "Pacific/Pago_Pago",
+        -600 => "Pacific/Honolulu",
+        -570 => "Pacific/Marquesas",
+        -540 => "Pacific/Gambier",
+        -480 => "America/Los_Angeles",
+        -420 => "America/Phoenix",
+        -360 => "America/Guatemala",
+        -300 => "America/Lima",
+        -240 => "America/Santo_Domingo",
+        -180 => "America/Argentina/Buenos_Aires",
+        -150 => "America/St_Johns",
+        -120 => "Atlantic/South_Georgia",
+        -60 => "Atlantic/Azores",
+        0 => "Etc/UTC",
+        60 => "Africa/Lagos",
+        120 => "Africa/Johannesburg",
+        180 => "Asia/Riyadh",
+        210 => "Asia/Tehran",
+        240 => "Asia/Dubai",
+        270 => "Asia/Kabul",
+        300 => "Asia/Karachi",
+        330 => "Asia/Kolkata",
+        345 => "Asia/Kathmandu",
+        360 => "Asia/Dhaka",
+        390 => "Asia/Yangon",
+        420 => "Asia/Jakarta",
+        480 => "Asia/Makassar",
+        525 => "Australia/Eucla",
+        540 => "Asia/Tokyo",
+        570 => "Australia/Darwin",
+        600 => "Australia/Brisbane",
+        630 => "Australia/Lord_Howe",
+        660 => "Pacific/Noumea",
+        720 => "Pacific/Fiji",
+        765 => "Pacific/Chatham",
+        780 => "Pacific/Apia",
+        840 => "Pacific/Kiritimati",
+        _ => "UTC",
+    }
+}
+
+pub async fn detect_server_timezone(client: &mut MssqlClient) -> Option<(i32, String)> {
+    if let Ok(stream) = client
+        .query("SELECT DATEPART(tzoffset, SYSDATETIMEOFFSET())", &[])
+        .await
+    {
+        if let Ok(rows) = stream.into_first_result().await {
+            if let Some(row) = rows.first() {
+                if let Ok(data) = row.get_column_data(0) {
+                    let offset = match data {
+                        ColumnData::I32(Some(v)) => Some(*v),
+                        ColumnData::I16(Some(v)) => Some(*v as i32),
+                        _ => None,
+                    };
+                    if let Some(off) = offset {
+                        let iana = offset_minutes_to_iana(off).to_string();
+                        return Some((off, iana));
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 pub fn column_data_to_json(data: &ColumnData<'static>) -> Value {
     match data {
         ColumnData::Bit(opt) => opt
@@ -43,7 +111,7 @@ pub fn column_data_to_json(data: &ColumnData<'static>) -> Value {
             .unwrap_or(Value::Null),
         ColumnData::DateTime(_) | ColumnData::SmallDateTime(_) | ColumnData::DateTime2(_) => {
             match NaiveDateTime::from_sql(data) {
-                Ok(Some(dt)) => Value::String(dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()),
+                Ok(Some(dt)) => Value::String(dt.format("%Y-%m-%dT%H:%M:%S%.3f").to_string()),
                 _ => Value::Null,
             }
         }
