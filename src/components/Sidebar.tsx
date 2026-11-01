@@ -57,8 +57,8 @@ export interface SidebarProps {
   onOpenStructure: (table: SidebarTable) => void
   onOpenModule: (module: SidebarModule) => void
   onCopyModuleDefinition: (module: SidebarModule) => void
-  onNewFunction: () => void
-  onNewTable: (table: SidebarTable) => void
+  onNewFunction: (driverType?: string) => void
+  onNewTable: (table?: SidebarTable) => void
   onRenameTable: (table: SidebarTable) => void
   onCloneTable: (table: SidebarTable) => void
   onTruncateTable: (table: SidebarTable) => void
@@ -78,6 +78,8 @@ export interface SidebarProps {
 type MenuState =
   | { x: number; y: number; kind: 'table'; table: SidebarTable }
   | { x: number; y: number; kind: 'module'; module: SidebarModule }
+  | { x: number; y: number; kind: 'tables-header'; item: SidebarSessionItem }
+  | { x: number; y: number; kind: 'modules-header'; item: SidebarSessionItem }
   | null
 
 export default function Sidebar({
@@ -255,7 +257,7 @@ export default function Sidebar({
           className={`icon-btn h-5 w-5 shrink-0 ${
             pinned.has(key) ? 'text-accent' : 'opacity-0 group-hover/table:opacity-100'
           }`}
-          title={pinned.has(key) ? 'Unpin from top' : 'Pin to top'}
+          title={pinned.has(key) ? 'Unpin from Top' : 'Pin to Top'}
           onClick={() => onTogglePin(table)}
         >
           <Icon name="pin" size={10} />
@@ -320,6 +322,16 @@ export default function Sidebar({
         <button
           type="button"
           onClick={() => setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }))}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            setMenu({
+              x: event.clientX,
+              y: event.clientY,
+              kind: group === 'tables' ? 'tables-header' : 'modules-header',
+              item,
+            })
+          }}
           className="tree-row"
           title={isOpen ? 'Collapse' : 'Expand'}
         >
@@ -333,7 +345,7 @@ export default function Sidebar({
             size={12}
             className="shrink-0 text-text-muted"
           />
-          <span className="truncate">{group === 'tables' ? 'Tables' : 'Procedures & functions'}</span>
+          <span className="truncate">{group === 'tables' ? 'Tables' : 'Functions'}</span>
           {count !== null ? (
             <span className="ml-auto tabular-nums text-[length:var(--app-text-10)] text-text-faint">{count}</span>
           ) : null}
@@ -344,7 +356,7 @@ export default function Sidebar({
             {state.status === 'loading' ? (
               <div className="flex items-center gap-2 px-2 py-1 text-[length:var(--app-text-11)] text-text-muted">
                 <Spinner size={11} />
-                {group === 'tables' ? 'Loading tables…' : 'Loading routines…'}
+                {group === 'tables' ? 'Loading tables…' : 'Loading functions…'}
               </div>
             ) : null}
 
@@ -357,7 +369,7 @@ export default function Sidebar({
             {state.status === 'ready' && visible.length === 0 ? (
               <p className="px-2 py-1 text-[length:var(--app-text-11)] text-text-faint">
                 {filterText === ''
-                  ? `No ${group === 'tables' ? 'tables' : 'routines'}`
+                  ? `No ${group === 'tables' ? 'tables' : 'functions'}`
                   : 'No matches'}
               </p>
             ) : null}
@@ -415,7 +427,7 @@ export default function Sidebar({
             <button
               type="button"
               className="icon-btn h-6 w-6"
-              title="Refresh databases"
+              title="Refresh Databases"
               onClick={() => onRefreshDatabases(item.connectionId)}
             >
               <Icon name="refresh" size={13} />
@@ -423,7 +435,7 @@ export default function Sidebar({
             <button
               type="button"
               className="icon-btn h-6 w-6"
-              title="Close connection"
+              title="Close Connection"
               onClick={() => onCloseSession(item.connectionId)}
             >
               <Icon name="power" size={13} />
@@ -448,8 +460,8 @@ export default function Sidebar({
                   <button
                     type="button"
                     className="icon-btn h-4 w-4 text-text-faint hover:text-text"
-                    title="Clear filter"
-                    aria-label="Clear filter"
+                    title="Clear Filter"
+                    aria-label="Clear Filter"
                     onClick={() => setFilter('')}
                   >
                     <Icon name="x" size={11} />
@@ -520,34 +532,57 @@ export default function Sidebar({
           ? ([
               {
                 id: 'open-new-tab',
-                label: 'Open new tab',
+                label: 'Open New Tab',
                 onSelect: () => onOpenModule(menu.module),
               },
               {
                 id: 'copy-object-name',
-                label: 'Copy object name',
+                label: 'Copy Object Name',
                 onSelect: () => onCopyObjectName(menu.module),
               },
               {
                 id: 'copy-module-definition',
-                label: 'Copy definition',
+                label: 'Copy Definition',
                 onSelect: () => onCopyModuleDefinition(menu.module),
               },
               {
                 id: 'new-function',
-                label: 'New function',
+                label: 'New Function',
                 onSelect: () => onNewFunction(),
+              },
+            ] as ContextMenuItem[])
+          : menu.kind === 'tables-header'
+          ? ([
+              {
+                id: 'new-table',
+                label: 'New Table',
+                onSelect: () =>
+                  onNewTable({
+                    schema:
+                      menu.item.connection.driverType === 'mysql'
+                        ? (menu.item.activeDatabase || '')
+                        : 'dbo',
+                    name: '',
+                  }),
+              },
+            ] as ContextMenuItem[])
+          : menu.kind === 'modules-header'
+          ? ([
+              {
+                id: 'new-functions',
+                label: 'New Functions',
+                onSelect: () => onNewFunction(menu.item.connection.driverType),
               },
             ] as ContextMenuItem[])
           : ([
               {
                 id: 'open-new-tab',
-                label: 'Open new tab',
+                label: 'Open New Tab',
                 onSelect: () => onBrowseTable(menu.table),
               },
               {
                 id: 'copy-object-name',
-                label: 'Copy object name',
+                label: 'Copy Object Name',
                 onSelect: () => onCopyObjectName(menu.table),
               },
               {
@@ -557,12 +592,12 @@ export default function Sidebar({
               },
               {
                 id: 'open-structure',
-                label: 'Open structure',
+                label: 'Open Structure',
                 onSelect: () => onOpenStructure(menu.table),
               },
               {
                 id: 'new-table',
-                label: 'New table',
+                label: 'New Table',
                 onSelect: () => onNewTable(menu.table),
               },
               {
@@ -578,8 +613,8 @@ export default function Sidebar({
               {
                 id: 'pin-to-top',
                 label: pinnedTables.includes(`${menu.table.schema}.${menu.table.name}`)
-                  ? 'Unpin from top'
-                  : 'Pin to top',
+                  ? 'Unpin from Top'
+                  : 'Pin to Top',
                 onSelect: () => onTogglePin(menu.table),
               },
               {
@@ -608,8 +643,8 @@ export default function Sidebar({
           <button
             type="button"
             className="icon-btn h-7 w-7"
-            title="Show sidebar"
-            aria-label="Show sidebar"
+            title="Show Sidebar"
+            aria-label="Show Sidebar"
             onClick={() => onToggleCollapsed(false)}
           >
             <Icon name="chevron-right" size={13} />
@@ -627,7 +662,7 @@ export default function Sidebar({
         >
           {renderPanel({
             icon: 'chevron-right',
-            title: 'Expand sidebar',
+            title: 'Expand Sidebar',
             onClick: () => onToggleCollapsed(false),
           })}
         </aside>
@@ -641,7 +676,7 @@ export default function Sidebar({
     <aside style={{ width }} className="relative flex shrink-0 flex-col border-r border-line bg-panel">
       {renderPanel({
         icon: 'panel-left',
-        title: 'Collapse sidebar',
+        title: 'Collapse Sidebar',
         onClick: () => onToggleCollapsed(true),
       })}
 

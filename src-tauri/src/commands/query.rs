@@ -489,6 +489,42 @@ pub async fn list_modules(
             }
         }
     }
+
+    // Then try MySQL
+    if let Some(id) = connection_id.as_deref() {
+        if let Ok(db_path) = FileSystem::get_database_path() {
+            if let Ok(conn) = LocalStore::init(&db_path) {
+                if let Ok(Some(item)) = LocalStore::get_connection(&conn, id) {
+                    let driver_type = item.driver_type.as_deref().unwrap_or("sqlserver");
+                    if driver_type == "mysql" {
+                        let db_to_use = database
+                            .as_deref()
+                            .filter(|value| !value.is_empty())
+                            .or(item.database_name.as_deref());
+                        let password = item.password.or(item.password_cipher).unwrap_or_default();
+                        if let Ok(mut client) = mysql::create_client(
+                            &item.host,
+                            item.port,
+                            &item.username,
+                            &password,
+                            db_to_use,
+                            item.encrypt,
+                            item.trust_server_certificate,
+                        )
+                        .await
+                        {
+                            if let Ok(res) =
+                                mysql::list_modules(&mut client, db_to_use).await
+                            {
+                                return Ok(res);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Ok(json!({
       "ok": true,
       "modules": []
@@ -515,6 +551,42 @@ pub async fn module_definition(
             }
         }
     }
+
+    // Then try MySQL
+    if let Some(id) = connection_id.as_deref() {
+        if let Ok(db_path) = FileSystem::get_database_path() {
+            if let Ok(conn) = LocalStore::init(&db_path) {
+                if let Ok(Some(item)) = LocalStore::get_connection(&conn, id) {
+                    let driver_type = item.driver_type.as_deref().unwrap_or("sqlserver");
+                    if driver_type == "mysql" {
+                        let db_to_use = database
+                            .as_deref()
+                            .filter(|value| !value.is_empty())
+                            .or(item.database_name.as_deref());
+                        let password = item.password.or(item.password_cipher).unwrap_or_default();
+                        if let Ok(mut client) = mysql::create_client(
+                            &item.host,
+                            item.port,
+                            &item.username,
+                            &password,
+                            db_to_use,
+                            item.encrypt,
+                            item.trust_server_certificate,
+                        )
+                        .await
+                        {
+                            if let Ok(res) =
+                                mysql::module_definition(&mut client, db_to_use, &s, &n).await
+                            {
+                                return Ok(res);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Ok(json!({
       "ok": true,
       "definition": ""

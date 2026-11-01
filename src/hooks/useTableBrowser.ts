@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { api } from '@/api'
-import { SessionData, SessionTab, createDesignTab, browseSql, relatedSql, sessionTableFor, NEW_FUNCTION_SQL } from '@/utils/sessionHelpers'
+import { SessionData, SessionTab, createDesignTab, browseSql, relatedSql, sessionTableFor, NEW_FUNCTION_SQL, newFunctionSql } from '@/utils/sessionHelpers'
 import { SidebarTable, SidebarModule } from '@/components/Sidebar'
 import { buildEditSource } from '@/edits'
 import { TableDesign } from '@/designSql'
@@ -200,10 +200,11 @@ export function useTableBrowser({
     [activeSession, showBanner],
   )
 
-  const handleNewFunction = useCallback(() => {
+  const handleNewFunction = useCallback((driverTypeParam?: string) => {
     const current = activeSession()
     if (!current) return
-    openTab(current.connectionId, 'New function', NEW_FUNCTION_SQL)
+    const driverType = driverTypeParam || current.connection?.driverType
+    openTab(current.connectionId, 'New Function', newFunctionSql(driverType))
   }, [activeSession, openTab])
 
   const handleCopyText = useCallback(
@@ -363,23 +364,29 @@ export function useTableBrowser({
   )
 
   const handleNewTable = useCallback(
-    (table: SidebarTable) => {
+    (table?: SidebarTable) => {
       const current = activeSession()
       if (!current) {
         showBanner('warn', 'Open a connection before creating a table.')
         return
       }
 
-      const tabId = openDesignTab(current.connectionId, 'New table', {
+      const defaultSchema =
+        current.connection?.driverType === 'mysql'
+          ? current.activeDatabase || ''
+          : 'dbo'
+      const schema = table?.schema || defaultSchema
+
+      const tabId = openDesignTab(current.connectionId, 'New Table', {
         mode: 'new',
-        schema: table?.schema || 'dbo',
+        schema,
         table: '',
       })
 
       updateTab(current.connectionId, tabId, {
         loading: false,
         design: {
-          schema: table?.schema || 'dbo',
+          schema,
           table: '',
           columns: [
             {

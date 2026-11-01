@@ -32,6 +32,18 @@ BEGIN
 END
 `
 
+export const MYSQL_NEW_FUNCTION_SQL = `CREATE FUNCTION \`fn_name\`()
+RETURNS INT
+DETERMINISTIC
+BEGIN
+    RETURN 0;
+END
+`
+
+export function newFunctionSql(driverType?: string | null): string {
+  return driverType === 'mysql' ? MYSQL_NEW_FUNCTION_SQL : NEW_FUNCTION_SQL
+}
+
 export const EMPTY_TABLES = { status: 'idle', database: null, tables: [], error: null }
 export const EMPTY_MODULES = { status: 'idle', database: null, modules: [], error: null }
 export const EMPTY_COLUMNS = { status: 'idle', database: null, tables: [], error: null }

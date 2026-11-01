@@ -392,9 +392,9 @@ pub async fn execute_sql(conn: &mut Conn, sql: &str) -> Result<Value, String> {
 pub async fn list_modules(conn: &mut Conn, database: Option<&str>) -> Result<Value, String> {
     let db = database.unwrap_or("");
     let query = if db.is_empty() {
-        "SELECT Routine_name AS routine_name, Routine_type AS routine_type FROM information_schema.Routines WHERE Routine_schema NOT IN ('mysql', 'information_schema', 'performance_schema') ORDER BY Routine_name".to_string()
+        "SELECT Routine_name AS routine_name, Routine_type AS routine_type, Routine_schema AS routine_schema FROM information_schema.Routines WHERE Routine_schema NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys') ORDER BY Routine_name".to_string()
     } else {
-        format!("SELECT Routine_name AS routine_name, Routine_type AS routine_type FROM information_schema.Routines WHERE Routine_schema = '{}' ORDER BY Routine_name", db)
+        format!("SELECT Routine_name AS routine_name, Routine_type AS routine_type, Routine_schema AS routine_schema FROM information_schema.Routines WHERE Routine_schema = '{}' ORDER BY Routine_name", db)
     };
 
     let rows: Vec<Row> = conn.query(query).await.map_err(|e| e.to_string())?;
@@ -403,10 +403,12 @@ pub async fn list_modules(conn: &mut Conn, database: Option<&str>) -> Result<Val
     for row in rows {
         let name: String = row.get(0).unwrap_or_default();
         let r#type: String = row.get(1).unwrap_or_default();
+        let schema: String = row.get(2).unwrap_or_else(|| db.to_string());
 
         modules.push(json!({
+          "schema": schema,
           "name": name,
-          "type": r#type
+          "type": r#type.to_lowercase()
         }));
     }
 
@@ -1012,14 +1014,45 @@ pub async fn table_structure(
     }))
 }
 
-/// Gets module definition - simplified MySQL implementation.
+/// Gets module definition - MySQL implementation.
 pub async fn module_definition(
-    _conn: &mut Conn,
-    _database: Option<&str>,
-    _schema: &str,
-    _name: &str,
+    conn: &mut Conn,
+    database: Option<&str>,
+    schema: &str,
+    name: &str,
 ) -> Result<Value, String> {
-    Err("Not yet implemented for MySQL".to_string())
+    let fn_query = format!("SHOW CREATE FUNCTION `{schema}`.`{name}`");
+    if let Ok(stmt_rows) = conn.query::<Row, _>(&fn_query).await {
+        if let Some(row) = stmt_rows.first() {
+            let stmt: String = row.get(2).unwrap_or_default();
+            return Ok(json!({
+              "database": database,
+              "schema": schema,
+              "name": name,
+              "objectName": format!("`{schema}`.`{name}`"),
+              "type": "function",
+              "definition": stmt,
+              "statement": stmt,
+            }));
+        }
+    }
+
+    let sp_query = format!("SHOW CREATE PROCEDURE `{schema}`.`{name}`");
+    let stmt_rows: Vec<Row> = conn.query(&sp_query).await.map_err(|e| e.to_string())?;
+    let stmt: String = stmt_rows
+        .first()
+        .and_then(|row| row.get(2))
+        .unwrap_or_default();
+
+    Ok(json!({
+      "database": database,
+      "schema": schema,
+      "name": name,
+      "objectName": format!("`{schema}`.`{name}`"),
+      "type": "procedure",
+      "definition": stmt,
+      "statement": stmt,
+    }))
 }
 
 /// Gets the estimated execution plan via EXPLAIN FORMAT=JSON.
