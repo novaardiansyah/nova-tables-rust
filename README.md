@@ -98,7 +98,100 @@ Preferences cover light and dark palettes, app, grid, JSON and editor fonts, siz
 
 ![Settings dialog](./public/demo/settings.png)
 
+### Manage connections from a single screen
+
+The connection manager lists every saved connection with driver badges, environment badges and quick actions to edit, replicate, move, export or delete.
+
+![Manage connections](./public/demo/v2.2.0/manage-connection.png)
+
+### An empty connection list, ready for your first server
+
+When no connections exist yet, the screen offers a clear starting point to add one manually or import an encrypted file.
+
+![Empty connection state](./public/demo/v2.2.0/empty-state-connection.png)
+
+### Edit or replicate a connection in place
+
+Connection details, driver, environment and TLS options can be updated or duplicated without recreating the connection from scratch.
+
+![Edit connection](./public/demo/v2.2.0/edit-connection.png)
+
+### Export a connection tree with one click
+
+Export a single connection or a whole folder into an encrypted file, with a preview of exactly what will be written.
+
+![Export connection](./public/demo/v2.2.0/export-connection.png)
+
+### Import connections from an encrypted file
+
+Importing asks only for the passphrase; folders are recreated and duplicate names get a safe suffix.
+
+![Import configuration](./public/demo/v2.2.0/import-configuration.png)
+
+### Delete a folder and its connections safely
+
+Deleting a folder cascades through every connection inside it, with a confirmation dialog that lists what will be removed.
+
+![Delete folder connection](./public/demo/v2.2.0/delete-folder-connection.png)
+
+### Keyboard shortcuts at a glance
+
+A dedicated dialog lists every shortcut for running queries, switching tabs, searching and navigating the grid.
+
+![Keyboard shortcuts](./public/demo/v2.2.0/keyboard-shortcut.png)
+
+### Fine-tune preferences and themes
+
+Preferences are split into clear tabs for content typography, editor settings, timezone and theme selection, persisted to the local SQLite store.
+
+![Settings preference](./public/demo/v2.2.0/setting-preference.png)
+
+![Settings preference theme](./public/demo/v2.2.0/setting-preference-theme.png)
+
+### Run queries with execution guards and estimated plans
+
+The header holds the database picker, execution guard (`silent`, `alert-readonly`, `alert`), estimated plan and the run button.
+
+![Alert mode and estimate plan](./public/demo/v2.2.0/workspace-alert-mode-and-estimate-plan.png)
+
+### Review edits before they are applied
+
+No edit is written silently. Reviewing changes shows the exact `UPDATE` statements generated per row, with the primary key in the `WHERE` clause.
+
+![Edit confirm dialog](./public/demo/v2.2.0/workspace-edit-confirm-dialog.png)
+
+### Read a row as a JSON record
+
+The inspect dialog formats any row or selection as JSON, with raw, wrapped and XML views for long values.
+
+![JSON viewer](./public/demo/v2.2.0/workspace-json-viewer.png)
+
+### Browse a table row as a vertical form
+
+The right panel shows a single row as an editable vertical form, with column types and special value options.
+
+![Form viewer](./public/demo/v2.2.0/workspace-form-viewer.png)
+
+### Write and run queries in a calm workspace
+
+The Monaco SQL editor keeps syntax highlighting, completion and line numbers, while the resizable results grid stays in view.
+
+![Workspace query](./public/demo/v2.2.0/workspace-query.png)
+
+### Inspect and change table structure in the table designer
+
+Columns, lengths, defaults, nullability, identity, primary keys, unique keys and foreign keys are editable side by side, with generated DDL ready to review before it is applied.
+
+![Table designer](./public/demo/v2.2.0/workspace-table-design.png)
+
+### Manage database users and fixed roles
+
+Create, edit and drop database users and assign fixed roles, with support for both SQL Server and MySQL.
+
+![User role permission](./public/demo/v2.2.0/workspace-user-role-permission.png)
+
 ---
+
 
 ## Dazzling Tech Stack
 
@@ -130,44 +223,6 @@ Preferences cover light and dark palettes, app, grid, JSON and editor fonts, siz
 - **Execution Plan Inspection**: Analyze query performance with estimated visual execution plan trees (cost analysis and XML).
 - **Exporting & History**: Export query results directly to RFC 4180 CSV or formatted JSON, and review query history anytime.
 - **Theme & Typography**: Switch between dark and light themes (default: `Light Nova`), with responsive auto-detected font sizes (12px laptop / 14px large displays) persisted directly to SQLite.
-
----
-
-## Quick Start & Development
-
-### Prerequisites
-
-- Node.js (v18+) & `npm`
-- Rust toolchain (`cargo`, `rustc` 2021 edition)
-- System libraries for Tauri on Linux: `libwebkit2gtk-4.1-dev`, `build-essential`, `curl`, `wget`, `file`, `libssl-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`
-
-### Development Commands
-
-```bash
-# Install frontend dependencies
-npm install
-
-# Run Vite dev server with Tauri desktop window and HMR
-make dev
-
-# Build frontend assets with Vite
-make compile
-
-# Build and package the release binary (AppImage, deb, rpm)
-make build
-
-# Build the Windows NSIS installer from Linux (cargo-xwin + makensis)
-make build-win
-
-# Build all 4 release installers (Linux + Windows) and collect into build/v<version>/
-make build-all
-
-# Copy the generated installers into build/<version>/
-make artifacts
-
-# Install locally to ~/.local/opt/nova-tables and add desktop launcher
-make deploy
-```
 
 ---
 
