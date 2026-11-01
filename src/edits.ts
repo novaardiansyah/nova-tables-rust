@@ -227,16 +227,7 @@ export function editHasKeys(editSource: EditSource | null | undefined): boolean 
 }
 
 export function editSqlHeader(editSource: EditSource | null | undefined): string {
-  if (!editSource) return ''
-  const names = editSource.tables.map((table) => `${table.schema}.${table.table}`)
-  const lines: string[] = []
-  if (editSource.joined) {
-    lines.push(`-- Generated from a joined result set. Editable tables: ${names.join(', ')}.`)
-    lines.push('-- Joined rows can repeat, so check that each statement matches exactly one row before running it.')
-  } else if (editSource.inferred) {
-    lines.push(`-- Generated from ${names[0]}, inferred from this query. Review it before running.`)
-  }
-  return lines.length ? `${lines.join('\n')}\n\n` : ''
+  return ''
 }
 
 function editTarget(editSource: EditSource, columnName: string): EditTableTarget | null {

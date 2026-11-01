@@ -331,6 +331,11 @@ export default function WorkspaceView({
           await handleCopyText(jsonText, 'Copied row JSON.')
         }}
         onHoverVisibleChange={setJsonPanelHovered}
+        columns={activeResultData?.columnNames ?? []}
+        rows={activeResultData?.rows ?? []}
+        columnTypes={activeResultData?.columnTypes ?? []}
+        rowIndexes={activeResultData?.rowIndexes ?? []}
+        onCellChange={handleCellChange}
       />
     </div>
   )

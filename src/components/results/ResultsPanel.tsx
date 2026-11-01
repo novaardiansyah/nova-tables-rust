@@ -66,6 +66,8 @@ export interface ActiveDataPayload {
   columnNames: string[]
   rows: unknown[][]
   label: string
+  rowIndexes?: number[]
+  columnTypes?: (string | null)[]
 }
 
 export interface ResultsPanelProps {
@@ -266,10 +268,20 @@ export default function ResultsPanel({
       selectionBounds.rowStart === selectionBounds.rowEnd
         ? `Row ${selectionBounds.rowStart + 1}`
         : `Rows ${selectionBounds.rowStart + 1}–${selectionBounds.rowEnd + 1}`
+
+    const selectedRowIndexes: number[] = []
+    for (let r = selectionBounds.rowStart; r <= selectionBounds.rowEnd; r += 1) {
+      selectedRowIndexes.push(r)
+    }
+
+    const columnTypes = (activeResultSet.columns ?? []).map((col) => (col.type ? String(col.type) : null))
+
     onActiveDataChange?.({
       columnNames,
       rows: selectionRows,
       label,
+      rowIndexes: selectedRowIndexes,
+      columnTypes,
     })
   }, [activeResultSet, columnNames, onActiveDataChange, selectionBounds, selectionRows])
 
