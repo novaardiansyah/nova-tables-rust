@@ -11,11 +11,14 @@ import { editEditableColumns, editHasKeys, EditSource } from '@/edits'
 import { FilterCondition } from '@/filters'
 import { ParsedPlan } from '@/planParser'
 
-const SPECIAL_OPTIONS = [
-  { id: 'null', label: 'NULL', value: null },
-  { id: 'default', label: 'Default', value: { special: 'DEFAULT' } },
-  { id: 'getdate', label: 'GETDATE()', value: { special: 'GETDATE()' } },
-]
+export function specialOptionsForDriver(driverType?: string | null): { id: string; label: string; value: unknown }[] {
+  const now = driverType === 'mysql' ? 'NOW()' : 'GETDATE()'
+  return [
+    { id: 'null', label: 'NULL', value: null },
+    { id: 'default', label: 'Default', value: { special: 'DEFAULT' } },
+    { id: 'now', label: now, value: { special: now } },
+  ]
+}
 
 export interface ResultSetItem {
   columns: ResultColumn[]
@@ -453,7 +456,7 @@ export default function ResultsPanel({
       items.push({
         id: 'set-value',
         label: 'Set Value',
-        children: SPECIAL_OPTIONS.map((option) => ({
+        children: specialOptionsForDriver(driverType).map((option) => ({
           id: option.id,
           label: option.label,
           onSelect: () => {
@@ -732,6 +735,7 @@ export default function ResultsPanel({
                   onCellChange={onCellChange}
                   onStartEdit={() => setEditMode(true)}
                   onInspectCell={openInspector}
+                  driverType={driverType}
                   deleteMode={deletingRows.length > 0}
                   deletingRows={deletingRows}
                   onDeleteRows={deletable ? onDeleteRows : undefined}

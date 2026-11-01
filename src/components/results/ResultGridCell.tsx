@@ -6,11 +6,16 @@ export interface SpecialValueOption {
   value: unknown
 }
 
-export const SPECIAL_VALUES: SpecialValueOption[] = [
-  { label: 'NULL', hint: 'null', value: null },
-  { label: 'DEFAULT', hint: 'column default', value: { special: 'DEFAULT' } },
-  { label: 'GETDATE()', hint: 'now', value: { special: 'GETDATE()' } },
-]
+export function specialValuesForDriver(driverType?: string | null): SpecialValueOption[] {
+  const now = driverType === 'mysql' ? 'NOW()' : 'GETDATE()'
+  return [
+    { label: 'NULL', hint: 'null', value: null },
+    { label: 'DEFAULT', hint: 'column default', value: { special: 'DEFAULT' } },
+    { label: now, hint: 'now', value: { special: now } },
+  ]
+}
+
+export const SPECIAL_VALUES = specialValuesForDriver('sqlserver')
 
 export interface CellEditorController {
   commit: () => void
@@ -22,9 +27,11 @@ export interface CellEditorProps {
   onCommit: (next: unknown) => void
   onCancel: () => void
   controllerRef?: React.MutableRefObject<CellEditorController | null>
+  driverType?: string | null
 }
 
-export default function CellEditor({ value, onCommit, onCancel, controllerRef }: CellEditorProps) {
+export default function CellEditor({ value, onCommit, onCancel, controllerRef, driverType }: CellEditorProps) {
+  const specialValues = specialValuesForDriver(driverType)
   const isSpecial = Boolean(value && typeof value === 'object' && 'special' in value)
   const isNull = !isSpecial && (value === null || value === undefined)
   const initial = isSpecial ? String((value as { special: unknown }).special) : isNull ? '' : String(value)
@@ -35,7 +42,7 @@ export default function CellEditor({ value, onCommit, onCancel, controllerRef }:
   const settledRef = useRef(false)
 
   const query = draft.trim().toLowerCase()
-  const matches = SPECIAL_VALUES.filter((option) => option.label.toLowerCase().includes(query))
+  const matches = specialValues.filter((option) => option.label.toLowerCase().includes(query))
 
   const commitValue = (next: unknown) => {
     if (settledRef.current) return
@@ -50,7 +57,7 @@ export default function CellEditor({ value, onCommit, onCancel, controllerRef }:
       return
     }
     const text = next.trim()
-    const exact = SPECIAL_VALUES.find((option) => option.label.toLowerCase() === text.toLowerCase())
+    const exact = specialValues.find((option) => option.label.toLowerCase() === text.toLowerCase())
     if (exact) {
       commitValue(exact.value)
       return

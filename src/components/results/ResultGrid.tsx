@@ -117,6 +117,7 @@ export interface ResultGridProps {
   timezone?: string
   relations?: ResultRelation[] | null
   onRelationClick?: (relation: ResultRelation, value: unknown) => void
+  driverType?: string | null
   selection?: GridSelection | null
   onSelectionChange?: React.Dispatch<React.SetStateAction<GridSelection | null>>
   onCellContextMenu?: (x: number, y: number, columnIndex: number, origIndex: number) => void
@@ -153,6 +154,7 @@ export default function ResultGrid({
   deleteMode = false,
   deletingRows = [],
   onDeleteRows,
+  driverType,
 }: ResultGridProps) {
   const [sort, setSort] = useState<{ index: number; direction: 'asc' | 'desc' } | null>(null)
   const [active, setActive] = useState<{ row: number; col: number } | null>(null)
@@ -605,6 +607,7 @@ export default function ResultGrid({
                           onCommit={commitEdit}
                           onCancel={cancelEdit}
                           controllerRef={editorRef}
+                          driverType={driverType}
                         />
                       ) : columnRelations[colIndex] && display !== null && display !== undefined ? (
                         <button

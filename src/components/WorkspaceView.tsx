@@ -336,6 +336,7 @@ export default function WorkspaceView({
         columnTypes={activeResultData?.columnTypes ?? []}
         rowIndexes={activeResultData?.rowIndexes ?? []}
         onCellChange={handleCellChange}
+        driverType={session?.connection?.driverType ?? null}
       />
     </div>
   )

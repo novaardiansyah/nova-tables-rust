@@ -296,6 +296,38 @@ pub async fn get_client_for_connection(
     Err("MySQL connection setup needs driver_type awareness".to_string())
 }
 
+pub fn mysql_column_type_to_string(col_type: mysql_async::consts::ColumnType) -> &'static str {
+    use mysql_async::consts::ColumnType::*;
+    match col_type {
+        MYSQL_TYPE_DECIMAL | MYSQL_TYPE_NEWDECIMAL => "decimal",
+        MYSQL_TYPE_TINY => "tinyint",
+        MYSQL_TYPE_SHORT => "smallint",
+        MYSQL_TYPE_LONG => "int",
+        MYSQL_TYPE_FLOAT => "float",
+        MYSQL_TYPE_DOUBLE => "double",
+        MYSQL_TYPE_NULL => "null",
+        MYSQL_TYPE_TIMESTAMP | MYSQL_TYPE_TIMESTAMP2 => "timestamp",
+        MYSQL_TYPE_LONGLONG => "bigint",
+        MYSQL_TYPE_INT24 => "mediumint",
+        MYSQL_TYPE_DATE | MYSQL_TYPE_NEWDATE => "date",
+        MYSQL_TYPE_TIME | MYSQL_TYPE_TIME2 => "time",
+        MYSQL_TYPE_DATETIME | MYSQL_TYPE_DATETIME2 => "datetime",
+        MYSQL_TYPE_YEAR => "year",
+        MYSQL_TYPE_VARCHAR | MYSQL_TYPE_VAR_STRING => "varchar",
+        MYSQL_TYPE_BIT => "bit",
+        MYSQL_TYPE_JSON => "json",
+        MYSQL_TYPE_ENUM => "enum",
+        MYSQL_TYPE_SET => "set",
+        MYSQL_TYPE_TINY_BLOB => "tinyblob",
+        MYSQL_TYPE_MEDIUM_BLOB => "mediumblob",
+        MYSQL_TYPE_LONG_BLOB => "longblob",
+        MYSQL_TYPE_BLOB => "blob",
+        MYSQL_TYPE_STRING => "char",
+        MYSQL_TYPE_GEOMETRY => "geometry",
+        _ => "varchar",
+    }
+}
+
 /// Executes a SQL statement and returns result as JSON.
 pub async fn execute_sql(conn: &mut Conn, sql: &str) -> Result<Value, String> {
     let rows: Vec<Row> = conn.query(sql).await.map_err(|e| e.to_string())?;
@@ -315,15 +347,13 @@ pub async fn execute_sql(conn: &mut Conn, sql: &str) -> Result<Value, String> {
         }
 
         if current_columns.is_none() {
-            // Store column names from first row
+            let row_cols = row.columns();
             let mut cols = Vec::new();
-            for i in 0..row.columns().len() {
-                let col_name: String = row
-                    .columns()
-                    .get(i)
-                    .map(|c| c.name_str().to_string())
-                    .unwrap_or_default();
-                cols.push(json!({ "name": col_name }));
+            for c in row_cols.iter() {
+                cols.push(json!({
+                    "name": c.name_str(),
+                    "type": mysql_column_type_to_string(c.column_type()),
+                }));
             }
             current_columns = Some(cols);
         }

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import Icon from '@/components/common/Icon'
 import { formatDateTime, isDateTimeString } from '@/resultFormats'
-import { SPECIAL_VALUES } from '@/components/results/ResultGridCell'
+import { specialValuesForDriver, SpecialValueOption } from '@/components/results/ResultGridCell'
 
 export interface FormViewerProps {
   columns: string[]
@@ -9,6 +9,7 @@ export interface FormViewerProps {
   columnTypes?: (string | null)[]
   rowIndexes?: number[]
   onCellChange?: (rowIndex: number, columnName: string, nextValue: unknown, prevValue: unknown) => void
+  driverType?: string | null
   timezone?: string
 }
 
@@ -24,10 +25,10 @@ function toText(value: unknown, timezone: string): string {
   return isDateTimeString(text) ? formatDateTime(text, timezone) : text
 }
 
-function parseValue(raw: string, original: unknown): unknown {
+function parseValue(raw: string, original: unknown, specialValues: SpecialValueOption[]): unknown {
   const text = raw.trim()
   if (text === '') return null
-  const exact = SPECIAL_VALUES.find((option) => option.label.toLowerCase() === text.toLowerCase())
+  const exact = specialValues.find((option) => option.label.toLowerCase() === text.toLowerCase())
   if (exact) return exact.value
   if (isSpecial(original)) return text === '' ? null : raw
   if (typeof original !== 'number') return raw
@@ -42,6 +43,7 @@ function FormField({
   value,
   onChange,
   onSpecial,
+  specialValues,
   timezone,
 }: {
   id: string
@@ -50,6 +52,7 @@ function FormField({
   value: unknown
   onChange: (next: unknown) => void
   onSpecial?: (special: unknown) => void
+  specialValues: SpecialValueOption[]
   timezone: string
 }) {
   const [draft, setDraft] = useState(() => toText(value, timezone))
@@ -107,7 +110,7 @@ function FormField({
               </button>
               {menuOpen ? (
                 <div className="absolute right-0 top-full z-50 mt-1 flex w-44 flex-col rounded-md border border-line-strong bg-elevated p-1 shadow-2xl shadow-black/60">
-                  {SPECIAL_VALUES.map((option) => (
+                  {specialValues.map((option) => (
                     <button
                       key={option.label}
                       type="button"
@@ -143,7 +146,7 @@ function FormField({
         }}
         onChange={(event) => {
           setDraft(event.target.value)
-          onChange(parseValue(event.target.value, value))
+          onChange(parseValue(event.target.value, value, specialValues))
         }}
         className="w-full rounded border border-line-strong bg-base px-2 py-1 font-mono text-[length:var(--app-text-12)] text-text outline-none transition-colors select-text focus:border-accent/70"
         style={{ fontSize: 'var(--json-font-size)' }}
@@ -158,6 +161,7 @@ export default function FormViewer({
   columnTypes = [],
   rowIndexes,
   onCellChange,
+  driverType,
   timezone = 'UTC',
 }: FormViewerProps) {
   if (!columns.length) {
@@ -168,6 +172,7 @@ export default function FormViewer({
     )
   }
 
+  const specialValues = specialValuesForDriver(driverType)
   const displayedRows = rows.length ? rows : [[]]
 
   return (
@@ -191,6 +196,7 @@ export default function FormViewer({
                   value={original}
                   onChange={(next) => onCellChange?.(rowIndex, columnName, next, original)}
                   onSpecial={onCellChange ? (special) => onCellChange(rowIndex, columnName, special, original) : undefined}
+                  specialValues={specialValues}
                   timezone={timezone}
                 />
               )
