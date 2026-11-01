@@ -51,7 +51,7 @@ export interface JsonViewProps {
 export default function JsonView({ text }: JsonViewProps) {
   return (
     <pre
-      className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words px-3 py-2 leading-[calc(var(--json-font-size)+8px)] text-text"
+      className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words px-3 py-2 select-text leading-[calc(var(--json-font-size)+8px)] text-text"
       style={{ fontFamily: 'var(--json-font-family)', fontSize: 'var(--json-font-size)' }}
     >
       {tokenize(text)}
