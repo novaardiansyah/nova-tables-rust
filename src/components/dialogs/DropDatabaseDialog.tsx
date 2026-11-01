@@ -56,6 +56,28 @@ export default function DropDatabaseDialog({
     if (ready) setConfirmFinalOpen(true)
   }
 
+  if (confirmFinalOpen) {
+    return (
+      <ConfirmDialog
+        open={confirmFinalOpen}
+        title="This action cannot be undone"
+        message={
+          <span>
+            You are about to drop <strong>{database}</strong>. All tables, data, functions, stored procedures, users and permissions in this database will be deleted.
+          </span>
+        }
+        confirmLabel="Drop database"
+        danger
+        busy={busy}
+        onCancel={() => setConfirmFinalOpen(false)}
+        onConfirm={() => {
+          setConfirmFinalOpen(false)
+          onConfirm(typed.trim())
+        }}
+      />
+    )
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]"
@@ -117,13 +139,13 @@ export default function DropDatabaseDialog({
               onChange={(event) => setTyped(event.target.value)}
             />
             {typed && !matches ? (
-              <p className="mt-2 flex items-start gap-1.5 text-[length:var(--app-text-11)] text-danger">
-                <Icon name="alert-triangle" size={11} className="mt-px shrink-0" />
+              <p className="mt-2 flex items-center gap-1.5 text-[length:var(--app-text-11)] text-danger">
+                <Icon name="alert-triangle" size={11} className="shrink-0" />
                 <span>The name must match exactly, including letter case.</span>
               </p>
             ) : (
-              <p className="mt-2 flex items-start gap-1.5 text-[length:var(--app-text-11)] text-text-faint">
-                <Icon name="lock" size={11} className="mt-px shrink-0" />
+              <p className="mt-2 flex items-center gap-1.5 text-[length:var(--app-text-11)] text-text-faint">
+                <Icon name="lock" size={11} className="shrink-0" />
                 <span>Open connections to this database can block the drop.</span>
               </p>
             )}
@@ -160,22 +182,6 @@ export default function DropDatabaseDialog({
           </button>
         </div>
       </form>
-
-      {confirmFinalOpen && (
-        <ConfirmDialog
-          open={confirmFinalOpen}
-          title="This action cannot be undone"
-          message={`You are about to drop ${database}. All tables, data, functions, stored procedures, users and permissions in this database will be deleted.`}
-          confirmLabel="Drop database"
-          danger
-          busy={busy}
-          onCancel={() => setConfirmFinalOpen(false)}
-          onConfirm={() => {
-            setConfirmFinalOpen(false)
-            onConfirm(typed.trim())
-          }}
-        />
-      )}
     </div>
   )
 }

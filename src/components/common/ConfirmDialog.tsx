@@ -4,7 +4,7 @@ import Icon from '@/components/common/Icon'
 export interface ConfirmDialogProps {
   open: boolean
   title: string
-  message?: string | null
+  message?: React.ReactNode
   detail?: string | null
   detailHtml?: string | null
   confirmLabel?: string
