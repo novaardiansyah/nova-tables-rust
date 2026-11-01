@@ -9,8 +9,8 @@ export interface TableItem {
   [key: string]: unknown
 }
 
-export function qualifiedName(table: { schema: string; name: string }): string {
-  return `${quoteIdentifier(table.schema)}.${quoteIdentifier(table.name)}`
+export function qualifiedName(table: { schema: string; name: string }, driverType?: string | null): string {
+  return `${quoteIdentifier(table.schema, driverType)}.${quoteIdentifier(table.name, driverType)}`
 }
 
 function constraintName(prefix: string, table: string, columns: string[]): string {
@@ -140,10 +140,14 @@ export function useTableOperations({
         return
       }
 
+      const driverType = current.connection?.driverType ?? null
+      const qName = qualifiedName(table, driverType)
       const statement =
         prompt.kind === 'rename'
-          ? `EXEC sp_rename N'${qualifiedName(table)}', N'${value.replace(/'/g, "''")}';`
-          : `TRUNCATE TABLE ${qualifiedName(table)};`
+          ? (driverType === 'mysql'
+              ? `RENAME TABLE ${qName} TO ${quoteIdentifier(table.schema, driverType)}.${quoteIdentifier(value, driverType)};`
+              : `EXEC sp_rename N'${qName}', N'${value.replace(/'/g, "''")}';`)
+          : `TRUNCATE TABLE ${qName};`
 
       setTableBusy(true)
       try {
@@ -185,7 +189,7 @@ export function useTableOperations({
       await api.runQuery({
         connectionId: current.connectionId,
         database: current.activeDatabase,
-        sql: `DROP TABLE ${qualifiedName(dropTarget)};`,
+        sql: `DROP TABLE ${qualifiedName(dropTarget, current.connection?.driverType ?? null)};`,
       })
       showBanner('success', `Dropped ${dropTarget.schema}.${dropTarget.name}.`)
       patchSession(current.connectionId, { selectedTable: null })

@@ -438,7 +438,7 @@ export default function TableDesigner({
       return
     }
     const text = preview(forceMode)
-    if (text) onGenerate(text)
+    if (text) onGenerate(text, draft)
   }
 
   const handleApply = (forceMode?: 'recreate' | 'alter') => {
