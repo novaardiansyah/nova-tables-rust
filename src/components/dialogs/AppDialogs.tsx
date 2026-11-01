@@ -192,11 +192,13 @@ export default function AppDialogs({
     setConfigBusy(true)
     try {
       const result = await api.exportAppConfig(settings, password)
-      setConfigTransfer(null)
-      onNotify?.(
-        'success',
-        `Configuration exported with ${result.connectionCount} connection${result.connectionCount === 1 ? '' : 's'}.`,
-      )
+      if (result.saved) {
+        setConfigTransfer(null)
+        onNotify?.(
+          'success',
+          `Configuration exported with ${result.connectionCount} connection${result.connectionCount === 1 ? '' : 's'}.`,
+        )
+      }
     } catch (error: any) {
       setConfigError(error.message)
     } finally {

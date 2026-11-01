@@ -183,3 +183,79 @@ pub async fn save_file(app: tauri::AppHandle, input: Value) -> Result<Value, Str
         })),
     }
 }
+
+#[tauri::command]
+pub async fn select_import_file(app: tauri::AppHandle, input: Option<Value>) -> Result<Value, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let mut dialog = app.dialog().file().set_title("Select File");
+
+    let filters = input
+        .as_ref()
+        .and_then(|inp| inp.get("filters"))
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_else(|| {
+            vec![
+                json!({
+                    "name": "Nova Tables (*.nova-tables)",
+                    "extensions": ["nova-tables"]
+                })
+            ]
+        });
+
+    for filter in filters {
+        let name = filter
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Files");
+        let extensions: Vec<String> = filter
+            .get("extensions")
+            .and_then(|v| v.as_array())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| item.as_str().map(|ext| ext.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if !extensions.is_empty() {
+            let refs: Vec<&str> = extensions.iter().map(|ext| ext.as_str()).collect();
+            dialog = dialog.add_filter(name, &refs);
+        }
+    }
+
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    dialog.pick_file(move |path| {
+        let _ = sender.send(path);
+    });
+
+    match receiver.await.map_err(|e| e.to_string())? {
+        Some(path) => {
+            let std_path = path.into_path().map_err(|e| e.to_string())?;
+            let is_nova_tables = std_path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case("nova-tables"))
+                .unwrap_or(false);
+            if !is_nova_tables {
+                return Err("Only .nova-tables files are supported".to_string());
+            }
+            let content = std::fs::read_to_string(&std_path).map_err(|e| e.to_string())?;
+            let file_name = std_path
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_default();
+            Ok(json!({
+                "canceled": false,
+                "filePath": std_path.to_string_lossy(),
+                "fileName": file_name,
+                "content": content
+            }))
+        }
+        None => Ok(json!({
+            "canceled": true
+        })),
+    }
+}

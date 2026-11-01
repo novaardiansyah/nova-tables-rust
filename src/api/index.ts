@@ -381,7 +381,7 @@ async function saveFileWithDialog(input: {
     URL.revokeObjectURL(url)
     return { saved: true }
   }
-  const res = await callCommand<any>('save_file', input)
+  const res = await callCommand<any>('save_file', { input })
   return res || { saved: false }
 }
 
@@ -698,16 +698,15 @@ export const api = {
       secret
     )
     const defaultName = `connections-${getYYYYMMDD()}.nova-tables`
-    saveFileWithDialog({
+    const saveResult = await saveFileWithDialog({
       defaultPath: defaultName,
       filters: [
         { name: 'Nova Tables Export', extensions: ['nova-tables'] },
-        { name: 'All Files', extensions: ['*'] },
       ],
       content: encrypted,
     })
 
-    return { saved: true, count: bundle.connections.length }
+    return saveResult.saved ? { saved: true, count: bundle.connections.length } : { saved: false, count: 0 }
   },
 
   exportAppConfig: async (
@@ -734,16 +733,17 @@ export const api = {
       secret
     )
     const defaultName = `configs-${getYYYYMMDD()}.nova-tables`
-    saveFileWithDialog({
+    const saveResult = await saveFileWithDialog({
       defaultPath: defaultName,
       filters: [
         { name: 'Nova Tables Config', extensions: ['nova-tables'] },
-        { name: 'All Files', extensions: ['*'] },
       ],
       content: encrypted,
     })
 
-    return { saved: true, connectionCount: bundle.connections.length }
+    return saveResult.saved
+      ? { saved: true, connectionCount: bundle.connections.length }
+      : { saved: false, connectionCount: 0 }
   },
 
   selectImportFile: async (): Promise<{
@@ -752,10 +752,34 @@ export const api = {
     fileName?: string
     content?: string
   }> => {
+    if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
+      try {
+        const res = await callCommand<{
+          canceled: boolean
+          filePath?: string
+          fileName?: string
+          content?: string
+        }>('select_import_file', {
+          input: {
+            filters: [{ name: 'Nova Tables (*.nova-tables)', extensions: ['nova-tables'] }],
+          },
+        })
+        if (res) {
+          if (res.canceled) return { canceled: true }
+          if (!res.fileName?.endsWith('.nova-tables')) {
+            return { canceled: true }
+          }
+          return res
+        }
+      } catch {
+        // Fall through to DOM input on IPC failure
+      }
+    }
+
     return new Promise((resolve) => {
       const input = document.createElement('input')
       input.type = 'file'
-      input.accept = '.nova-tables,.json,application/json'
+      input.accept = '.nova-tables'
       input.style.display = 'none'
       document.body.appendChild(input)
 
@@ -770,7 +794,7 @@ export const api = {
         settled = true
         const file = input.files?.[0]
         cleanup()
-        if (!file) {
+        if (!file || !file.name.endsWith('.nova-tables')) {
           resolve({ canceled: true })
           return
         }

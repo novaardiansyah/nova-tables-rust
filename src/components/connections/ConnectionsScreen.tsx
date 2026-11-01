@@ -741,7 +741,7 @@ export default function ConnectionsScreen({
             type="button"
             className="btn-soft"
             onClick={handleStartImport}
-            title="Import connections from encrypted JSON file"
+            title="Import connections from encrypted .nova-tables file"
           >
             <Icon name="upload" size={14} />
             Import
@@ -753,7 +753,7 @@ export default function ConnectionsScreen({
             title={
               selectedCount > 0
                 ? `Export ${selectedExportIds.length} connection(s)`
-                : 'Export all connections to encrypted JSON file'
+                : 'Export all connections to encrypted .nova-tables file'
             }
           >
             <Icon name="download" size={14} />
