@@ -32,26 +32,27 @@ const DEFAULTS: ConnectionFormState = {
 
 export type ConnectionDialogMode = 'new' | 'edit'
 
-export interface ConnectionDialogConnection extends Partial<ConnectionItem> {
+export interface ConnectionDialogConnection extends Partial<Omit<ConnectionItem, 'port'>> {
+  port?: string | number | null
   hasPassword?: boolean
   encrypt?: boolean
   trustServerCertificate?: boolean
-  driverType?: string
+  driverType?: string | null
 }
 
 function buildInitial(connection?: ConnectionDialogConnection | null): ConnectionFormState {
   if (!connection) return { ...DEFAULTS }
   return {
-    name: connection.name || '',
-    host: connection.host || '',
+    name: (connection.name as string) || '',
+    host: (connection.host as string) || '',
     port: String(connection.port || 1433),
-    username: connection.username || '',
+    username: (connection.username as string) || '',
     password: '',
     database:
       connection.databaseName !== undefined && connection.databaseName !== null
-        ? connection.databaseName
-        : connection.database || '',
-    environment: connection.environment || '',
+        ? (connection.databaseName as string)
+        : (connection.database as string) || '',
+    environment: (connection.environment as string) || '',
     encrypt: connection.encrypt !== false,
     trustServerCertificate: connection.trustServerCertificate !== false,
     driverType: connection.driverType || 'sqlserver',

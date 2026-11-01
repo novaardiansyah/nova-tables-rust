@@ -246,6 +246,7 @@ export default function WorkspaceView({
               busy={activeTab.busy}
               availableTables={session?.tables?.tables ?? []}
               availableColumns={session?.columns?.tables ?? []}
+              driverType={session?.connection?.driverType ?? null}
               onGenerate={handleDesignGenerate}
               onApply={(sql, draft) => handleDesignApply(activeTab.id, sql, draft)}
               onRenameTable={(nextName) =>

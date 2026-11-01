@@ -1,4 +1,7 @@
-export function quoteIdentifier(name: string | number): string {
+export function quoteIdentifier(name: string | number, driverType: string | null = null): string {
+  if (driverType === 'mysql') {
+    return `\`${String(name).replace(/`/g, '``')}\``
+  }
   return `[${String(name).replace(/]/g, ']]')}]`
 }
 
@@ -82,73 +85,78 @@ function collationSql(column: DesignColumn): string {
   return ` COLLATE ${column.collation}`
 }
 
-function columnBody(column: DesignColumn): string {
-  return `${quoteIdentifier(column.name)} ${typeSql(column.typeName, column)}${collationSql(column)}${
+function columnBody(column: DesignColumn, driverType: string = 'mssql'): string {
+  return `${quoteIdentifier(column.name, driverType)} ${typeSql(column.typeName, column)}${collationSql(column)}${
     column.isNullable ? '' : ' NOT NULL'
   }`
 }
 
-function columnAdd(column: DesignColumn): string {
-  if (column.isComputed && column.computedDefinition) {
-    return `${quoteIdentifier(column.name)} AS ${column.computedDefinition}`
-  }
-  let definition = columnBody(column)
+function columnAdd(column: DesignColumn, driverType: string = 'mssql'): string {
+  const parts: string[] = [quoteIdentifier(column.name, driverType), typeSql(column.typeName, column)]
+  const collation = collationSql(column)
+  if (collation) parts.push(collation.trim())
+  if (!column.isNullable) parts.push('NOT NULL')
   if (column.isIdentity) {
-    definition += ` IDENTITY(${column.seedValue ?? 1}, ${column.incrementValue ?? 1})`
+    parts.push(driverType === 'mysql' ? 'AUTO_INCREMENT' : `IDENTITY(${column.seedValue ?? 1}, ${column.incrementValue ?? 1})`)
   }
-  if (column.defaultDefinition) definition += ` DEFAULT ${column.defaultDefinition}`
-  return definition
+  if (column.defaultDefinition) parts.push(`DEFAULT ${column.defaultDefinition}`)
+  return parts.join(' ')
 }
 
-function uniqueSql(key: DesignUniqueKey): string {
-  return `CONSTRAINT ${quoteIdentifier(key.name)} UNIQUE${
+function uniqueSql(key: DesignUniqueKey, driverType: string = 'mssql'): string {
+  return `CONSTRAINT ${quoteIdentifier(key.name, driverType)} UNIQUE${
     key.clustered ? ' CLUSTERED' : ''
-  } (${key.columns.map(quoteIdentifier).join(', ')})`
+  } (${key.columns.map((c) => quoteIdentifier(c, driverType)).join(', ')})`
 }
 
-function foreignSql(_table: TableDesign, foreign: DesignForeignKey): string {
-  const columns = foreign.columns.map((item) => quoteIdentifier(item.column)).join(', ')
-  const referenced = foreign.columns.map((item) => quoteIdentifier(item.referencedColumn)).join(', ')
-  return `CONSTRAINT ${quoteIdentifier(foreign.name)} FOREIGN KEY (${columns}) REFERENCES ${quoteIdentifier(
+function foreignSql(_table: TableDesign, foreign: DesignForeignKey, driverType: string = 'mssql'): string {
+  const columns = foreign.columns.map((item) => quoteIdentifier(item.column, driverType)).join(', ')
+  const referenced = foreign.columns.map((item) => quoteIdentifier(item.referencedColumn, driverType)).join(', ')
+  return `CONSTRAINT ${quoteIdentifier(foreign.name, driverType)} FOREIGN KEY (${columns}) REFERENCES ${quoteIdentifier(
     foreign.referencedSchema,
-  )}.${quoteIdentifier(foreign.referencedTable)} (${referenced})`
+    driverType,
+  )}.${quoteIdentifier(foreign.referencedTable, driverType)} (${referenced})`
 }
 
-function indexSql(table: TableDesign, index: DesignIndex): string {
+function indexSql(table: TableDesign, index: DesignIndex, driverType: string = 'mssql'): string {
   const columns = index.columns
-    .map((column, position) => `${quoteIdentifier(column)}${index.descending?.[position] ? ' DESC' : ''}`)
+    .map((column, position) => `${quoteIdentifier(column, driverType)}${index.descending?.[position] ? ' DESC' : ''}`)
     .join(', ')
   return `CREATE ${index.clustered ? 'CLUSTERED ' : ''}${index.unique ? 'UNIQUE ' : ''}INDEX ${quoteIdentifier(
     index.name,
-  )} ON ${quoteIdentifier(table.schema)}.${quoteIdentifier(table.table)} (${columns})`
+    driverType,
+  )} ON ${quoteIdentifier(table.schema, driverType)}.${quoteIdentifier(table.table, driverType)} (${columns})`
 }
 
-function tableName(design: TableDesign): string {
-  return `${quoteIdentifier(design.schema)}.${quoteIdentifier(design.table)}`
+function tableName(design: TableDesign, driverType?: string | null): string {
+  return `${quoteIdentifier(design.schema, driverType)}.${quoteIdentifier(design.table, driverType)}`
 }
 
 function sameColumns(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((column, index) => column === right[index])
 }
 
-export function generateCreateTable(design: TableDesign): string {
-  const lines = design.columns.map(columnAdd)
+export function generateCreateTable(design: TableDesign, driverType?: string | null): string {
+  const driver = driverType || 'mssql'
+  const lines = design.columns.map((column) => columnAdd(column, driver))
   if (design.primaryKey?.length) {
-    lines.push(`PRIMARY KEY (${design.primaryKey.map(quoteIdentifier).join(', ')})`)
+    lines.push(`PRIMARY KEY (${design.primaryKey.map((c) => quoteIdentifier(c, driver)).join(', ')})`)
   }
-  for (const key of design.uniqueKeys ?? []) lines.push(uniqueSql(key))
+  for (const key of design.uniqueKeys ?? []) lines.push(uniqueSql(key, driver))
   for (const foreign of design.foreignKeys ?? []) {
-    if (foreign.referencedTable) lines.push(foreignSql(design, foreign))
+    if (foreign.referencedTable) lines.push(foreignSql(design, foreign, driver))
   }
 
   const body = lines.map((line) => `  ${line}`).join(', \n')
-  const statements = [`CREATE TABLE ${tableName(design)} (\n${body}\n);`]
-  for (const index of design.indexes ?? []) statements.push(`${indexSql(design, index)};`)
+  const tableNameResult = tableName(design, driver)
+  const statements = [`CREATE TABLE ${tableNameResult} (\n${body}\n);`]
+  for (const index of design.indexes ?? []) statements.push(`${indexSql(design, index, driver)};`)
   return statements.join('\n\n')
 }
 
-export function generateAlterTable(original: TableDesign | null | undefined, design: TableDesign): string {
-  const table = tableName(design)
+export function generateAlterTable(original: TableDesign | null | undefined, design: TableDesign, driverType?: string | null): string {
+  const driver = driverType || 'mssql'
+  const table = tableName(design, driver)
   const originalColumns = new Map<string, DesignColumn>(
     (original?.columns ?? []).map((column) => [column.name, column])
   )
@@ -181,7 +189,7 @@ export function generateAlterTable(original: TableDesign | null | undefined, des
       renamedColumns.push({ from: previous.name, to: column.name })
     }
 
-    if (columnBody(column) !== columnBody({ ...previous, name: column.name })) {
+    if (columnBody(column, driver) !== columnBody({ ...previous, name: column.name }, driver)) {
       alteredColumns.push(column)
     }
   }
@@ -222,39 +230,39 @@ export function generateAlterTable(original: TableDesign | null | undefined, des
 
   for (const name of originalForeign.keys()) {
     if (!draftForeign.has(name) || changedForeign(name)) {
-      statements.push(`ALTER TABLE ${table} DROP CONSTRAINT ${quoteIdentifier(name)};`)
+      statements.push(`ALTER TABLE ${table} DROP CONSTRAINT ${quoteIdentifier(name, driver)};`)
     }
   }
   for (const name of originalIndexes.keys()) {
     if (!draftIndexes.has(name) || changedIndex(name)) {
-      statements.push(`DROP INDEX ${quoteIdentifier(name)} ON ${table};`)
+      statements.push(`DROP INDEX ${quoteIdentifier(name, driver)} ON ${table};`)
     }
   }
   for (const name of originalUnique.keys()) {
     if (!draftUnique.has(name) || changedUnique(name)) {
-      statements.push(`ALTER TABLE ${table} DROP CONSTRAINT ${quoteIdentifier(name)};`)
+      statements.push(`ALTER TABLE ${table} DROP CONSTRAINT ${quoteIdentifier(name, driver)};`)
     }
   }
   if (primaryChanged && originalPrimaryKeyName) {
-    statements.push(`ALTER TABLE ${table} DROP CONSTRAINT ${quoteIdentifier(originalPrimaryKeyName)};`)
+    statements.push(`ALTER TABLE ${table} DROP CONSTRAINT ${quoteIdentifier(originalPrimaryKeyName, driver)};`)
   }
 
   for (const name of droppedColumns) {
-    statements.push(`ALTER TABLE ${table} DROP COLUMN ${quoteIdentifier(name)};`)
+    statements.push(`ALTER TABLE ${table} DROP COLUMN ${quoteIdentifier(name, driver)};`)
   }
 
   for (const rename of renamedColumns) {
     statements.push(
-      `EXEC sp_rename N'${table.replace(/'/g, "''")}.${quoteIdentifier(rename.from).replace(/'/g, "''")}', N'${rename.to.replace(/'/g, "''")}', 'COLUMN';`,
+      `EXEC sp_rename N'${table.replace(/'/g, "''")}.${quoteIdentifier(rename.from, driver).replace(/'/g, "''")}', N'${rename.to.replace(/'/g, "''")}', 'COLUMN';`,
     )
   }
 
   for (const column of alteredColumns) {
-    statements.push(`ALTER TABLE ${table} ALTER COLUMN ${columnBody(column)};`)
+    statements.push(`ALTER TABLE ${table} ALTER COLUMN ${columnBody(column, driver)};`)
   }
 
   for (const column of addedColumns) {
-    statements.push(`ALTER TABLE ${table} ADD ${columnAdd(column)};`)
+    statements.push(`ALTER TABLE ${table} ADD ${columnAdd(column, driver)};`)
   }
 
   for (const column of design.columns ?? []) {
@@ -263,37 +271,37 @@ export function generateAlterTable(original: TableDesign | null | undefined, des
     if ((previous.defaultDefinition ?? null) === (column.defaultDefinition ?? null)) continue
 
     if (previous.defaultName) {
-      statements.push(`ALTER TABLE ${table} DROP CONSTRAINT ${quoteIdentifier(previous.defaultName)};`)
+      statements.push(`ALTER TABLE ${table} DROP CONSTRAINT ${quoteIdentifier(previous.defaultName, driver)};`)
     }
     if (column.defaultDefinition) {
       const name = previous.defaultName ?? `DF_${design.table}_${column.name}`.slice(0, 128)
       statements.push(
-        `ALTER TABLE ${table} ADD CONSTRAINT ${quoteIdentifier(name)} DEFAULT ${column.defaultDefinition} FOR ${quoteIdentifier(column.name)};`,
+        `ALTER TABLE ${table} ADD CONSTRAINT ${quoteIdentifier(name, driver)} DEFAULT ${column.defaultDefinition} FOR ${quoteIdentifier(column.name, driver)};`,
       )
     }
   }
 
   if (primaryChanged && (design.primaryKey ?? []).length) {
     statements.push(
-      `ALTER TABLE ${table} ADD PRIMARY KEY (${design.primaryKey!.map(quoteIdentifier).join(', ')});`,
+      `ALTER TABLE ${table} ADD PRIMARY KEY (${design.primaryKey!.map((c) => quoteIdentifier(c, driver)).join(', ')});`,
     )
   }
 
   for (const [name, key] of draftUnique) {
     if (!originalUnique.has(name) || changedUnique(name)) {
-      statements.push(`ALTER TABLE ${table} ADD ${uniqueSql(key)};`)
+      statements.push(`ALTER TABLE ${table} ADD ${uniqueSql(key, driver)};`)
     }
   }
 
   for (const [name, foreign] of draftForeign) {
     if (!originalForeign.has(name) || changedForeign(name)) {
-      if (foreign.referencedTable) statements.push(`ALTER TABLE ${table} ADD ${foreignSql(design, foreign)};`)
+      if (foreign.referencedTable) statements.push(`ALTER TABLE ${table} ADD ${foreignSql(design, foreign, driver)};`)
     }
   }
 
   for (const [name, index] of draftIndexes) {
     if (!originalIndexes.has(name) || changedIndex(name)) {
-      statements.push(`${indexSql(design, index)};`)
+      statements.push(`${indexSql(design, index, driver)};`)
     }
   }
 
@@ -338,17 +346,19 @@ export function checkRequiresRecreation(
 
 export function generateRecreateTable(
   original: TableDesign,
-  design: TableDesign
+  design: TableDesign,
+  driverType?: string | null
 ): string {
+  const driver = driverType || 'mssql'
   const tmpName = `_tmp_nova_${design.table}`.slice(0, 128)
   const tmpDesign: TableDesign = {
     ...design,
     table: tmpName,
   }
-  const fullOriginalTable = tableName(design)
-  const fullTmpTable = `${quoteIdentifier(design.schema)}.${quoteIdentifier(tmpName)}`
+  const fullOriginalTable = tableName(design, driver)
+  const fullTmpTable = `${quoteIdentifier(design.schema, driver)}.${quoteIdentifier(tmpName, driver)}`
 
-  const createTmpSql = generateCreateTable(tmpDesign)
+  const createTmpSql = generateCreateTable(tmpDesign, driver)
 
   const origColMap = new Map((original.columns ?? []).map((c) => [c.name, c]))
   const copyColumns: { dest: string; src: string }[] = []
@@ -369,8 +379,8 @@ export function generateRecreateTable(
     if (hasIdentity) {
       statements.push(`SET IDENTITY_INSERT ${fullTmpTable} ON;`)
     }
-    const destList = copyColumns.map((c) => quoteIdentifier(c.dest)).join(', ')
-    const srcList = copyColumns.map((c) => quoteIdentifier(c.src)).join(', ')
+    const destList = copyColumns.map((c) => quoteIdentifier(c.dest, driver)).join(', ')
+    const srcList = copyColumns.map((c) => quoteIdentifier(c.src, driver)).join(', ')
     statements.push(
       `INSERT INTO ${fullTmpTable} (${destList}) SELECT ${srcList} FROM ${fullOriginalTable} WITH (HOLDLOCK TABLOCKX);`,
     )

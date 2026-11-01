@@ -96,6 +96,7 @@ export interface TableDesignerProps {
   busy?: boolean
   availableTables?: TableOptionItem[]
   availableColumns?: { schema: string; name: string; columns: string[] }[]
+  driverType?: string | null
   onRenameTable?: (nextName: string) => void
   onGenerate: (sql: string) => void
   onApply: (sql: string, draft: TableDesign) => void
@@ -109,6 +110,7 @@ export default function TableDesigner({
   busy = false,
   availableTables = [],
   availableColumns = [],
+  driverType,
   onRenameTable,
   onGenerate,
   onApply,
@@ -412,10 +414,10 @@ export default function TableDesigner({
     }))
 
   const buildSql = (forceMode?: 'recreate' | 'alter') => {
-    if (mode === 'new') return generateCreateTable(draft)
+    if (mode === 'new') return generateCreateTable(draft, driverType)
     if (!originalRef.current) return '-- Loading'
-    if (forceMode === 'recreate') return generateRecreateTable(originalRef.current, draft)
-    return generateAlterTable(originalRef.current, draft)
+    if (forceMode === 'recreate') return generateRecreateTable(originalRef.current, draft, driverType)
+    return generateAlterTable(originalRef.current, draft, driverType)
   }
 
   const preview = (forceMode?: 'recreate' | 'alter') => {

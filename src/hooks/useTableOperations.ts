@@ -57,6 +57,7 @@ export interface UseTableOperationsProps {
   activeSession: () => {
     connectionId: string
     activeDatabase?: string | null
+    connection?: any
   } | null
   openTab: (connectionId: string, title: string, sql: string) => void
   patchSession: (connectionId: string, patch: Record<string, unknown>) => void
@@ -109,7 +110,7 @@ export function useTableOperations({
           table.name,
         )
         const copyName = `${table.name}_copy`
-        const sql = generateCreateTable(cloneDesign(structure, copyName))
+        const sql = generateCreateTable(cloneDesign(structure, copyName), current?.connection?.driverType ?? null)
         openTab(current.connectionId, copyName, sql)
         patchSession(current.connectionId, { selectedTable: `${structure.schema}.${copyName}` })
       } catch (error: any) {
