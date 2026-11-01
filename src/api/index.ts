@@ -1040,9 +1040,10 @@ export const api = {
         target = { ...found, ...connection }
       }
     }
+    const isMysql = target?.driverType === 'mysql'
     if (!connection?.database && !connection?.databaseName) {
       const preferredDb = target.lastDatabaseUsed || target.database || target.databaseName || ''
-      if (preferredDb) {
+      if (preferredDb && !(isMysql && preferredDb === 'master')) {
         target.database = preferredDb
       }
     }
@@ -1061,13 +1062,20 @@ export const api = {
       name: target?.name || 'SQL Server',
       host: target?.host || '127.0.0.1',
       port: target?.port || 1433,
-      database: res?.database || target?.database || target?.lastDatabaseUsed || target?.databaseName || 'master',
-      databases: [
-        { name: 'master', isSystem: true, isOnline: true },
-        { name: 'model', isSystem: true, isOnline: true },
-        { name: 'msdb', isSystem: true, isOnline: true },
-        { name: 'tempdb', isSystem: true, isOnline: true },
-      ],
+      database: res?.database || target?.database || target?.lastDatabaseUsed || target?.databaseName || (isMysql ? '' : 'master'),
+      databases: isMysql
+        ? [
+            { name: 'information_schema', isSystem: true, isOnline: true },
+            { name: 'mysql', isSystem: true, isOnline: true },
+            { name: 'performance_schema', isSystem: true, isOnline: true },
+            { name: 'sys', isSystem: true, isOnline: true },
+          ]
+        : [
+            { name: 'master', isSystem: true, isOnline: true },
+            { name: 'model', isSystem: true, isOnline: true },
+            { name: 'msdb', isSystem: true, isOnline: true },
+            { name: 'tempdb', isSystem: true, isOnline: true },
+          ],
       serverVersion: 'Microsoft SQL Server',
       serverName: target?.host || '127.0.0.1',
       edition: 'Developer Edition',

@@ -30,8 +30,12 @@ async fn mysql_client_for_connection(
         .ok_or_else(|| format!("Connection {} not found", connection_id))?;
     let password = item.password.or(item.password_cipher).unwrap_or_default();
     let db_to_use = database
-        .filter(|value| !value.is_empty())
-        .or(item.database_name.as_deref());
+        .filter(|value| !value.is_empty() && *value != "master")
+        .or_else(|| {
+            item.database_name
+                .as_deref()
+                .filter(|value| !value.is_empty() && *value != "master")
+        });
 
     mysql::create_client(
         &item.host,
@@ -239,52 +243,25 @@ pub async fn execute_query(
 
 #[tauri::command]
 pub async fn list_databases(connection_id: Option<String>) -> Result<Value, String> {
-    // Try SQL Server first
     if let Some(id) = connection_id.as_deref() {
-        if let Ok(mut client) = mssql::get_client_for_connection(id, Some("master")).await {
-            if let Ok(databases) = mssql::list_databases(&mut client).await {
-                return Ok(json!({
-                  "ok": true,
-                  "databases": databases
-                }));
+        let is_mysql = connection_driver_type(id) == "mysql";
+
+        if is_mysql {
+            if let Ok(mut client) = mysql_client_for_connection(id, None).await {
+                if let Ok(databases) = mysql::list_databases(&mut client).await {
+                    return Ok(json!({
+                        "ok": true,
+                        "databases": databases
+                    }));
+                }
             }
-        }
-    }
-
-    // Then try MySQL
-    if let Some(id) = connection_id.as_deref() {
-        if let Ok(db_path) = FileSystem::get_database_path() {
-            if let Ok(conn) = LocalStore::init(&db_path) {
-                if let Ok(Some(item)) = LocalStore::get_connection(&conn, id) {
-                    let driver_type = item.driver_type.as_deref().unwrap_or("sqlserver");
-                    if driver_type == "mysql" {
-                        let password = item.password.or(item.password_cipher).unwrap_or_default();
-                        let db_to_use = item.database_name.as_deref().unwrap_or("");
-
-                        match mysql::create_client(
-                            &item.host,
-                            item.port,
-                            &item.username,
-                            &password,
-                            Some(db_to_use),
-                            item.encrypt,
-                            item.trust_server_certificate,
-                        )
-                        .await
-                        {
-                            Ok(mut client) => {
-                                if let Ok(databases) = mysql::list_databases(&mut client).await {
-                                    return Ok(json!({
-                                      "ok": true,
-                                      "databases": databases
-                                    }));
-                                }
-                            }
-                            Err(_) => {
-                                // Ignore error, fall through to default
-                            }
-                        }
-                    }
+        } else {
+            if let Ok(mut client) = mssql::get_client_for_connection(id, Some("master")).await {
+                if let Ok(databases) = mssql::list_databases(&mut client).await {
+                    return Ok(json!({
+                        "ok": true,
+                        "databases": databases
+                    }));
                 }
             }
         }

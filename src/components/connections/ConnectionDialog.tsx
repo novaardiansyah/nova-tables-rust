@@ -264,7 +264,20 @@ export default function ConnectionDialog({
                   { value: 'mysql', label: 'MySQL' },
                 ]}
                 onChange={(value) => {
-                  setForm((prev) => ({ ...prev, driverType: value }))
+                  setForm((prev) => {
+                    const next: ConnectionFormState = { ...prev, driverType: value }
+                    // Update default username and port if not custom-edited
+                    if (!isEdit) {
+                      if (value === 'mysql') {
+                        if (prev.username === 'sa' || prev.username === '') next.username = 'root'
+                        if (prev.port === '1433' || prev.port === '') next.port = '3306'
+                      } else if (value === 'sqlserver') {
+                        if (prev.username === 'root' || prev.username === '') next.username = 'sa'
+                        if (prev.port === '3306' || prev.port === '') next.port = '1433'
+                      }
+                    }
+                    return next
+                  })
                   setTestResult(null)
                 }}
                 icon="database"
@@ -299,7 +312,7 @@ export default function ConnectionDialog({
                 className="field"
                 value={form.port}
                 onChange={update('port')}
-                placeholder="1433"
+                placeholder={form.driverType === 'mysql' ? '3306' : '1433'}
                 inputMode="numeric"
               />
               <FieldError message={fieldErrors.port} />
@@ -330,7 +343,7 @@ export default function ConnectionDialog({
                 className="field"
                 value={form.username}
                 onChange={update('username')}
-                placeholder="sa"
+                placeholder={form.driverType === 'mysql' ? 'root' : 'sa'}
                 spellCheck={false}
                 autoComplete="off"
               />

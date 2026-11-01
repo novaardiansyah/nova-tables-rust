@@ -508,18 +508,18 @@ pub async fn connect(input: Value) -> Result<Value, String> {
     let database = input
         .get("database")
         .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
+        .filter(|s| !s.is_empty() && !(driver_type == "mysql" && *s == "master"))
         .map(|s| s.to_string())
         .or_else(|| {
             stored.as_ref().and_then(|s| {
                 s.last_database_used
                     .as_ref()
-                    .filter(|db| !db.is_empty())
+                    .filter(|db| !db.is_empty() && !(driver_type == "mysql" && *db == "master"))
                     .cloned()
                     .or_else(|| {
                         s.database_name
                             .as_ref()
-                            .filter(|db| !db.is_empty())
+                            .filter(|db| !db.is_empty() && !(driver_type == "mysql" && *db == "master"))
                             .cloned()
                     })
             })
@@ -528,7 +528,7 @@ pub async fn connect(input: Value) -> Result<Value, String> {
             input
                 .get("databaseName")
                 .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty())
+                .filter(|s| !s.is_empty() && !(driver_type == "mysql" && *s == "master"))
                 .map(|s| s.to_string())
         })
         .unwrap_or_else(|| {

@@ -107,11 +107,11 @@ export default function CreateDatabaseDialog({
               autoComplete="off"
               spellCheck={false}
               disabled={busy}
-              placeholder="nova_database"
+              placeholder="Enter database name"
               onChange={(event) => setName(event.target.value)}
             />
-            <p className="mt-2 flex items-start gap-1.5 text-[length:var(--app-text-11)] text-text-faint">
-              <Icon name="info" size={11} className="mt-px shrink-0" />
+            <p className="mt-2 flex items-center gap-1.5 text-[length:var(--app-text-11)] text-text-faint">
+              <Icon name="info" size={11} className="shrink-0" />
               <span>The database name must be unique on this server.</span>
             </p>
           </div>
