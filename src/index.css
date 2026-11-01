@@ -282,7 +282,7 @@
   }
 
   .btn-primary {
-    @apply btn bg-accent text-on-accent hover:bg-accent-hover;
+    @apply btn border border-transparent bg-accent text-on-accent hover:bg-accent-hover;
   }
 
   .btn-soft {
