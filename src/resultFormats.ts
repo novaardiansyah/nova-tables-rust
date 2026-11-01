@@ -129,31 +129,58 @@ function getFormatter(timeZone: string): Intl.DateTimeFormat {
   return dtf
 }
 
+function getTimezoneOffsetMs(date: Date, timeZone: string): number {
+  if (timeZone === 'UTC' || timeZone === 'Etc/UTC') return 0
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' }).formatToParts(date)
+    const name = parts.find((part) => part.type === 'timeZoneName')?.value || 'GMT+00:00'
+    const match = /GMT([+-])(\d{2}):?(\d{2})?/.exec(name)
+    if (!match) return 0
+    const minutes = Number(match[2]) * 60 + Number(match[3] || 0)
+    return (match[1] === '-' ? -minutes : minutes) * 60000
+  } catch {
+    return 0
+  }
+}
+
+function formatWithFormatter(date: Date, timeZone: string): string {
+  const pad = (num: number, len = 2) => String(num).padStart(len, '0')
+  const dtf = getFormatter(timeZone)
+  const parts: Record<string, string> = {}
+  for (const part of dtf.formatToParts(date)) {
+    parts[part.type] = part.value
+  }
+  const ms = parts.fractionalSecond || pad(date.getUTCMilliseconds(), 3)
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}.${ms}`
+}
+
 export function formatDateTime(value: unknown, timeZone?: string): string {
   const date = parseDateTime(value)
   if (!date) return value === null || value === undefined ? '' : String(value)
-
-  const pad = (num: number, len = 2) => String(num).padStart(len, '0')
-  const effectiveTz = timeZone || getCurrentSettings()?.timezone || 'UTC'
-
-  if (effectiveTz === 'UTC') {
-    const day = `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`
-    const time = `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`
-    return `${day} ${time}.${pad(date.getUTCMilliseconds(), 3)}`
+  
+  const userTz = timeZone || getCurrentSettings()?.timezone || 'UTC'
+  const systemTz = getCurrentSettings()?.systemTimezone || 'UTC'
+  const isNaive = typeof value === 'string' && !/Z|[+-]\d{2}:?\d{2}$/i.test(value.trim())
+  
+  // Naive timestamps are interpreted as system timezone and converted to user timezone
+  const instant = isNaive && systemTz !== 'UTC'
+    ? new Date(date.getTime() - getTimezoneOffsetMs(date, systemTz))
+    : date
+  
+  if (userTz === 'UTC') {
+    const pad = (num: number, len = 2) => String(num).padStart(len, '0')
+    const day = `${instant.getUTCFullYear()}-${pad(instant.getUTCMonth() + 1)}-${pad(instant.getUTCDate())}`
+    const time = `${pad(instant.getUTCHours())}:${pad(instant.getUTCMinutes())}:${pad(instant.getUTCSeconds())}`
+    return `${day} ${time}.${pad(instant.getUTCMilliseconds(), 3)}`
   }
-
+  
   try {
-    const dtf = getFormatter(effectiveTz)
-    const parts: Record<string, string> = {}
-    for (const part of dtf.formatToParts(date)) {
-      parts[part.type] = part.value
-    }
-    const ms = parts.fractionalSecond || pad(date.getUTCMilliseconds(), 3)
-    return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}.${ms}`
+    return formatWithFormatter(instant, userTz)
   } catch {
-    const day = `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`
-    const time = `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`
-    return `${day} ${time}.${pad(date.getUTCMilliseconds(), 3)}`
+    const pad = (num: number, len = 2) => String(num).padStart(len, '0')
+    const day = `${instant.getUTCFullYear()}-${pad(instant.getUTCMonth() + 1)}-${pad(instant.getUTCDate())}`
+    const time = `${pad(instant.getUTCHours())}:${pad(instant.getUTCMinutes())}:${pad(instant.getUTCSeconds())}`
+    return `${day} ${time}.${pad(instant.getUTCMilliseconds(), 3)}`
   }
 }
 

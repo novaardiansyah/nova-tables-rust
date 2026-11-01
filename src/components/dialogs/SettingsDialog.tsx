@@ -168,9 +168,9 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
     setDraft({
       ...DEFAULT_SETTINGS,
       appFontSize: defaultSize,
-      gridFontSize: defaultSize,
-      jsonFontSize: defaultSize,
-      queryFontSize: defaultSize,
+      contentFontSize: defaultSize,
+      systemTimezone: 'UTC',
+      queryWordWrap: false,
     })
   }
 
@@ -193,7 +193,7 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
         if (event.target === event.currentTarget && !saving) handleCancel()
       }}
     >
-      <div className="max-h-[92vh] w-full max-w-2xl animate-fade-in overflow-y-auto overflow-x-hidden rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70">
+      <div className="max-h-[92vh] w-full max-w-4xl animate-fade-in overflow-y-auto overflow-x-hidden rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70">
         <div className="flex items-center gap-3 border-b border-line px-5 py-4">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-soft text-accent">
             <Icon name="settings" size={16} />
@@ -250,29 +250,42 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
           </section>
 
           <section className="border-t border-line pt-4">
-            <p className="field-label">Result grid</p>
-            <Row label="Font" hint="Grid cell typography in query results">
+            <p className="field-label">Editor, Result Grid & JSON Viewer</p>
+            <Row label="Font" hint="SQL editor, query results grid, and JSON viewer typography">
               <div className="flex items-center gap-2">
                 <Select
-                  value={draft.gridFontFamily}
+                  value={draft.contentFontFamily}
                   options={FONT_OPTIONS}
-                  onChange={update('gridFontFamily')}
-                  icon="grid"
+                  onChange={update('contentFontFamily')}
+                  icon="code"
                   placeholder="Select font"
                   emptyLabel="No fonts"
                   panelAlign="right"
-                  className="w-44"
+                  className="w-60"
                 />
                 <SizeInput
-                  label="Result grid font size"
-                  value={draft.gridFontSize}
+                  label="Content font size"
+                  value={draft.contentFontSize}
                   min={FONT_SIZE_MIN}
                   max={FONT_SIZE_MAX}
-                  onChange={update('gridFontSize')}
+                  onChange={update('contentFontSize')}
                 />
               </div>
             </Row>
-            <Row label="Timezone" hint="Display timezone for query datetime results">
+            <Row label="System Timezone" hint="Timezone of the database connection">
+              <Select
+                value={draft.systemTimezone || 'UTC'}
+                options={TIMEZONE_OPTIONS}
+                onChange={update('systemTimezone')}
+                icon="clock"
+                placeholder="Select system timezone"
+                emptyLabel="No timezones"
+                panelAlign="right"
+                className="w-60"
+                searchable
+              />
+            </Row>
+            <Row label="User Timezone" hint="Display timezone for query datetime results">
               <Select
                 value={draft.timezone}
                 options={TIMEZONE_OPTIONS}
@@ -284,56 +297,6 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
                 className="w-60"
                 searchable
               />
-            </Row>
-          </section>
-
-          <section className="border-t border-line pt-4">
-            <p className="field-label">JSON viewer</p>
-            <Row label="Font" hint="Side panel formatted JSON display">
-              <div className="flex items-center gap-2">
-                <Select
-                  value={draft.jsonFontFamily}
-                  options={FONT_OPTIONS}
-                  onChange={update('jsonFontFamily')}
-                  icon="folder"
-                  placeholder="Select font"
-                  emptyLabel="No fonts"
-                  panelAlign="right"
-                  className="w-44"
-                />
-                <SizeInput
-                  label="JSON viewer font size"
-                  value={draft.jsonFontSize}
-                  min={FONT_SIZE_MIN}
-                  max={FONT_SIZE_MAX}
-                  onChange={update('jsonFontSize')}
-                />
-              </div>
-            </Row>
-          </section>
-
-          <section className="border-t border-line pt-4">
-            <p className="field-label">Query editor</p>
-            <Row label="Font" hint="SQL editor and line numbers">
-              <div className="flex items-center gap-2">
-                <Select
-                  value={draft.queryFontFamily}
-                  options={FONT_OPTIONS}
-                  onChange={update('queryFontFamily')}
-                  icon="code"
-                  placeholder="Select font"
-                  emptyLabel="No fonts"
-                  panelAlign="right"
-                  className="w-44"
-                />
-                <SizeInput
-                  label="Query editor font size"
-                  value={draft.queryFontSize}
-                  min={FONT_SIZE_MIN}
-                  max={FONT_SIZE_MAX}
-                  onChange={update('queryFontSize')}
-                />
-              </div>
             </Row>
             <Row label="Word wrap" hint="Wrap long SQL lines instead of scrolling horizontally">
               <span className="text-[length:var(--app-text-11)] text-text-muted">

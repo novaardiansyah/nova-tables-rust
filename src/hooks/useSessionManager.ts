@@ -297,13 +297,13 @@ export function useSessionManager({
         const created = createSession(result, connection, database, tabs[0])
         created.tabs = tabs
         created.activeTabId = activeTabId
-        if (detectedTz && (settings.timezone === 'UTC' || !settings.timezone)) {
+        if (detectedTz) {
           created.timezone = detectedTz
-          const nextSettings = applySettings({ ...settings, timezone: detectedTz })
-          setSettings(nextSettings)
-          void api.saveSettings(nextSettings)
-        } else if (detectedTz) {
-          created.timezone = detectedTz
+          if (settings.systemTimezone !== detectedTz) {
+            const nextSettings = applySettings({ ...settings, systemTimezone: detectedTz })
+            setSettings(nextSettings)
+            void api.saveSettings(nextSettings)
+          }
         }
 
         setSessions((prev) => ({ ...prev, [connection.id]: created }))

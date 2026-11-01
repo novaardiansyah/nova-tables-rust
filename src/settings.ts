@@ -19,14 +19,11 @@ export interface TimezoneOption {
 export interface Settings {
   theme: string
   timezone: string
+  systemTimezone: string
   appFontSize: number
   appFontFamily: string
-  gridFontSize: number
-  gridFontFamily: string
-  jsonFontSize: number
-  jsonFontFamily: string
-  queryFontSize: number
-  queryFontFamily: string
+  contentFontSize: number
+  contentFontFamily: string
   queryWordWrap: boolean
   queryExecutionMode: ExecutionModeId
 }
@@ -112,14 +109,11 @@ export const TIMEZONES: TimezoneOption[] = [
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'light-nova',
   timezone: 'UTC',
+  systemTimezone: 'UTC',
   appFontSize: 12,
   appFontFamily: 'system',
-  gridFontSize: 12,
-  gridFontFamily: 'system',
-  jsonFontSize: 12,
-  jsonFontFamily: 'mono',
-  queryFontSize: 12,
-  queryFontFamily: 'hack',
+  contentFontSize: 12,
+  contentFontFamily: 'hack',
   queryWordWrap: false,
   queryExecutionMode: 'silent',
 }
@@ -154,6 +148,12 @@ function normalizeTimezone(value: unknown, fallback: string): string {
   return TIMEZONES.some((tz) => tz.id === value) ? (value as string) : fallback
 }
 
+function normalizeSystemTimezone(value: unknown, fallback: string): string {
+  const candidate = typeof value === 'string' ? value.trim() : ''
+  if (candidate === 'Etc/UTC') return 'UTC'
+  return TIMEZONES.some((tz) => tz.id === candidate) ? candidate : fallback
+}
+
 export function normalizeSettings(input: unknown): Settings {
   const source = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
   const defaultSize = getResponsiveDefaultFontSize()
@@ -163,19 +163,27 @@ export function normalizeSettings(input: unknown): Settings {
     ? queryExecutionModeCandidate
     : DEFAULT_SETTINGS.queryExecutionMode
 
+  const contentFontFamilyFallback =
+    (source.queryFontFamily as string) ||
+    (source.gridFontFamily as string) ||
+    (source.jsonFontFamily as string) ||
+    DEFAULT_SETTINGS.contentFontFamily
+  const contentFontSizeFallback =
+    (source.queryFontSize as number) ||
+    (source.gridFontSize as number) ||
+    (source.jsonFontSize as number) ||
+    defaultSize
+
   return {
     theme: THEMES.some((theme) => theme.id === source.theme)
       ? (source.theme as string)
       : DEFAULT_SETTINGS.theme,
     timezone: normalizeTimezone(source.timezone, DEFAULT_SETTINGS.timezone),
+    systemTimezone: normalizeSystemTimezone(source.systemTimezone, DEFAULT_SETTINGS.systemTimezone),
     appFontSize: normalizeFontSize(source.appFontSize, defaultSize, APP_FONT_SIZE_MAX),
     appFontFamily: normalizeFontFamily(source.appFontFamily, DEFAULT_SETTINGS.appFontFamily),
-    gridFontSize: normalizeFontSize(source.gridFontSize, defaultSize),
-    gridFontFamily: normalizeFontFamily(source.gridFontFamily, DEFAULT_SETTINGS.gridFontFamily),
-    jsonFontSize: normalizeFontSize(source.jsonFontSize, defaultSize),
-    jsonFontFamily: normalizeFontFamily(source.jsonFontFamily, DEFAULT_SETTINGS.jsonFontFamily),
-    queryFontSize: normalizeFontSize(source.queryFontSize, defaultSize),
-    queryFontFamily: normalizeFontFamily(source.queryFontFamily, DEFAULT_SETTINGS.queryFontFamily),
+    contentFontSize: normalizeFontSize(source.contentFontSize ?? contentFontSizeFallback, defaultSize),
+    contentFontFamily: normalizeFontFamily(source.contentFontFamily ?? contentFontFamilyFallback, DEFAULT_SETTINGS.contentFontFamily),
     queryWordWrap: source.queryWordWrap === true,
     queryExecutionMode: validExecutionMode,
   }
@@ -204,12 +212,12 @@ export function applySettings(input: unknown): Settings {
     root.style.setProperty(`--app-text-${size}`, `${Math.round(size * scale)}px`)
   })
   root.style.setProperty('--app-font-family', fontFamilyValue(settings.appFontFamily))
-  root.style.setProperty('--grid-font-size', `${settings.gridFontSize}px`)
-  root.style.setProperty('--grid-font-family', fontFamilyValue(settings.gridFontFamily))
-  root.style.setProperty('--json-font-size', `${settings.jsonFontSize}px`)
-  root.style.setProperty('--json-font-family', fontFamilyValue(settings.jsonFontFamily))
-  root.style.setProperty('--query-font-size', `${settings.queryFontSize}px`)
-  root.style.setProperty('--query-font-family', fontFamilyValue(settings.queryFontFamily))
+  root.style.setProperty('--grid-font-size', `${settings.contentFontSize}px`)
+  root.style.setProperty('--grid-font-family', fontFamilyValue(settings.contentFontFamily))
+  root.style.setProperty('--json-font-size', `${settings.contentFontSize}px`)
+  root.style.setProperty('--json-font-family', fontFamilyValue(settings.contentFontFamily))
+  root.style.setProperty('--query-font-size', `${settings.contentFontSize}px`)
+  root.style.setProperty('--query-font-family', fontFamilyValue(settings.contentFontFamily))
 
   activeSettings = settings
   listeners.forEach((listener) => listener(settings))
@@ -234,9 +242,9 @@ export interface QueryFontOptions {
 export function queryFontOptions(settings: unknown): QueryFontOptions {
   const normalized = normalizeSettings(settings)
   return {
-    fontFamily: fontFamilyValue(normalized.queryFontFamily),
-    fontSize: normalized.queryFontSize,
-    lineHeight: Math.round(normalized.queryFontSize * 1.6),
+    fontFamily: fontFamilyValue(normalized.contentFontFamily),
+    fontSize: normalized.contentFontSize,
+    lineHeight: Math.round(normalized.contentFontSize * 1.6),
     wordWrap: normalized.queryWordWrap ? 'on' : 'off',
   }
 }
