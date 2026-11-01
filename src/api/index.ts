@@ -45,6 +45,7 @@ export interface ConnectionModel {
   environment?: string
   encrypt?: boolean
   trustServerCertificate?: boolean
+  driverType?: string
   createdAt?: string
   updatedAt?: string
   lastConnectedAt?: string | null
@@ -338,6 +339,7 @@ async function buildConnectionsBundle(
       environment: item.environment || '',
       encrypt: item.encrypt !== false,
       trustServerCertificate: item.trustServerCertificate !== false,
+      driverType: item.driverType ?? null,
       password: item.password || null,
       folderId: item.folderId ?? null,
     })
@@ -360,7 +362,10 @@ function getYYYYMMDD(): string {
   const year = now.getFullYear()
   const month = String(now.getMonth() + 1).padStart(2, '0')
   const day = String(now.getDate()).padStart(2, '0')
-  return `${year}${month}${day}`
+  const hour = String(now.getHours()).padStart(2, '0')
+  const minute = String(now.getMinutes()).padStart(2, '0')
+  const second = String(now.getSeconds()).padStart(2, '0')
+  return `${year}${month}${day}${hour}${minute}${second}`
 }
 
 async function saveFileWithDialog(input: {
@@ -486,6 +491,7 @@ async function applyImportedConnections(payload: {
       environment: item.environment || '',
       encrypt: item.encrypt !== false,
       trustServerCertificate: item.trustServerCertificate !== false,
+      driverType: item.driverType,
       folderId,
       password: item.password || null,
     })
