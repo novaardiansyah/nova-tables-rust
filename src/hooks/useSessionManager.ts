@@ -501,6 +501,25 @@ export function useSessionManager({
     [activeConnectionId, loadColumns, loadModules, loadTables, patchSession, showBanner],
   )
 
+  const handleDuplicateConnection = useCallback(
+    async (connection: any) => {
+      try {
+        const saved = await api.saveConnection({
+          ...connection,
+          id: undefined,
+          name: `${connection.name} (copy)`,
+        })
+        setConnections(await api.listConnections())
+        if (saved.id) {
+          setDialog({ mode: 'edit', connection: saved })
+        }
+      } catch (error: any) {
+        showBanner('error', error.message)
+      }
+    },
+    [showBanner],
+  )
+
   const handleSaveConnection = useCallback(
     async (input: any) => {
       const saved = await api.saveConnection(input)
@@ -658,6 +677,7 @@ export function useSessionManager({
     handleCreateDatabaseConfirm,
     handleOpenDropDatabase,
     handleDropDatabaseConfirm,
+    handleDuplicateConnection,
     handleSaveConnection,
     handleDeleteSelection,
     handleDeleteConfirm,

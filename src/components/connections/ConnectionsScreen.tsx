@@ -62,6 +62,7 @@ export interface ConnectionsScreenProps {
   onNewConnection: () => void
   onEditConnection: (connection: ConnectionItem) => void
   onDeleteConnection: (connection: ConnectionItem) => void
+  onDuplicateConnection: (connection: ConnectionItem) => void
   onCreateFolder: (name: string, parentId?: string | null) => Promise<unknown> | void
   onRenameFolder: (folder: FolderItem, name: string) => Promise<unknown> | void
   onDeleteSelection: (selection: { connectionIds?: string[]; folderIds?: string[] }) => Promise<unknown> | void
@@ -87,6 +88,7 @@ export default function ConnectionsScreen({
   onNewConnection,
   onEditConnection,
   onDeleteConnection,
+  onDuplicateConnection,
   onCreateFolder,
   onRenameFolder,
   onDeleteSelection,
@@ -576,6 +578,7 @@ export default function ConnectionsScreen({
   const connectionMenuItems = (connection: ConnectionItem): ContextMenuItem[] => [
     { id: 'open', label: 'Open connection', onSelect: () => onOpen(connection) },
     { id: 'edit', label: 'Edit connection', onSelect: () => onEditConnection(connection) },
+    { id: 'replicate', label: 'Replicate connection', onSelect: () => onDuplicateConnection(connection) },
     {
       id: 'move',
       label: 'Move to folder',

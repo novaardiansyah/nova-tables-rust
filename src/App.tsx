@@ -430,6 +430,7 @@ export default function App() {
           onOpen={sessionManager.handleConnect}
           onNewConnection={() => sessionManager.setDialog({ mode: 'new' })}
           onEditConnection={(connection) => sessionManager.setDialog({ mode: 'edit', connection })}
+          onDuplicateConnection={sessionManager.handleDuplicateConnection}
           onDeleteConnection={(connection) => sessionManager.setDeleteTarget(connection)}
           onCreateFolder={sessionManager.handleCreateFolder}
           onRenameFolder={sessionManager.handleRenameFolder}
