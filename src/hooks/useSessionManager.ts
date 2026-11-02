@@ -504,14 +504,23 @@ export function useSessionManager({
   const handleDuplicateConnection = useCallback(
     async (connection: any) => {
       try {
-        const saved = await api.saveConnection({
-          ...connection,
-          id: undefined,
-          name: `${connection.name} (copy)`,
-        })
+        const saved = connection.id
+          ? await api.duplicateConnection(connection.id, `${connection.name} (copy)`)
+          : await api.saveConnection({
+              ...connection,
+              id: undefined,
+              name: `${connection.name} (copy)`,
+            })
         setConnections(await api.listConnections())
         if (saved.id) {
-          setDialog({ mode: 'edit', connection: saved })
+          setDialog({
+            mode: 'edit',
+            connection: {
+              ...saved,
+              isDuplicate: true,
+              hasPassword: true,
+            },
+          })
         }
       } catch (error: any) {
         showBanner('error', error.message)

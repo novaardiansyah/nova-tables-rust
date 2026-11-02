@@ -35,6 +35,7 @@ export type ConnectionDialogMode = 'new' | 'edit'
 export interface ConnectionDialogConnection extends Partial<Omit<ConnectionItem, 'port'>> {
   port?: string | number | null
   hasPassword?: boolean
+  isDuplicate?: boolean
   encrypt?: boolean
   trustServerCertificate?: boolean
   driverType?: string | null
@@ -85,6 +86,13 @@ export default function ConnectionDialog({
   onTest,
 }: ConnectionDialogProps) {
   const isEdit = mode === 'edit' && Boolean(connection?.id)
+  const isDuplicate = Boolean(connection?.isDuplicate)
+  const hasSavedPassword = Boolean(
+    connection?.hasPassword ||
+      (connection as any)?.password_cipher ||
+      (connection as any)?.passwordCipher ||
+      (isEdit && (connection?.password ? true : false)),
+  )
   const [form, setForm] = useState<ConnectionFormState>(() => buildInitial(connection))
   const [showPassword, setShowPassword] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({})
@@ -116,6 +124,9 @@ export default function ConnectionDialog({
     if (!form.username.trim()) errors.username = 'Username is required'
     const port = Number(form.port)
     if (!Number.isInteger(port) || port < 1 || port > 65535) errors.port = 'Invalid port'
+    if (!form.password && !hasSavedPassword) {
+      errors.password = 'Password is required'
+    }
     return errors
   }
 
@@ -134,10 +145,10 @@ export default function ConnectionDialog({
     if (connection?.folderId) {
       data.folderId = connection.folderId
     }
-    if (isEdit && connection?.id) {
+    if (connection?.id) {
       data.id = connection.id
     }
-    if (!isEdit || form.password !== '') data.password = form.password
+    if (form.password !== '') data.password = form.password
     return data
   }
 
@@ -363,7 +374,13 @@ export default function ConnectionDialog({
                   type={showPassword ? 'text' : 'password'}
                   value={form.password}
                   onChange={update('password')}
-                  placeholder={isEdit && connection?.hasPassword ? 'Unchanged' : 'Password'}
+                  placeholder={
+                    isDuplicate && hasSavedPassword
+                      ? 'Original password will be kept if not changed'
+                      : hasSavedPassword
+                      ? 'Unchanged'
+                      : 'Password'
+                  }
                   autoComplete="new-password"
                 />
                 <button
@@ -375,10 +392,15 @@ export default function ConnectionDialog({
                   <Icon name={showPassword ? 'eye-off' : 'eye'} size={14} />
                 </button>
               </div>
+              <FieldError message={fieldErrors.password} />
             </div>
           </div>
 
-          {isEdit && connection?.hasPassword ? (
+          {isDuplicate && hasSavedPassword ? (
+            <p className="-mt-2 text-[length:var(--app-text-11)] text-text-muted">
+              Leave the password blank to keep using the password from the original connection.
+            </p>
+          ) : hasSavedPassword ? (
             <p className="-mt-2 text-[length:var(--app-text-11)] text-text-muted">
               Leave the password blank to keep the saved password.
             </p>

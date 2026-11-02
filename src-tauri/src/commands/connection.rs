@@ -22,9 +22,24 @@ pub fn save_connection(connection: DbConnectionItem) -> Result<Value, String> {
     let db_path = FileSystem::get_database_path()?;
     let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
     LocalStore::save_connection(&conn, &connection).map_err(|e| e.to_string())?;
+    let saved = LocalStore::get_connection(&conn, &connection.id)
+        .map_err(|e| e.to_string())?
+        .unwrap_or(connection);
     Ok(json!({
       "ok": true,
-      "connection": connection
+      "connection": saved
+    }))
+}
+
+#[tauri::command]
+pub fn duplicate_connection(id: String, name: Option<String>) -> Result<Value, String> {
+    let db_path = FileSystem::get_database_path()?;
+    let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
+    let duplicated =
+        LocalStore::duplicate_connection(&conn, &id, name.as_deref()).map_err(|e| e.to_string())?;
+    Ok(json!({
+      "ok": true,
+      "connection": duplicated
     }))
 }
 
@@ -153,42 +168,59 @@ pub async fn test_connection(connection: Value) -> Result<Value, String> {
         None
     };
 
-    let host = connection
-        .get("host")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .or_else(|| stored.as_ref().map(|s| s.host.clone()))
-        .unwrap_or_else(|| "127.0.0.1".to_string());
+    let host = match connection.get("host").and_then(|v| v.as_str()) {
+        Some(s) if !s.trim().is_empty() => s.trim().to_string(),
+        _ => stored
+            .as_ref()
+            .map(|s| s.host.clone())
+            .unwrap_or_else(|| "127.0.0.1".to_string()),
+    };
 
     let port = connection
         .get("port")
-        .and_then(|v| v.as_u64())
+        .and_then(|v| {
+            v.as_u64()
+                .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+        })
         .map(|p| p as u16)
         .or_else(|| stored.as_ref().map(|s| s.port))
         .unwrap_or(1433);
 
-    let username = connection
-        .get("username")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .or_else(|| stored.as_ref().map(|s| s.username.clone()))
-        .unwrap_or_default();
+    let username = match connection.get("username").and_then(|v| v.as_str()) {
+        Some(s) => s.trim().to_string(),
+        None => stored
+            .as_ref()
+            .map(|s| s.username.clone())
+            .unwrap_or_default(),
+    };
 
-    let password = connection
-        .get("password")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .or_else(|| stored.as_ref().and_then(|s| s.password.clone()))
-        .or_else(|| stored.as_ref().and_then(|s| s.password_cipher.clone()))
-        .unwrap_or_default();
+    let form_password = connection.get("password").and_then(|v| v.as_str());
+    let password = match form_password {
+        Some(p) if !p.is_empty() => p.to_string(),
+        _ => stored
+            .as_ref()
+            .and_then(|s| s.password.clone().or_else(|| s.password_cipher.clone()))
+            .filter(|p| !p.is_empty())
+            .unwrap_or_default(),
+    };
 
-    let database = connection
+    let database = match connection
         .get("database")
         .or_else(|| connection.get("databaseName"))
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .or_else(|| stored.as_ref().and_then(|s| s.database_name.clone()));
+    {
+        Some(v) => {
+            let s = v.as_str().unwrap_or("").trim();
+            if s.is_empty() {
+                None
+            } else {
+                Some(s.to_string())
+            }
+        }
+        None => stored
+            .as_ref()
+            .and_then(|s| s.database_name.clone())
+            .filter(|s| !s.is_empty()),
+    };
 
     let encrypt = connection
         .get("encrypt")
@@ -205,11 +237,7 @@ pub async fn test_connection(connection: Value) -> Result<Value, String> {
     let driver_type = connection
         .get("driverType")
         .and_then(|v| v.as_str())
-        .or_else(|| {
-            stored
-                .as_ref()
-                .map(|s| s.driver_type.as_deref().unwrap_or("sqlserver"))
-        })
+        .or_else(|| stored.as_ref().and_then(|s| s.driver_type.as_deref()))
         .unwrap_or("sqlserver");
 
     let started = std::time::Instant::now();
@@ -337,42 +365,59 @@ pub async fn test_mysql_connection(connection: Value) -> Result<Value, String> {
         None
     };
 
-    let host = connection
-        .get("host")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .or_else(|| stored.as_ref().map(|s| s.host.clone()))
-        .unwrap_or_else(|| "127.0.0.1".to_string());
+    let host = match connection.get("host").and_then(|v| v.as_str()) {
+        Some(s) if !s.trim().is_empty() => s.trim().to_string(),
+        _ => stored
+            .as_ref()
+            .map(|s| s.host.clone())
+            .unwrap_or_else(|| "127.0.0.1".to_string()),
+    };
 
     let port = connection
         .get("port")
-        .and_then(|v| v.as_u64())
+        .and_then(|v| {
+            v.as_u64()
+                .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+        })
         .map(|p| p as u16)
         .or_else(|| stored.as_ref().map(|s| s.port))
         .unwrap_or(3306);
 
-    let username = connection
-        .get("username")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .or_else(|| stored.as_ref().map(|s| s.username.clone()))
-        .unwrap_or_default();
+    let username = match connection.get("username").and_then(|v| v.as_str()) {
+        Some(s) => s.trim().to_string(),
+        None => stored
+            .as_ref()
+            .map(|s| s.username.clone())
+            .unwrap_or_default(),
+    };
 
-    let password = connection
-        .get("password")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .or_else(|| stored.as_ref().and_then(|s| s.password.clone()))
-        .or_else(|| stored.as_ref().and_then(|s| s.password_cipher.clone()))
-        .unwrap_or_default();
+    let form_password = connection.get("password").and_then(|v| v.as_str());
+    let password = match form_password {
+        Some(p) if !p.is_empty() => p.to_string(),
+        _ => stored
+            .as_ref()
+            .and_then(|s| s.password.clone().or_else(|| s.password_cipher.clone()))
+            .filter(|p| !p.is_empty())
+            .unwrap_or_default(),
+    };
 
-    let database = connection
+    let database = match connection
         .get("database")
         .or_else(|| connection.get("databaseName"))
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .or_else(|| stored.as_ref().and_then(|s| s.database_name.clone()));
+    {
+        Some(v) => {
+            let s = v.as_str().unwrap_or("").trim();
+            if s.is_empty() {
+                None
+            } else {
+                Some(s.to_string())
+            }
+        }
+        None => stored
+            .as_ref()
+            .and_then(|s| s.database_name.clone())
+            .filter(|s| !s.is_empty()),
+    };
 
     let encrypt = connection
         .get("encrypt")
@@ -389,11 +434,7 @@ pub async fn test_mysql_connection(connection: Value) -> Result<Value, String> {
     let driver_type = connection
         .get("driverType")
         .and_then(|v| v.as_str())
-        .or_else(|| {
-            stored
-                .as_ref()
-                .map(|s| s.driver_type.as_deref().unwrap_or("sqlserver"))
-        })
+        .or_else(|| stored.as_ref().and_then(|s| s.driver_type.as_deref()))
         .unwrap_or("sqlserver");
 
     // Only proceed if driver_type is mysql
@@ -464,34 +505,41 @@ pub async fn connect(input: Value) -> Result<Value, String> {
         .or_else(|| stored.as_ref().map(|s| s.name.clone()))
         .unwrap_or_else(|| "SQL Server".to_string());
 
-    let host = input
-        .get("host")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .or_else(|| stored.as_ref().map(|s| s.host.clone()))
-        .unwrap_or_else(|| "127.0.0.1".to_string());
+    let host = match input.get("host").and_then(|v| v.as_str()) {
+        Some(s) if !s.trim().is_empty() => s.trim().to_string(),
+        _ => stored
+            .as_ref()
+            .map(|s| s.host.clone())
+            .unwrap_or_else(|| "127.0.0.1".to_string()),
+    };
 
     let port = input
         .get("port")
-        .and_then(|v| v.as_u64())
+        .and_then(|v| {
+            v.as_u64()
+                .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+        })
         .map(|p| p as u16)
         .or_else(|| stored.as_ref().map(|s| s.port))
         .unwrap_or(1433);
 
-    let username = input
-        .get("username")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .or_else(|| stored.as_ref().map(|s| s.username.clone()))
-        .unwrap_or_else(|| "sa".to_string());
+    let username = match input.get("username").and_then(|v| v.as_str()) {
+        Some(s) => s.trim().to_string(),
+        None => stored
+            .as_ref()
+            .map(|s| s.username.clone())
+            .unwrap_or_else(|| "sa".to_string()),
+    };
 
-    let password = input
-        .get("password")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .or_else(|| stored.as_ref().and_then(|s| s.password.clone()))
-        .or_else(|| stored.as_ref().and_then(|s| s.password_cipher.clone()))
-        .unwrap_or_default();
+    let form_password = input.get("password").and_then(|v| v.as_str());
+    let password = match form_password {
+        Some(p) if !p.is_empty() => p.to_string(),
+        _ => stored
+            .as_ref()
+            .and_then(|s| s.password.clone().or_else(|| s.password_cipher.clone()))
+            .filter(|p| !p.is_empty())
+            .unwrap_or_default(),
+    };
 
     // Determine driver type - check stored connection first, then input
     let driver_type = input
@@ -519,7 +567,9 @@ pub async fn connect(input: Value) -> Result<Value, String> {
                     .or_else(|| {
                         s.database_name
                             .as_ref()
-                            .filter(|db| !db.is_empty() && !(driver_type == "mysql" && *db == "master"))
+                            .filter(|db| {
+                                !db.is_empty() && !(driver_type == "mysql" && *db == "master")
+                            })
                             .cloned()
                     })
             })

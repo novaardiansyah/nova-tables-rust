@@ -38,6 +38,7 @@ export interface ConnectionModel {
   port?: number | string
   username?: string
   password?: string | null
+  passwordCipher?: string | null
   database?: string
   databaseName?: string
   lastDatabaseUsed?: string | null
@@ -49,6 +50,8 @@ export interface ConnectionModel {
   createdAt?: string
   updatedAt?: string
   lastConnectedAt?: string | null
+  hasPassword?: boolean
+  isDuplicate?: boolean
   [key: string]: unknown
 }
 
@@ -617,10 +620,25 @@ export const api = {
   listConnections: async (): Promise<ConnectionModel[]> => {
     const res = await callCommand<{ connections?: ConnectionModel[] }>('list_connections')
     const list = res?.connections || []
-    return list.map((conn) => ({
-      ...conn,
-      database: conn.lastDatabaseUsed || conn.databaseName || conn.database || '',
-    }))
+    return list.map((conn) => {
+      const explicitDb =
+        conn.databaseName !== undefined && conn.databaseName !== null
+          ? conn.databaseName
+          : conn.database !== undefined && conn.database !== null
+          ? conn.database
+          : conn.lastDatabaseUsed || ''
+      const hasPassword = Boolean(
+        conn.hasPassword ||
+          (conn.password && conn.password.length > 0) ||
+          (conn.passwordCipher && conn.passwordCipher.length > 0),
+      )
+      return {
+        ...conn,
+        database: explicitDb,
+        databaseName: explicitDb,
+        hasPassword,
+      }
+    })
   },
 
   getLastConnectedId: async (): Promise<string | null> => {
@@ -655,7 +673,9 @@ export const api = {
       databaseName:
         connection.databaseName !== undefined && connection.databaseName !== null
           ? connection.databaseName
-          : connection.database || '',
+          : connection.database !== undefined && connection.database !== null
+          ? connection.database
+          : '',
       folderId: connection.folderId || null,
       environment: connection.environment || '',
       encrypt: connection.encrypt !== false,
@@ -665,10 +685,52 @@ export const api = {
     // Remove `database` to avoid duplicate field error in Rust serde
     // (field has both `rename = "databaseName"` and `alias = "database"`)
     delete payload.database
+    if (typeof payload.password === 'string' && payload.password.trim() === '') {
+      delete payload.password
+    }
     const res = await callCommand<{ connection?: ConnectionModel }>('save_connection', {
       connection: payload,
     })
-    return res?.connection || payload
+    const saved = res?.connection || payload
+    const hasPassword = Boolean(
+      saved.hasPassword ||
+        (saved.password && saved.password.length > 0) ||
+        (saved.passwordCipher && saved.passwordCipher.length > 0) ||
+        connection.hasPassword,
+    )
+    return {
+      ...saved,
+      database:
+        saved.databaseName !== undefined && saved.databaseName !== null
+          ? saved.databaseName
+          : saved.database || '',
+      databaseName:
+        saved.databaseName !== undefined && saved.databaseName !== null
+          ? saved.databaseName
+          : saved.database || '',
+      hasPassword,
+    }
+  },
+
+  duplicateConnection: async (id: string, name?: string): Promise<ConnectionModel> => {
+    const res = await callCommand<ConnectionModel | { connection?: ConnectionModel }>('duplicate_connection', {
+      id,
+      name,
+    })
+    const conn = (res && 'connection' in res && res.connection ? res.connection : res) as ConnectionModel
+    const explicitDb =
+      conn.databaseName !== undefined && conn.databaseName !== null
+        ? conn.databaseName
+        : conn.database !== undefined && conn.database !== null
+        ? conn.database
+        : ''
+    return {
+      ...conn,
+      database: explicitDb,
+      databaseName: explicitDb,
+      hasPassword: true,
+      isDuplicate: true,
+    }
   },
 
   deleteConnection: async (id: string): Promise<unknown> => {
@@ -1064,12 +1126,21 @@ export const api = {
   },
 
   testConnection: async (connection: Partial<ConnectionModel> | null | undefined): Promise<any> => {
-    let target: Partial<ConnectionModel> = connection || {}
+    let target: Partial<ConnectionModel> = connection ? { ...connection } : {}
     if (connection?.id && (!connection?.host || !connection?.name)) {
       const all = await api.listConnections()
       const found = all.find((c) => c.id === connection.id)
       if (found) {
         target = { ...found, ...connection }
+      }
+    }
+    if (connection) {
+      if (connection.databaseName !== undefined) {
+        target.databaseName = connection.databaseName
+        target.database = connection.databaseName
+      } else if (connection.database !== undefined) {
+        target.databaseName = connection.database
+        target.database = connection.database
       }
     }
     const res = await callCommand('test_connection', { connection: target })

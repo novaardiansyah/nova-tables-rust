@@ -30,6 +30,7 @@ pub fn run() {
             commands::system::select_import_file,
             commands::connection::list_connections,
             commands::connection::save_connection,
+            commands::connection::duplicate_connection,
             commands::connection::delete_connection,
             commands::connection::update_last_database,
             commands::connection::list_folders,

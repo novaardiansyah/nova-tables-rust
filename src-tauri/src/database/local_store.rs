@@ -110,8 +110,7 @@ fn map_query_history_row(row: &rusqlite::Row<'_>) -> Result<QueryHistoryItem> {
 pub struct LocalStore;
 
 impl LocalStore {
-    pub fn init(path: &Path) -> Result<SqliteConnection> {
-        let conn = SqliteConnection::open(path)?;
+    pub fn setup_schema(conn: &SqliteConnection) -> Result<()> {
         conn.execute_batch(
             "PRAGMA journal_mode = WAL;
        PRAGMA foreign_keys = ON;
@@ -137,16 +136,16 @@ impl LocalStore {
          database_name TEXT NOT NULL DEFAULT '',
          folder_id TEXT REFERENCES folders(id) ON DELETE CASCADE,
          environment TEXT NOT NULL DEFAULT '',
-encrypt INTEGER NOT NULL DEFAULT 1,
-          trust_server_certificate INTEGER NOT NULL DEFAULT 1,
-          driver_type TEXT NOT NULL DEFAULT 'sqlserver',
-          timezone TEXT,
-          password_cipher TEXT,
-          last_connected_at TEXT,
-          last_database_used TEXT,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        );
+         encrypt INTEGER NOT NULL DEFAULT 1,
+         trust_server_certificate INTEGER NOT NULL DEFAULT 1,
+         driver_type TEXT NOT NULL DEFAULT 'sqlserver',
+         timezone TEXT,
+         password_cipher TEXT,
+         last_connected_at TEXT,
+         last_database_used TEXT,
+         created_at TEXT NOT NULL,
+         updated_at TEXT NOT NULL
+       );
 
        CREATE TABLE IF NOT EXISTS saved_queries (
          id TEXT PRIMARY KEY,
@@ -173,10 +172,7 @@ encrypt INTEGER NOT NULL DEFAULT 1,
        CREATE INDEX IF NOT EXISTS query_history_scope
          ON query_history (connection_id, database_name, created_at DESC);",
         )?;
-        let _ = conn.execute(
-            "ALTER TABLE connections ADD COLUMN timezone TEXT",
-            [],
-        );
+        let _ = conn.execute("ALTER TABLE connections ADD COLUMN timezone TEXT", []);
         let _ = conn.execute(
             "ALTER TABLE connections ADD COLUMN last_database_used TEXT",
             [],
@@ -185,6 +181,19 @@ encrypt INTEGER NOT NULL DEFAULT 1,
             "ALTER TABLE connections ADD COLUMN driver_type TEXT DEFAULT 'sqlserver'",
             [],
         );
+        Ok(())
+    }
+
+    pub fn init(path: &Path) -> Result<SqliteConnection> {
+        let conn = SqliteConnection::open(path)?;
+        Self::setup_schema(&conn)?;
+        Ok(conn)
+    }
+
+    #[cfg(test)]
+    pub fn init_memory() -> Result<SqliteConnection> {
+        let conn = SqliteConnection::open_in_memory()?;
+        Self::setup_schema(&conn)?;
         Ok(conn)
     }
 
@@ -283,7 +292,11 @@ encrypt INTEGER NOT NULL DEFAULT 1,
     }
 
     pub fn save_connection(conn: &SqliteConnection, item: &DbConnectionItem) -> Result<()> {
-        let password = item.password.as_deref().or(item.password_cipher.as_deref());
+        let password = item
+            .password
+            .as_deref()
+            .filter(|p| !p.is_empty())
+            .or_else(|| item.password_cipher.as_deref().filter(|p| !p.is_empty()));
         let driver_type = item.driver_type.as_deref().unwrap_or("sqlserver");
         conn.execute(
       "INSERT INTO connections (id, name, host, port, username, database_name, folder_id, environment, encrypt, trust_server_certificate, driver_type, timezone, password_cipher, last_database_used, created_at, updated_at)
@@ -300,8 +313,14 @@ encrypt INTEGER NOT NULL DEFAULT 1,
          trust_server_certificate = excluded.trust_server_certificate,
          driver_type = excluded.driver_type,
          timezone = excluded.timezone,
-         password_cipher = COALESCE(excluded.password_cipher, connections.password_cipher),
-         last_database_used = COALESCE(excluded.last_database_used, connections.last_database_used),
+         password_cipher = CASE
+           WHEN excluded.password_cipher IS NOT NULL AND excluded.password_cipher != '' THEN excluded.password_cipher
+           ELSE connections.password_cipher
+         END,
+         last_database_used = CASE
+           WHEN excluded.database_name = '' THEN NULL
+           ELSE COALESCE(excluded.last_database_used, connections.last_database_used)
+         END,
          updated_at = datetime('now')",
        params![
          item.id,
@@ -321,6 +340,45 @@ encrypt INTEGER NOT NULL DEFAULT 1,
        ],
      )?;
         Ok(())
+    }
+
+    pub fn duplicate_connection(
+        conn: &SqliteConnection,
+        id: &str,
+        new_name: Option<&str>,
+    ) -> Result<DbConnectionItem> {
+        let source =
+            Self::get_connection(conn, id)?.ok_or_else(|| rusqlite::Error::QueryReturnedNoRows)?;
+        let new_id = uuid::Uuid::new_v4().to_string();
+        let name = match new_name {
+            Some(n) if !n.trim().is_empty() => n.trim().to_string(),
+            _ => format!("{} (copy)", source.name),
+        };
+
+        let duplicated = DbConnectionItem {
+            id: new_id,
+            name,
+            host: source.host,
+            port: source.port,
+            username: source.username,
+            password: source.password_cipher.clone(),
+            database_name: source.database_name,
+            folder_id: source.folder_id,
+            environment: source.environment,
+            encrypt: source.encrypt,
+            trust_server_certificate: source.trust_server_certificate,
+            timezone: source.timezone,
+            password_cipher: source.password_cipher,
+            driver_type: source.driver_type,
+            last_connected_at: None,
+            last_database_used: None,
+            created_at: None,
+            updated_at: None,
+        };
+
+        Self::save_connection(conn, &duplicated)?;
+        let saved = Self::get_connection(conn, &duplicated.id)?.unwrap_or(duplicated);
+        Ok(saved)
     }
 
     pub fn update_last_database_used(
@@ -524,8 +582,9 @@ encrypt INTEGER NOT NULL DEFAULT 1,
         let mut rows: Vec<(String, String)> = Vec::new();
         {
             let mut stmt = conn.prepare(sql)?;
-            let mapped = stmt
-                .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?;
+            let mapped = stmt.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?;
             for row in mapped {
                 rows.push(row?);
             }
@@ -724,10 +783,7 @@ encrypt INTEGER NOT NULL DEFAULT 1,
         Ok(result)
     }
 
-    pub fn save_saved_query(
-        conn: &SqliteConnection,
-        item: &SavedQueryItem,
-    ) -> Result<()> {
+    pub fn save_saved_query(conn: &SqliteConnection, item: &SavedQueryItem) -> Result<()> {
         conn.execute(
             "INSERT INTO saved_queries (id, connection_id, database_name, name, sql, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
@@ -760,7 +816,8 @@ encrypt INTEGER NOT NULL DEFAULT 1,
              WHERE connection_id = ?1 AND database_name = ?2 AND name = ?3
              LIMIT 1",
         )?;
-        let mut rows = stmt.query_map(params![connection_id, database, name], map_saved_query_row)?;
+        let mut rows =
+            stmt.query_map(params![connection_id, database, name], map_saved_query_row)?;
         if let Some(row) = rows.next() {
             Ok(Some(row?))
         } else {
@@ -796,5 +853,145 @@ encrypt INTEGER NOT NULL DEFAULT 1,
 
     pub fn delete_saved_query(conn: &SqliteConnection, id: &str) -> Result<usize> {
         conn.execute("DELETE FROM saved_queries WHERE id = ?1", params![id])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_save_and_duplicate_preserves_password() {
+        let conn = LocalStore::init_memory().expect("in-memory db");
+        let conn_id = "test-conn-1".to_string();
+        let item = DbConnectionItem {
+            id: conn_id.clone(),
+            name: "Main DB".to_string(),
+            host: "localhost".to_string(),
+            port: 1433,
+            username: "sa".to_string(),
+            password: Some("super_secret".to_string()),
+            database_name: Some("production".to_string()),
+            folder_id: None,
+            environment: Some("prod".to_string()),
+            encrypt: true,
+            trust_server_certificate: true,
+            timezone: None,
+            password_cipher: None,
+            driver_type: Some("sqlserver".to_string()),
+            last_connected_at: None,
+            last_database_used: Some("production".to_string()),
+            created_at: None,
+            updated_at: None,
+        };
+        LocalStore::save_connection(&conn, &item).expect("save connection");
+
+        let loaded = LocalStore::get_connection(&conn, &conn_id)
+            .expect("get")
+            .expect("exists");
+        assert_eq!(loaded.password_cipher.as_deref(), Some("super_secret"));
+
+        // Duplicate connection
+        let duplicated =
+            LocalStore::duplicate_connection(&conn, &conn_id, None).expect("duplicate");
+        assert_ne!(duplicated.id, conn_id);
+        assert_eq!(duplicated.name, "Main DB (copy)");
+        assert_eq!(duplicated.password_cipher.as_deref(), Some("super_secret"));
+        assert_eq!(duplicated.database_name.as_deref(), Some("production"));
+
+        let loaded_dup = LocalStore::get_connection(&conn, &duplicated.id)
+            .expect("get")
+            .expect("exists");
+        assert_eq!(loaded_dup.password_cipher.as_deref(), Some("super_secret"));
+    }
+
+    #[test]
+    fn test_edit_connection_empty_password_does_not_overwrite() {
+        let conn = LocalStore::init_memory().expect("in-memory db");
+        let conn_id = "test-conn-2".to_string();
+        let item = DbConnectionItem {
+            id: conn_id.clone(),
+            name: "Original DB".to_string(),
+            host: "localhost".to_string(),
+            port: 1433,
+            username: "sa".to_string(),
+            password: Some("secret123".to_string()),
+            database_name: Some("test_db".to_string()),
+            folder_id: None,
+            environment: None,
+            encrypt: true,
+            trust_server_certificate: true,
+            timezone: None,
+            password_cipher: None,
+            driver_type: Some("sqlserver".to_string()),
+            last_connected_at: None,
+            last_database_used: None,
+            created_at: None,
+            updated_at: None,
+        };
+        LocalStore::save_connection(&conn, &item).expect("save connection");
+
+        // Now edit with empty string password (simulate leaving blank)
+        let mut edit_item = item.clone();
+        edit_item.name = "Edited DB".to_string();
+        edit_item.password = Some("".to_string());
+        edit_item.password_cipher = None;
+        LocalStore::save_connection(&conn, &edit_item).expect("save edit");
+
+        let loaded = LocalStore::get_connection(&conn, &conn_id)
+            .expect("get")
+            .expect("exists");
+        assert_eq!(loaded.name, "Edited DB");
+        assert_eq!(loaded.password_cipher.as_deref(), Some("secret123"));
+
+        // Now edit with new password
+        edit_item.password = Some("new_password_456".to_string());
+        LocalStore::save_connection(&conn, &edit_item).expect("save edit with new pass");
+
+        let loaded_new = LocalStore::get_connection(&conn, &conn_id)
+            .expect("get")
+            .expect("exists");
+        assert_eq!(
+            loaded_new.password_cipher.as_deref(),
+            Some("new_password_456")
+        );
+    }
+
+    #[test]
+    fn test_clearing_database_name_persists_empty() {
+        let conn = LocalStore::init_memory().expect("in-memory db");
+        let conn_id = "test-conn-3".to_string();
+        let item = DbConnectionItem {
+            id: conn_id.clone(),
+            name: "Scoped DB".to_string(),
+            host: "localhost".to_string(),
+            port: 1433,
+            username: "sa".to_string(),
+            password: Some("pass".to_string()),
+            database_name: Some("mydb".to_string()),
+            folder_id: None,
+            environment: None,
+            encrypt: true,
+            trust_server_certificate: true,
+            timezone: None,
+            password_cipher: None,
+            driver_type: Some("sqlserver".to_string()),
+            last_connected_at: None,
+            last_database_used: Some("mydb".to_string()),
+            created_at: None,
+            updated_at: None,
+        };
+        LocalStore::save_connection(&conn, &item).expect("save connection");
+
+        // Clear database name
+        let mut clear_item = item.clone();
+        clear_item.database_name = Some("".to_string());
+        LocalStore::save_connection(&conn, &clear_item).expect("save clear");
+
+        let loaded = LocalStore::get_connection(&conn, &conn_id)
+            .expect("get")
+            .expect("exists");
+        assert_eq!(loaded.database_name.as_deref(), Some(""));
+        assert_eq!(loaded.last_database_used.as_deref(), None);
     }
 }
