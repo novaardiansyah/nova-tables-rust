@@ -18,7 +18,7 @@ const KEYWORD_KIND = monaco.languages.CompletionItemKind.Keyword
 const FUNCTION_KIND = monaco.languages.CompletionItemKind.Function
 
 const RESERVED_ALIAS = new Set(
-  'as and or on where set select insert update delete inner left right full cross outer join order group having values output with from into using top for apply fetch begin commit rollback transaction'.split(
+  'select from where group having order limit offset join inner left right full cross outer natural straight_join on as using set values and or case when then else end insert update delete into table union with apply fetch begin commit rollback transaction top for'.split(
     ' ',
   ),
 )
@@ -37,6 +37,8 @@ export interface CatalogTableColumns {
 export interface CompletionCatalog {
   tables?: CatalogTable[]
   columns?: CatalogTableColumns[]
+  driverType?: string | null
+  activeDatabase?: string | null
 }
 
 interface Segment {
@@ -53,14 +55,20 @@ interface Reference {
 const catalog: {
   tables: CatalogTable[]
   columns: CatalogTableColumns[]
+  driverType: string | null
+  activeDatabase: string | null
 } = {
   tables: [],
   columns: [],
+  driverType: null,
+  activeDatabase: null,
 }
 
 export function setCompletionCatalog(next: CompletionCatalog | null | undefined): void {
   catalog.tables = [...(next?.tables || [])]
   catalog.columns = [...(next?.columns || [])]
+  catalog.driverType = next?.driverType || null
+  catalog.activeDatabase = next?.activeDatabase || null
 }
 
 function tableKey(schema: string, name: string): string {
@@ -68,20 +76,40 @@ function tableKey(schema: string, name: string): string {
 }
 
 function unwrap(part: string): string {
-  return String(part).replace(/^\[|\]$/g, '')
+  return String(part || '')
+    .trim()
+    .replace(/^[`"\[]|[`"\]]$/g, '')
+}
+
+function isDefaultSchema(schema: string): boolean {
+  if (!schema) return true
+  const lower = schema.toLowerCase()
+  if (lower === 'dbo') return true
+  if (catalog.driverType === 'mysql') return true
+  if (catalog.activeDatabase && lower === catalog.activeDatabase.toLowerCase()) return true
+  return false
+}
+
+function tableLabel(schema: string, name: string): string {
+  return isDefaultSchema(schema) ? name : `${schema}.${name}`
 }
 
 function splitChain(chunk: string): Segment[] {
   const segments: Segment[] = []
   let value = ''
   let start = 0
-  let bracketed = false
+  let inBracket = false
+  let inBacktick = false
+  let inQuote = false
 
   for (let i = 0; i <= chunk.length; i += 1) {
     const character = i < chunk.length ? chunk[i] : '.'
-    if (character === '[') bracketed = true
-    else if (character === ']') bracketed = false
-    if (character === '.' && !bracketed) {
+    if (character === '[') inBracket = true
+    else if (character === ']') inBracket = false
+    else if (character === '`') inBacktick = !inBacktick
+    else if (character === '"') inQuote = !inQuote
+
+    if (character === '.' && !inBracket && !inBacktick && !inQuote) {
       segments.push({ value, start })
       value = ''
       start = i + 1
@@ -98,7 +126,7 @@ function parseChain(line: string, column: number): { chainStart: number; segment
 
   while (index >= 0) {
     const character = line[index]
-    if (/[A-Za-z0-9_$@#.[\]]/.test(character)) index -= 1
+    if (/[A-Za-z0-9_$@#.[\]`"]/.test(character)) index -= 1
     else break
   }
 
@@ -118,31 +146,92 @@ function buildColumnCache(): Map<string, string[]> {
   return cache
 }
 
+function stripCommentsAndStrings(sql: string): string {
+  return sql
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => ' '.repeat(m.length))
+    .replace(/--.*$/gm, (m) => ' '.repeat(m.length))
+    .replace(/'(?:''|[^'])*'/g, (m) => ' '.repeat(m.length))
+}
+
+function getContextualSql(strippedSql: string, offset: number): string {
+  const prevSemi = strippedSql.lastIndexOf(';', Math.max(0, offset - 1))
+  const start = prevSemi === -1 ? 0 : prevSemi + 1
+
+  const nextSemi = strippedSql.indexOf(';', offset)
+  const end = nextSemi === -1 ? strippedSql.length : nextSemi
+
+  return strippedSql.slice(start, end)
+}
+
+function recordReference(rawTable: string, rawAlias: string | undefined, references: Reference[]): void {
+  if (!rawTable) return
+  const parts = rawTable.split('.').map(unwrap)
+  let schema = ''
+  let name = ''
+
+  if (parts.length === 1) {
+    name = parts[0]
+  } else {
+    schema = parts[0]
+    name = parts[1]
+  }
+
+  if (!name || RESERVED_ALIAS.has(name.toLowerCase())) return
+
+  let alias = ''
+  if (rawAlias) {
+    const unwrappedAlias = unwrap(rawAlias).toLowerCase()
+    if (!RESERVED_ALIAS.has(unwrappedAlias)) {
+      alias = unwrappedAlias
+    }
+  }
+
+  references.push({
+    schema: schema.toLowerCase(),
+    name: name.toLowerCase(),
+    alias,
+  })
+}
+
+function parseTableAndAlias(raw: string, references: Reference[]): void {
+  const trimmed = raw.trim()
+  if (!trimmed) return
+  const match = trimmed.match(
+    /^([`"\[]?[A-Za-z0-9_$@#]+[`"\]]?(?:\.[`"\[]?[A-Za-z0-9_$@#]+[`"\]]?)?)(?:\s+(?:AS\s+)?([`"\[]?[A-Za-z0-9_$@#]+[`"\]]?))?/i,
+  )
+  if (match) {
+    recordReference(match[1], match[2], references)
+  }
+}
+
 function extractReferences(sql: string): Reference[] {
   const references: Reference[] = []
-  const pattern =
-    /\b(?:FROM|JOIN|INTO|UPDATE|MERGE|USING)\s+((?:[A-Za-z_][\w$@#]*|\[[^\]]*\])(?:\s*\.\s*(?:[A-Za-z_][\w$@#]*|\[[^\]]*\])?)?)\s*(?:as\s+)?((?:[A-Za-z_][\w$@#]*|\[[^\]]*\])?)?/gi
-  let match: RegExpExecArray | null
 
-  while ((match = pattern.exec(sql))) {
-    const target = match[1].split('.').map(unwrap)
-    const alias = match[2] ? unwrap(match[2]).toLowerCase() : ''
-    let schema = ''
-    let name = ''
+  const fromRegex =
+    /\bFROM\s+([^;]+?)(?=\s+\b(?:WHERE|GROUP|HAVING|ORDER|LIMIT|OFFSET|UNION|WINDOW|FOR|FETCH|JOIN|INNER|LEFT|RIGHT|FULL|CROSS|STRAIGHT_JOIN|NATURAL)\b|[;)]|$)/gi
+  let fromMatch: RegExpExecArray | null
 
-    if (target.length === 1) name = target[0]
-    else {
-      schema = target[0]
-      name = target[1]
+  while ((fromMatch = fromRegex.exec(sql))) {
+    const list = fromMatch[1].split(',')
+    for (const item of list) {
+      parseTableAndAlias(item, references)
     }
+  }
 
-    if (!name || RESERVED_ALIAS.has(name.toLowerCase())) continue
+  const joinRegex =
+    /\b(?:JOIN|INNER\s+JOIN|LEFT\s+JOIN|RIGHT\s+JOIN|FULL\s+JOIN|CROSS\s+JOIN|LEFT\s+OUTER\s+JOIN|RIGHT\s+OUTER\s+JOIN|FULL\s+OUTER\s+JOIN|NATURAL\s+JOIN|STRAIGHT_JOIN)\s+([`"\[]?[A-Za-z0-9_$@#]+[`"\]]?(?:\.[`"\[]?[A-Za-z0-9_$@#]+[`"\]]?)?)(?:\s+(?:AS\s+)?([`"\[]?[A-Za-z0-9_$@#]+[`"\]]?))?/gi
+  let joinMatch: RegExpExecArray | null
 
-    references.push({
-      schema: schema.toLowerCase(),
-      name: name.toLowerCase(),
-      alias,
-    })
+  while ((joinMatch = joinRegex.exec(sql))) {
+    recordReference(joinMatch[1], joinMatch[2], references)
+  }
+
+  const otherRegex =
+    /\b(?:UPDATE|INTO|USING)\s+([`"\[]?[A-Za-z0-9_$@#]+[`"\]]?(?:\.[`"\[]?[A-Za-z0-9_$@#]+[`"\]]?)?)(?:\s+(?:AS\s+)?([`"\[]?[A-Za-z0-9_$@#]+[`"\]]?))?/gi
+  let otherMatch: RegExpExecArray | null
+
+  while ((otherMatch = otherRegex.exec(sql))) {
+    recordReference(otherMatch[1], otherMatch[2], references)
   }
 
   return references
@@ -153,8 +242,17 @@ function columnsForReference(cache: Map<string, string[]>, reference: Reference)
   const name = unwrap(reference.name).toLowerCase()
 
   if (schema) {
-    return cache.get(tableKey(schema, name)) || null
+    const direct = cache.get(tableKey(schema, name))
+    if (direct) return direct
   }
+
+  if (catalog.activeDatabase) {
+    const active = cache.get(tableKey(catalog.activeDatabase, name))
+    if (active) return active
+  }
+
+  const dbo = cache.get(tableKey('dbo', name))
+  if (dbo) return dbo
 
   for (const [key, columns] of cache) {
     if (key.endsWith(`.${name}`)) return columns
@@ -172,7 +270,7 @@ function resolveColumns(
   const partsJoined = partsLower.join('.')
 
   for (const reference of references) {
-    if (reference.alias === partsJoined) {
+    if (reference.alias && reference.alias === partsJoined) {
       return columnsForReference(cache, reference)
     }
   }
@@ -184,6 +282,11 @@ function resolveColumns(
     ) {
       return columnsForReference(cache, reference)
     }
+  }
+
+  if (partsLower.length === 2) {
+    const direct = cache.get(tableKey(partsLower[0], partsLower[1]))
+    if (direct) return direct
   }
 
   const candidates = catalog.tables.filter(
@@ -219,10 +322,6 @@ function suggestion(
   }
 }
 
-function tableLabel(schema: string, name: string): string {
-  return schema.toLowerCase() === 'dbo' ? name : `${schema}.${name}`
-}
-
 function buildBareSuggestions(
   cache: Map<string, string[]>,
   references: Reference[],
@@ -256,14 +355,16 @@ function buildBareSuggestions(
   }
 
   for (const table of catalog.tables) {
-    if (!prefixLower || table.name.toLowerCase().startsWith(prefixLower)) {
+    const label = tableLabel(table.schema, table.name)
+    if (!prefixLower || label.toLowerCase().startsWith(prefixLower) || table.name.toLowerCase().startsWith(prefixLower)) {
       items.push(
         suggestion(
-          `${table.schema}.${table.name}`,
+          label,
           TABLE_KIND,
-          tableLabel(table.schema, table.name),
+          label,
           range,
           '1',
+          table.schema,
         ),
       )
     }
@@ -371,7 +472,15 @@ function provideCompletionItems(
   const line = model.getLineContent(position.lineNumber)
   const { chainStart, segments } = parseChain(line, position.column)
   const last = segments[segments.length - 1]
-  const references = extractReferences(model.getValue())
+
+  const fullSql = model.getValue()
+  const offset = model.getOffsetAt(position)
+  const strippedSql = stripCommentsAndStrings(fullSql)
+  const contextualSql = getContextualSql(strippedSql, offset)
+  let references = extractReferences(contextualSql)
+  if (references.length === 0) {
+    references = extractReferences(strippedSql)
+  }
 
   if (segments.length === 1) {
     return {

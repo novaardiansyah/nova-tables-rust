@@ -235,7 +235,9 @@ pub async fn list_tables(conn: &mut Conn, database: Option<&str>) -> Result<Valu
     let tables: Vec<Value> = order
         .into_iter()
         .map(|(schema, name)| {
-            let pk = map.remove(&(schema.clone(), name.clone())).unwrap_or_default();
+            let pk = map
+                .remove(&(schema.clone(), name.clone()))
+                .unwrap_or_default();
             json!({
               "schema": schema,
               "name": name,
@@ -254,37 +256,47 @@ pub async fn list_tables(conn: &mut Conn, database: Option<&str>) -> Result<Valu
 pub async fn list_columns(conn: &mut Conn, database: Option<&str>) -> Result<Value, String> {
     let db = database.unwrap_or("");
     let query = if db.is_empty() {
-        "SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA FROM information_schema.COLUMNS".to_string()
+        "SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME FROM information_schema.COLUMNS ORDER BY TABLE_SCHEMA, TABLE_NAME, ORDINAL_POSITION".to_string()
     } else {
-        format!("SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '{}'", db)
+        format!("SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '{}' ORDER BY TABLE_SCHEMA, TABLE_NAME, ORDINAL_POSITION", db)
     };
 
     let rows: Vec<Row> = conn.query(query).await.map_err(|e| e.to_string())?;
-    let mut columns = Vec::new();
+    let mut map: HashMap<(String, String), Vec<String>> = HashMap::new();
+    let mut order: Vec<(String, String)> = Vec::new();
 
     for row in rows {
         let schema: String = row.get(0).unwrap_or_default();
         let table: String = row.get(1).unwrap_or_default();
         let column: String = row.get(2).unwrap_or_default();
-        let data_type: String = row.get(3).unwrap_or_default();
-        let is_nullable: String = row.get(4).unwrap_or_default();
-        let column_key: String = row.get(5).unwrap_or_default();
-        let extra: String = row.get(6).unwrap_or_default();
+        if schema.is_empty() || table.is_empty() || column.is_empty() {
+            continue;
+        }
+        let key = (schema.clone(), table.clone());
+        if !map.contains_key(&key) {
+            order.push(key.clone());
+            map.insert(key.clone(), Vec::new());
+        }
+        if let Some(cols) = map.get_mut(&key) {
+            cols.push(column);
+        }
+    }
 
-        columns.push(json!({
-          "tableSchema": schema,
-          "tableName": table,
-          "name": column,
-          "typeName": data_type,
-          "nullable": is_nullable == "YES",
-          "columnKey": column_key,
-          "extra": extra
+    let mut tables = Vec::new();
+    for (schema, name) in order {
+        let cols = map
+            .remove(&(schema.clone(), name.clone()))
+            .unwrap_or_default();
+        tables.push(json!({
+          "schema": schema,
+          "name": name,
+          "columns": cols
         }));
     }
 
     Ok(json!({
       "database": database,
-      "tables": columns
+      "tables": tables
     }))
 }
 
@@ -464,7 +476,10 @@ fn quote_account(user: &str, host: &str) -> String {
 
 fn is_system_user(user: &str) -> bool {
     let lower = user.to_lowercase();
-    lower == "root" || lower.starts_with("mysql.") || lower == "mysql.sys" || lower == "mysql.session"
+    lower == "root"
+        || lower.starts_with("mysql.")
+        || lower == "mysql.sys"
+        || lower == "mysql.session"
 }
 
 // Validates the requested privileges and returns them in canonical form.
@@ -501,8 +516,8 @@ async fn current_account(conn: &mut Conn) -> Result<(String, String), String> {
 
 // Ensures the account exists, is not a system account and is not the current connection account.
 async fn assert_manageable(conn: &mut Conn, account: &str) -> Result<(String, String), String> {
-    let (user, host) = parse_account(account)
-        .ok_or_else(|| format!("Invalid MySQL account \"{}\".", account))?;
+    let (user, host) =
+        parse_account(account).ok_or_else(|| format!("Invalid MySQL account \"{}\".", account))?;
     if is_system_user(&user) {
         return Err("This system user cannot be changed.".to_string());
     }
@@ -514,10 +529,7 @@ async fn assert_manageable(conn: &mut Conn, account: &str) -> Result<(String, St
 }
 
 /// Lists MySQL accounts that have privileges on the specified database.
-pub async fn list_database_users(
-    conn: &mut Conn,
-    database: Option<&str>,
-) -> Result<Value, String> {
+pub async fn list_database_users(conn: &mut Conn, database: Option<&str>) -> Result<Value, String> {
     let db = database.unwrap_or("").trim();
     if db.is_empty() {
         return Err("Choose a database first.".to_string());
@@ -557,8 +569,7 @@ pub async fn list_database_users(
         let Some((user, host)) = parse_account(grantee) else {
             continue;
         };
-        let is_current =
-            user.to_lowercase() == current_user && host.to_lowercase() == current_host;
+        let is_current = user.to_lowercase() == current_user && host.to_lowercase() == current_host;
         let is_system = is_system_user(&user);
         let roles = privileges.remove(grantee).unwrap_or_default();
         users.push(json!({
@@ -620,8 +631,8 @@ pub async fn create_database_user(
     if db.is_empty() {
         return Err("Choose a database first.".to_string());
     }
-    let (user, host) = parse_account(name)
-        .ok_or_else(|| format!("Invalid MySQL account \"{}\".", name))?;
+    let (user, host) =
+        parse_account(name).ok_or_else(|| format!("Invalid MySQL account \"{}\".", name))?;
     let account = quote_account(&user, &host);
     let privileges = normalize_privileges(roles)?;
 
@@ -747,7 +758,10 @@ pub async fn table_relations(
     schema: &str,
     table: &str,
 ) -> Result<Value, String> {
-    let db = database.as_deref().filter(|value| !value.is_empty()).unwrap_or(schema);
+    let db = database
+        .as_deref()
+        .filter(|value| !value.is_empty())
+        .unwrap_or(schema);
     let query = format!(
         "SELECT k.COLUMN_NAME AS column_name,
                 k.REFERENCED_TABLE_SCHEMA AS referenced_schema,
@@ -817,10 +831,18 @@ pub async fn table_structure(
         let collation_name = opt_string(&row, 9);
         let generation_expr = opt_string(&row, 10);
 
-        let is_identity = extra.as_ref().map(|e| e.contains("auto_increment")).unwrap_or(false);
-        let is_computed = generation_expr.as_ref().map(|e| !e.is_empty()).unwrap_or(false);
+        let is_identity = extra
+            .as_ref()
+            .map(|e| e.contains("auto_increment"))
+            .unwrap_or(false);
+        let is_computed = generation_expr
+            .as_ref()
+            .map(|e| !e.is_empty())
+            .unwrap_or(false);
 
-        let max_length = char_max_len.map(|v| if v == -1 { 0 } else { v }).unwrap_or(0) as u32;
+        let max_length = char_max_len
+            .map(|v| if v == -1 { 0 } else { v })
+            .unwrap_or(0) as u32;
 
         columns.push(json!({
           "name": name,
@@ -960,11 +982,14 @@ pub async fn table_structure(
         }
         if !fk_map.contains_key(&name) {
             fk_order.push(name.clone());
-            fk_map.insert(name.clone(), (
-                ref_schema.unwrap_or_default(),
-                ref_table.unwrap_or_default(),
-                Vec::new()
-            ));
+            fk_map.insert(
+                name.clone(),
+                (
+                    ref_schema.unwrap_or_default(),
+                    ref_table.unwrap_or_default(),
+                    Vec::new(),
+                ),
+            );
         }
         if let (Some(col), Some(ref_col)) = (column_name, ref_column) {
             if let Some((_, _, cols)) = fk_map.get_mut(&name) {

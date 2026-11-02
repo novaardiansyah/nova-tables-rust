@@ -94,6 +94,12 @@ export interface TableSummary {
   primaryKey?: string[] | null
 }
 
+export interface TableColumnsSummary {
+  schema: string
+  name: string
+  columns: string[]
+}
+
 export interface ColumnSummary {
   schema: string
   table: string
@@ -1169,12 +1175,12 @@ export const api = {
     return res?.tables || []
   },
 
-  listColumns: async (connectionId: string, database: string): Promise<ColumnSummary[]> => {
-    const res = await callCommand<{ columns?: ColumnSummary[] }>('list_columns', {
+  listColumns: async (connectionId: string, database: string): Promise<TableColumnsSummary[]> => {
+    const res = await callCommand<{ tables?: TableColumnsSummary[] }>('list_columns', {
       connectionId,
       database,
     })
-    return res?.columns || []
+    return res?.tables || []
   },
 
   tableStructure: async (

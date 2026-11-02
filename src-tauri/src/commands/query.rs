@@ -337,6 +337,7 @@ pub async fn list_columns(
     connection_id: Option<String>,
     database: Option<String>,
 ) -> Result<Value, String> {
+    // Try SQL Server first
     if let Some(id) = connection_id.as_deref() {
         if let Ok(mut client) = mssql::get_client_for_connection(id, database.as_deref()).await {
             if let Ok(res) = mssql::list_columns(&mut client, database.as_deref()).await {
@@ -344,9 +345,44 @@ pub async fn list_columns(
             }
         }
     }
+
+    // Then try MySQL
+    if let Some(id) = connection_id.as_deref() {
+        if let Ok(db_path) = FileSystem::get_database_path() {
+            if let Ok(conn) = LocalStore::init(&db_path) {
+                if let Ok(Some(item)) = LocalStore::get_connection(&conn, id) {
+                    let driver_type = item.driver_type.as_deref().unwrap_or("sqlserver");
+                    if driver_type == "mysql" {
+                        let db_to_use = database
+                            .as_deref()
+                            .or(item.database_name.as_deref())
+                            .unwrap_or("");
+                        let password = item.password.or(item.password_cipher).unwrap_or_default();
+                        if let Ok(mut client) = mysql::create_client(
+                            &item.host,
+                            item.port,
+                            &item.username,
+                            &password,
+                            Some(db_to_use),
+                            item.encrypt,
+                            item.trust_server_certificate,
+                        )
+                        .await
+                        {
+                            if let Ok(res) = mysql::list_columns(&mut client, Some(db_to_use)).await
+                            {
+                                return Ok(res);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Ok(json!({
       "ok": true,
-      "columns": []
+      "tables": []
     }))
 }
 
@@ -513,9 +549,7 @@ pub async fn list_modules(
                         )
                         .await
                         {
-                            if let Ok(res) =
-                                mysql::list_modules(&mut client, db_to_use).await
-                            {
+                            if let Ok(res) = mysql::list_modules(&mut client, db_to_use).await {
                                 return Ok(res);
                             }
                         }
@@ -941,7 +975,8 @@ pub async fn update_database_user_roles(input: Value) -> Result<Value, String> {
 
     if connection_driver_type(&connection_id) == "mysql" {
         let mut client = mysql_client_for_connection(&connection_id, Some(&database)).await?;
-        return mysql::update_database_user_roles(&mut client, Some(&database), &name, &roles).await;
+        return mysql::update_database_user_roles(&mut client, Some(&database), &name, &roles)
+            .await;
     }
 
     let mut client = mssql::get_client_for_connection(&connection_id, Some(&database)).await?;
