@@ -2,11 +2,8 @@ import React, { useEffect, useMemo, useState, DragEvent, MouseEvent } from 'reac
 import ConfirmDialog from '@/components/common/ConfirmDialog'
 import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu'
 import EnvironmentBadge from '@/components/common/EnvironmentBadge'
-import ExportConnectionsDialog from '@/components/connections/ExportConnectionsDialog'
 import Icon, { BrandMark, Spinner } from '@/components/common/Icon'
-import ImportConnectionsDialog from '@/components/connections/ImportConnectionsDialog'
 import PromptDialog from '@/components/common/PromptDialog'
-import { api, ImportFileDialogResult } from '@/api'
 import {
   flattenRows,
   folderSubtree,
@@ -107,11 +104,6 @@ export default function ConnectionsScreen({
   const [menu, setMenu] = useState<ScreenMenuState | null>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
   const [dropTarget, setDropTarget] = useState<DropTargetState | { kind: 'root' } | null>(null)
-  const [exportTarget, setExportTarget] = useState<string[] | null>(null)
-  const [exportBusy, setExportBusy] = useState(false)
-  const [importFile, setImportFile] = useState<ImportFileDialogResult | null>(null)
-  const [importBusy, setImportBusy] = useState(false)
-  const [importError, setImportError] = useState<string | null>(null)
   const [selectedConnectionIds, setSelectedConnectionIds] = useState<Set<string>>(() => new Set())
   const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(() => new Set())
   const [selectionAnchor, setSelectionAnchor] = useState<{ kind: DragKind; id: string } | null>(null)
@@ -155,19 +147,6 @@ export default function ConnectionsScreen({
     [connections, folders, openFolders],
   )
   const selectedCount = selectedConnectionIds.size + selectedFolderIds.size
-  const selectedExportIds = useMemo(() => {
-    const ids = new Set(selectedConnectionIds)
-    if (selectedFolderIds.size > 0) {
-      const folderIds = new Set<string>()
-      for (const id of selectedFolderIds) {
-        for (const child of folderSubtree(folders, id)) folderIds.add(child)
-      }
-      for (const connection of connections) {
-        if (connection.folderId && folderIds.has(connection.folderId)) ids.add(connection.id)
-      }
-    }
-    return [...ids]
-  }, [connections, folders, selectedConnectionIds, selectedFolderIds])
   const selectedSummary = [
     selectedConnectionIds.size > 0
       ? `${selectedConnectionIds.size} connection${selectedConnectionIds.size === 1 ? '' : 's'}`
@@ -524,59 +503,6 @@ export default function ConnectionsScreen({
     }
   }
 
-  const handleOpenExport = (connectionIds: string[] | null = null) => {
-    const ids =
-      connectionIds ??
-      (selectedConnectionIds.size > 0
-        ? [...selectedConnectionIds]
-        : connections.map((conn) => conn.id))
-    setExportTarget(ids)
-  }
-
-  const handleExportConfirm = async (selectedIds: string[], password: string) => {
-    setExportBusy(true)
-    try {
-      const result = await api.exportConnections(selectedIds, password)
-      if (result.saved) {
-        setExportTarget(null)
-        onNotify?.('success', `Exported ${result.count} connection(s) successfully.`)
-      }
-    } catch (error: any) {
-      onNotify?.('error', error.message)
-    } finally {
-      setExportBusy(false)
-    }
-  }
-
-  const handleStartImport = async () => {
-    try {
-      const file = await api.selectImportFile()
-      if (file.canceled) return
-      setImportFile(file)
-      setImportError(null)
-    } catch (error: any) {
-      onNotify?.('error', error.message)
-    }
-  }
-
-  const handleImportConfirm = async (password: string) => {
-    if (!importFile?.content) return
-    setImportBusy(true)
-    setImportError(null)
-    try {
-      const result = await api.importConnections(importFile.content, password)
-      setImportFile(null)
-      await onReloadConnections?.()
-      const foldersCount = result.importedFolderCount
-      const suffix = foldersCount > 0 ? ` and ${foldersCount} folder(s)` : ''
-      onNotify?.('success', `Imported ${result.importedCount} connection(s)${suffix} successfully.`)
-    } catch (error: any) {
-      setImportError(error.message)
-    } finally {
-      setImportBusy(false)
-    }
-  }
-
   const connectionMenuItems = (connection: ConnectionItem): ContextMenuItem[] => [
     { id: 'open', label: 'Open connection', onSelect: () => onOpen(connection) },
     { id: 'edit', label: 'Edit connection', onSelect: () => onEditConnection(connection) },
@@ -587,11 +513,6 @@ export default function ConnectionsScreen({
       children: folderMoveItems((folderId) => onMoveConnection(connection, folderId), {
         skipFolderId: connection.folderId ?? null,
       }),
-    },
-    {
-      id: 'export',
-      label: 'Export connection',
-      onSelect: () => handleOpenExport([connection.id]),
     },
     { id: 'delete', label: 'Delete connection', onSelect: () => onDeleteConnection(connection) },
   ]
@@ -636,15 +557,8 @@ export default function ConnectionsScreen({
   ]
 
   const selectionMenuItems = (): ContextMenuItem[] => [
-    ...(selectedExportIds.length > 0
+    ...(selectedConnectionIds.size > 0
       ? [
-          {
-            id: 'bulk-export',
-            label: `Export ${selectedExportIds.length} connection${
-              selectedExportIds.length === 1 ? '' : 's'
-            }`,
-            onSelect: () => handleOpenExport(selectedExportIds),
-          },
           {
             id: 'bulk-move',
             label: 'Move connections to folder',
@@ -660,7 +574,7 @@ export default function ConnectionsScreen({
     const handleKeyDown = (event: KeyboardEvent) => {
       const tag = (event.target as HTMLElement)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || (event.target as HTMLElement)?.isContentEditable) return
-      if (prompt || exportTarget || importFile || deleteTarget || bulkDelete || menu) return
+      if (prompt || deleteTarget || bulkDelete || menu) return
 
       if (event.key === 'Escape' && selectedCount > 0) {
         event.preventDefault()
@@ -751,28 +665,6 @@ export default function ConnectionsScreen({
         <span className="text-[length:var(--app-text-13)] font-semibold tracking-tight text-text-strong">Nova Tables</span>
 
         <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            className="btn-soft"
-            onClick={handleStartImport}
-            title="Import connections from encrypted .nova-tables file"
-          >
-            <Icon name="upload" size={14} />
-            Import
-          </button>
-          <button
-            type="button"
-            className="btn-soft"
-            onClick={() => handleOpenExport(selectedCount > 0 ? selectedExportIds : null)}
-            title={
-              selectedCount > 0
-                ? `Export ${selectedExportIds.length} connection(s)`
-                : 'Export all connections to encrypted .nova-tables file'
-            }
-          >
-            <Icon name="download" size={14} />
-            {selectedCount > 0 ? 'Export selected' : 'Export'}
-          </button>
           <button
             type="button"
             className="btn-soft"
@@ -933,14 +825,16 @@ export default function ConnectionsScreen({
                                 {conn.driverType === 'sqlserver' ? (
                                   <span
                                     title={conn.driverType}
-                                    className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-success">
+                                    className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-success"
+                                  >
                                     <span className="h-1 w-1 rounded-full bg-current" />
                                     {conn.driverType}
                                   </span>
                                 ) : conn.driverType === 'mysql' ? (
                                   <span
                                     title={conn.driverType}
-                                    className="flex shrink-0 items-center gap-1 rounded-full bg-warning/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-warning">
+                                    className="flex shrink-0 items-center gap-1 rounded-full bg-warning/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-warning"
+                                  >
                                     <span className="h-1 w-1 rounded-full bg-current" />
                                     {conn.driverType}
                                   </span>
@@ -1017,14 +911,16 @@ export default function ConnectionsScreen({
                         {lastConnection.driverType === 'sqlserver' ? (
                           <span
                             title={lastConnection.driverType}
-                            className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-success">
+                            className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-success"
+                          >
                             <span className="h-1 w-1 rounded-full bg-current" />
                             {lastConnection.driverType}
                           </span>
                         ) : lastConnection.driverType === 'mysql' ? (
                           <span
                             title={lastConnection.driverType}
-                            className="flex shrink-0 items-center gap-1 rounded-full bg-warning/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-warning">
+                            className="flex shrink-0 items-center gap-1 rounded-full bg-warning/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-warning"
+                          >
                             <span className="h-1 w-1 rounded-full bg-current" />
                             {lastConnection.driverType}
                           </span>
@@ -1092,18 +988,6 @@ export default function ConnectionsScreen({
                 {selectedSummary} selected
               </span>
               <span className="h-3 w-px bg-line-strong" />
-
-              {selectedExportIds.length > 0 ? (
-                <button
-                  type="button"
-                  className="btn-soft h-7 px-2.5 text-[length:var(--app-text-11)]"
-                  onClick={() => handleOpenExport(selectedExportIds)}
-                  title={`Export ${selectedExportIds.length} connection(s)`}
-                >
-                  <Icon name="download" size={12} />
-                  Export
-                </button>
-              ) : null}
 
               {selectedConnectionIds.size > 0 ? (
                 <div className="relative">
@@ -1220,39 +1104,6 @@ export default function ConnectionsScreen({
                 : folderMenuItems(menu.item)
           }
           onClose={() => setMenu(null)}
-        />
-      ) : null}
-
-      {exportTarget ? (
-        <ExportConnectionsDialog
-          open
-          connections={connections}
-          folders={folders}
-          selectedIds={exportTarget}
-          busy={exportBusy}
-          onClose={() => setExportTarget(null)}
-          onCancel={() => setExportTarget(null)}
-          onExport={handleExportConfirm}
-          onConfirm={handleExportConfirm}
-        />
-      ) : null}
-
-      {importFile ? (
-        <ImportConnectionsDialog
-          open
-          fileName={importFile.fileName}
-          busy={importBusy}
-          error={importError}
-          onClose={() => {
-            setImportFile(null)
-            setImportError(null)
-          }}
-          onCancel={() => {
-            setImportFile(null)
-            setImportError(null)
-          }}
-          onImport={handleImportConfirm}
-          onConfirm={handleImportConfirm}
         />
       ) : null}
     </div>

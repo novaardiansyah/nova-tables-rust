@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import ShortcutPanel from '@/components/dialogs/ShortcutPanel'
 import SettingsDialog from '@/components/dialogs/SettingsDialog'
-import ConfigTransferDialog, { ConfigTransferMode } from '@/components/dialogs/ConfigTransferDialog'
+import ConfigTransferDialog, {
+  ConfigTransferMode,
+  ConfigTransferExportData,
+  ConfigTransferImportData,
+} from '@/components/dialogs/ConfigTransferDialog'
 import SavedQueriesDialog from '@/components/dialogs/SavedQueriesDialog'
 import QueryHistoryDialog from '@/components/dialogs/QueryHistoryDialog'
 import SaveQueryDialog from '@/components/dialogs/SaveQueryDialog'
@@ -188,15 +192,33 @@ export default function AppDialogs({
     }
   }
 
-  const handleExportConfig = async (password: string) => {
+  const handleExportConfig = async ({
+    includeSettings,
+    selectedConnectionIds,
+    password,
+  }: ConfigTransferExportData) => {
     setConfigBusy(true)
+    setConfigError(null)
     try {
-      const result = await api.exportAppConfig(settings, password)
+      const result = await api.exportAppConfig(
+        {
+          settings: includeSettings ? settings : null,
+          connectionIds: selectedConnectionIds,
+          includeSettings,
+          includeConnections: selectedConnectionIds.length > 0,
+        },
+        password,
+      )
       if (result.saved) {
         setConfigTransfer(null)
+        const parts: string[] = []
+        if (includeSettings) parts.push('preferences')
+        if (result.connectionCount > 0) {
+          parts.push(`${result.connectionCount} connection${result.connectionCount === 1 ? '' : 's'}`)
+        }
         onNotify?.(
           'success',
-          `Configuration exported with ${result.connectionCount} connection${result.connectionCount === 1 ? '' : 's'}.`,
+          `Configuration exported successfully (${parts.join(', ') || '0 items'}).`,
         )
       }
     } catch (error: any) {
@@ -206,20 +228,35 @@ export default function AppDialogs({
     }
   }
 
-  const handleImportConfig = async (password: string) => {
+  const handleImportConfig = async ({
+    includeSettings,
+    includeConnections,
+    password,
+  }: ConfigTransferImportData) => {
     if (!configFile) return
     setConfigBusy(true)
+    setConfigError(null)
     try {
-      const result = await api.importAppConfig(configFile.content, password)
+      const result = await api.importAppConfig(configFile.content, password, {
+        includeSettings,
+        includeConnections,
+      })
       setConfigTransfer(null)
       setConfigFile(null)
-      await sessionManager.handleReloadConnections()
-      if (result.settings) {
+      if (includeConnections) {
+        await sessionManager.handleReloadConnections()
+      }
+      if (includeSettings && result.settings) {
         await saveSettings(normalizeSettings(result.settings))
+      }
+      const parts: string[] = []
+      if (includeSettings && result.settings) parts.push('preferences')
+      if (includeConnections) {
+        parts.push(`${result.importedCount} connection${result.importedCount === 1 ? '' : 's'}`)
       }
       onNotify?.(
         'success',
-        `Configuration imported with ${result.importedCount} connection${result.importedCount === 1 ? '' : 's'}.`,
+        `Configuration imported successfully (${parts.join(', ') || '0 items'}).`,
       )
     } catch (error: any) {
       setConfigError(error.message)
@@ -242,12 +279,15 @@ export default function AppDialogs({
       <ConfigTransferDialog
         open={Boolean(configTransfer)}
         mode={configTransfer ?? 'export'}
+        connections={sessionManager.connections}
+        folders={sessionManager.folders}
         fileName={configFile?.name ?? ''}
         busy={configBusy}
         error={configError}
         onClose={closeConfigTransfer}
         onChooseFile={handleChooseConfigFile}
-        onSubmit={configTransfer === 'import' ? handleImportConfig : handleExportConfig}
+        onExport={handleExportConfig}
+        onImport={handleImportConfig}
       />
 
       <SavedQueriesDialog

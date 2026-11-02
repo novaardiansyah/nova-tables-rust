@@ -175,10 +175,14 @@ export async function decryptImportPayload(fileContent: string | Record<string, 
     throw error
   }
 
-  if (!parsed || !Array.isArray(parsed.connections)) {
-    const error: CryptoError = new Error('No connections found in export file')
+  if (!parsed || (!Array.isArray(parsed.connections) && !parsed.settings)) {
+    const error: CryptoError = new Error('No configuration or connections found in export file')
     error.code = 'INVALID_FORMAT'
     throw error
+  }
+
+  if (!Array.isArray(parsed.connections)) {
+    parsed.connections = []
   }
 
   return parsed

@@ -722,9 +722,9 @@ export const api = {
   },
 
   exportAppConfig: async (
-    settings: unknown,
+    target: unknown,
     password: string | null | undefined
-  ): Promise<{ saved: boolean; connectionCount: number }> => {
+  ): Promise<{ saved: boolean; connectionCount: number; hasSettings?: boolean }> => {
     const secret = String(password ?? '')
     if (!secret) {
       throw new IpcError({
@@ -733,13 +733,45 @@ export const api = {
       })
     }
 
-    const bundle = await buildConnectionsBundle(null)
+    let settingsPayload: unknown = null
+    let connectionIds: string[] | null | undefined = null
+    let includeConnections = true
+
+    if (
+      target &&
+      typeof target === 'object' &&
+      ('includeSettings' in target || 'connectionIds' in target || 'includeConnections' in target)
+    ) {
+      const opts = target as {
+        settings?: unknown
+        connectionIds?: string[] | null
+        includeSettings?: boolean
+        includeConnections?: boolean
+      }
+      settingsPayload = opts.includeSettings !== false ? (opts.settings ?? null) : null
+      connectionIds = opts.connectionIds ?? null
+      includeConnections = opts.includeConnections !== false
+    } else {
+      settingsPayload = target ?? null
+    }
+
+    const bundle = includeConnections
+      ? await buildConnectionsBundle(connectionIds)
+      : { connections: [], folders: [], order: { connections: [], folders: [] } }
+
+    if (!settingsPayload && bundle.connections.length === 0) {
+      throw new IpcError({
+        message: 'No configuration or connections selected to export',
+        code: 'NO_DATA',
+      })
+    }
+
     const encrypted = await encryptExportPayload(
       {
         version: 2,
         kind: 'app-config',
         exportedAt: new Date().toISOString(),
-        settings: settings ?? null,
+        settings: settingsPayload,
         ...bundle,
       },
       secret
@@ -754,8 +786,8 @@ export const api = {
     })
 
     return saveResult.saved
-      ? { saved: true, connectionCount: bundle.connections.length }
-      : { saved: false, connectionCount: 0 }
+      ? { saved: true, connectionCount: bundle.connections.length, hasSettings: Boolean(settingsPayload) }
+      : { saved: false, connectionCount: 0, hasSettings: false }
   },
 
   selectImportFile: async (): Promise<{
@@ -878,7 +910,11 @@ export const api = {
 
   importAppConfig: async (
     content: string | Record<string, unknown>,
-    password: string | null | undefined
+    password: string | null | undefined,
+    options?: {
+      includeSettings?: boolean
+      includeConnections?: boolean
+    }
   ): Promise<{
     importedCount: number
     importedFolderCount: number
@@ -904,9 +940,20 @@ export const api = {
       })
     }
 
-    const imported = await applyImportedConnections(payload)
+    const includeConnections = options?.includeConnections !== false
+    const includeSettings = options?.includeSettings !== false
+
+    const imported = includeConnections
+      ? await applyImportedConnections(payload)
+      : {
+          importedCount: 0,
+          importedFolderCount: 0,
+          connections: await api.listConnections(),
+          folders: await api.listFolders(),
+        }
+
     const settings =
-      payload.settings && typeof payload.settings === 'object'
+      includeSettings && payload.settings && typeof payload.settings === 'object'
         ? (payload.settings as Record<string, unknown>)
         : null
 
