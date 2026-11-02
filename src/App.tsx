@@ -441,6 +441,7 @@ export default function App() {
           onReorderTree={sessionManager.handleReorderTree}
           onReloadConnections={sessionManager.handleReloadConnections}
           onNotify={showBanner}
+          onTestConnection={api.testConnection}
         />
       )}
 

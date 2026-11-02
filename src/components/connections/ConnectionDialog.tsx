@@ -3,6 +3,13 @@ import Icon, { Spinner } from '@/components/common/Icon'
 import Select from '@/components/common/Select'
 import { ENVIRONMENT_OPTIONS } from '@/environments'
 import { ConnectionItem } from '@/components/connections/ConnectionTreeRow'
+import {
+  ConnectionTestResult,
+  formatConnectionSuccess,
+  formatConnectionError,
+} from '@/components/connections/connectionTestUtils'
+
+export type { ConnectionTestResult } from '@/components/connections/connectionTestUtils'
 
 export interface ConnectionFormState {
   name: string
@@ -60,14 +67,6 @@ function buildInitial(connection?: ConnectionDialogConnection | null): Connectio
   }
 }
 
-export interface ConnectionTestResult {
-  serverName?: string
-  productVersion?: string
-  edition?: string
-  elapsedMs?: number
-  [key: string]: unknown
-}
-
 export interface ConnectionDialogProps {
   mode: ConnectionDialogMode
   connection?: ConnectionDialogConnection | null
@@ -75,6 +74,7 @@ export interface ConnectionDialogProps {
   onClose: () => void
   onSubmit: (payload: Record<string, unknown>) => Promise<unknown> | void
   onTest?: (payload: Record<string, unknown>) => Promise<ConnectionTestResult>
+  onNotify?: (type: 'info' | 'warn' | 'error' | 'success', message: string) => void
 }
 
 export default function ConnectionDialog({
@@ -84,6 +84,7 @@ export default function ConnectionDialog({
   onClose,
   onSubmit,
   onTest,
+  onNotify,
 }: ConnectionDialogProps) {
   const isEdit = mode === 'edit' && Boolean(connection?.id)
   const isDuplicate = Boolean(connection?.isDuplicate)
@@ -98,7 +99,6 @@ export default function ConnectionDialog({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({})
   const [error, setError] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const formRef = useRef<HTMLFormElement | null>(null)
 
@@ -114,7 +114,6 @@ export default function ConnectionDialog({
     const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value
     setForm((prev) => ({ ...prev, [key]: value }))
     setFieldErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev))
-    setTestResult(null)
   }
 
   function validate() {
@@ -159,19 +158,12 @@ export default function ConnectionDialog({
     if (!onTest) return
 
     setTesting(true)
-    setTestResult(null)
     setError(null)
     try {
       const result = await onTest(payload())
-      const details = [result.serverName, result.productVersion ? `SQL Server ${result.productVersion}` : null, result.edition]
-        .filter(Boolean)
-        .join(' · ')
-      setTestResult({
-        ok: true,
-        message: `${details} — connected in ${result.elapsedMs} ms`,
-      })
+      onNotify?.('success', formatConnectionSuccess(result, form.name.trim()))
     } catch (testError: any) {
-      setTestResult({ ok: false, message: testError.message })
+      onNotify?.('error', formatConnectionError(testError, form.name.trim()))
     } finally {
       setTesting(false)
     }
@@ -261,7 +253,6 @@ export default function ConnectionDialog({
                 options={ENVIRONMENT_OPTIONS}
                 onChange={(value) => {
                   setForm((prev) => ({ ...prev, environment: value }))
-                  setTestResult(null)
                 }}
                 icon="server"
                 placeholder="Select environment"
@@ -292,7 +283,6 @@ export default function ConnectionDialog({
                     }
                     return next
                   })
-                  setTestResult(null)
                 }}
                 icon="database"
                 placeholder="Select driver"
@@ -430,23 +420,6 @@ export default function ConnectionDialog({
           <p className="text-[length:var(--app-text-11)] leading-[calc(var(--app-text-12)+4px)] text-text-faint">
             Passwords are stored only in the local SQLite database and never leave your computer.
           </p>
-
-          {testResult ? (
-            <div
-              className={`flex items-start gap-2 rounded-md border px-3 py-2 text-[length:var(--app-text-12)] leading-[calc(var(--app-text-12)+8px)] ${
-                testResult.ok
-                  ? 'border-success/25 bg-success/10 text-success'
-                  : 'border-danger/25 bg-danger/10 text-danger'
-              }`}
-            >
-              <Icon
-                name={testResult.ok ? 'check-circle' : 'alert-triangle'}
-                size={13}
-                className={`mt-0.5 shrink-0 ${testResult.ok ? 'text-success' : 'text-danger'}`}
-              />
-              <span className="break-words">{testResult.message}</span>
-            </div>
-          ) : null}
 
           {error ? (
             <div className="flex items-start gap-2 rounded-md border border-danger/25 bg-danger/10 px-3 py-2 text-[length:var(--app-text-12)] leading-[calc(var(--app-text-12)+8px)] text-danger">

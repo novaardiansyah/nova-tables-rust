@@ -337,6 +337,7 @@ export default function AppDialogs({
           onClose={() => setDialog(null)}
           onSubmit={handleSaveConnection}
           onTest={testConnection}
+          onNotify={onNotify}
         />
       ) : null}
 

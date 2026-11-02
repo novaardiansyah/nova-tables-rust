@@ -4,6 +4,12 @@ import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu'
 import EnvironmentBadge from '@/components/common/EnvironmentBadge'
 import Icon, { BrandMark, Spinner } from '@/components/common/Icon'
 import PromptDialog from '@/components/common/PromptDialog'
+import { api } from '@/api'
+import {
+  ConnectionTestResult,
+  formatConnectionSuccess,
+  formatConnectionError,
+} from '@/components/connections/connectionTestUtils'
 import {
   flattenRows,
   folderSubtree,
@@ -73,6 +79,7 @@ export interface ConnectionsScreenProps {
   }) => void
   onReloadConnections?: () => Promise<unknown> | void
   onNotify?: (type: 'info' | 'warn' | 'error' | 'success', message: string) => void
+  onTestConnection?: (connection: ConnectionItem) => Promise<unknown> | void
 }
 
 export default function ConnectionsScreen({
@@ -95,6 +102,7 @@ export default function ConnectionsScreen({
   onReorderTree,
   onReloadConnections,
   onNotify,
+  onTestConnection,
 }: ConnectionsScreenProps) {
   const [openFolders, setOpenFolders] = useState<Set<string>>(() => new Set())
   const [prompt, setPrompt] = useState<PromptState>(null)
@@ -111,6 +119,7 @@ export default function ConnectionsScreen({
   const [bulkBusy, setBulkBusy] = useState(false)
   const [actionMoveMenu, setActionMoveMenu] = useState<{ x: number; y: number } | null>(null)
   const [viewTab, setViewTab] = useState<'all' | 'recent'>('all')
+  const [testingConnectionId, setTestingConnectionId] = useState<string | null>(null)
 
   const effectiveLastConnectedId = useMemo(() => {
     if (lastConnectedId && connections.some((c) => c.id === lastConnectedId)) {
@@ -503,8 +512,30 @@ export default function ConnectionsScreen({
     }
   }
 
+  const handleTestConnection = async (connection: ConnectionItem) => {
+    if (testingConnectionId) return
+    setTestingConnectionId(connection.id)
+    try {
+      const result = onTestConnection
+        ? await onTestConnection(connection)
+        : await api.testConnection(connection)
+      const message = formatConnectionSuccess(result as ConnectionTestResult, connection.name)
+      onNotify?.('success', message)
+    } catch (testError: any) {
+      const message = formatConnectionError(testError, connection.name)
+      onNotify?.('error', message)
+    } finally {
+      setTestingConnectionId(null)
+    }
+  }
+
   const connectionMenuItems = (connection: ConnectionItem): ContextMenuItem[] => [
     { id: 'open', label: 'Open connection', onSelect: () => onOpen(connection) },
+    {
+      id: 'test',
+      label: testingConnectionId === connection.id ? 'Testing connection…' : 'Test connection',
+      onSelect: () => handleTestConnection(connection),
+    },
     { id: 'edit', label: 'Edit connection', onSelect: () => onEditConnection(connection) },
     { id: 'replicate', label: 'Replicate connection', onSelect: () => onDuplicateConnection(connection) },
     {
@@ -609,7 +640,7 @@ export default function ConnectionsScreen({
       key={connection.id}
       connection={connection}
       depth={depth}
-      connectingId={connectingId}
+      connectingId={connectingId || testingConnectionId}
       openIds={openIds}
       isLastConnected={connection.id === effectiveLastConnectedId}
       selectedConnectionIds={selectedConnectionIds}
@@ -781,7 +812,7 @@ export default function ConnectionsScreen({
               <div className="rounded-xl border border-line bg-panel p-2">
                 <div className="space-y-px">
                   {recentConnections.map((conn) => {
-                    const isConnecting = connectingId === conn.id
+                    const isConnecting = connectingId === conn.id || testingConnectionId === conn.id
                     const isOpen = openIds.includes(conn.id)
                     const isSelected = selectedConnectionIds.has(conn.id)
                     return (
@@ -947,7 +978,7 @@ export default function ConnectionsScreen({
                   <button
                     type="button"
                     className="btn-primary shrink-0"
-                    disabled={connectingId === lastConnection.id}
+                    disabled={connectingId === lastConnection.id || testingConnectionId === lastConnection.id}
                     onClick={() => onOpen(lastConnection)}
                     title={
                       openIds.includes(lastConnection.id)
@@ -955,7 +986,7 @@ export default function ConnectionsScreen({
                         : `Quick connect to ${lastConnection.name}`
                     }
                   >
-                    {connectingId === lastConnection.id ? (
+                    {connectingId === lastConnection.id || testingConnectionId === lastConnection.id ? (
                       <Spinner size={13} />
                     ) : openIds.includes(lastConnection.id) ? (
                       <Icon name="chevron-right" size={13} />
