@@ -614,7 +614,7 @@ pub async fn connect(input: Value) -> Result<Value, String> {
     // Try connection based on driver type
     if driver_type == "mysql" {
         // MySQL connection
-        match mysql::create_client(
+        let mut client_res = mysql::create_client(
             &host,
             port,
             &username,
@@ -623,26 +623,48 @@ pub async fn connect(input: Value) -> Result<Value, String> {
             encrypt,
             trust_cert,
         )
-        .await
-        {
+        .await;
+
+        let mut connected_database = database.clone();
+
+        // Fallback: if connecting to the specified database fails, retry with driver default (empty string for MySQL)
+        if client_res.is_err() && !database.is_empty() {
+            let fallback_res = mysql::create_client(
+                &host,
+                port,
+                &username,
+                &password,
+                Some(""),
+                encrypt,
+                trust_cert,
+            )
+            .await;
+
+            if fallback_res.is_ok() {
+                client_res = fallback_res;
+                connected_database = String::new();
+            }
+        }
+
+        match client_res {
             Ok(mut client) => {
                 let databases = mysql::list_databases(&mut client).await.unwrap_or_else(|_| {
-          vec![
-            json!({ "name": "mysql", "isSystem": true, "isOnline": true }),
-            json!({ "name": "information_schema", "isSystem": true, "isOnline": true }),
-            json!({ "name": "performance_schema", "isSystem": true, "isOnline": true }),
-            json!({ "name": "sys", "isSystem": true, "isOnline": true }),
-          ]
-        });
+                    vec![
+                        json!({ "name": "mysql", "isSystem": true, "isOnline": true }),
+                        json!({ "name": "information_schema", "isSystem": true, "isOnline": true }),
+                        json!({ "name": "performance_schema", "isSystem": true, "isOnline": true }),
+                        json!({ "name": "sys", "isSystem": true, "isOnline": true }),
+                    ]
+                });
                 let tz_info = mysql::detect_server_timezone(&mut client).await;
                 let detected_timezone = tz_info.as_ref().map(|(_, iana)| iana.clone());
                 let detected_offset_minutes = tz_info.as_ref().map(|(min, _)| *min);
 
                 // Update last_connected_at and last_database_used
                 let _ = conn.execute(
-            "UPDATE connections SET last_connected_at = datetime('now'), last_database_used = ?1, timezone = COALESCE(timezone, ?2) WHERE id = ?3",
-            params![database, detected_timezone.as_deref(), id],
-        );
+                    "UPDATE connections SET last_connected_at = datetime('now'), last_database_used = ?1, timezone = COALESCE(timezone, ?2) WHERE id = ?3",
+                    params![connected_database, detected_timezone.as_deref(), id],
+                );
 
                 Ok(json!({
                   "ok": true,
@@ -650,7 +672,7 @@ pub async fn connect(input: Value) -> Result<Value, String> {
                   "name": name,
                   "host": host,
                   "port": port,
-                  "database": database,
+                  "database": connected_database,
                   "databases": databases,
                   "serverVersion": "MySQL 8.0",
                   "serverName": host,
@@ -681,7 +703,7 @@ pub async fn connect(input: Value) -> Result<Value, String> {
         }
     } else {
         // SQL Server connection (existing logic)
-        match mssql::create_client(
+        let mut client_res = mssql::create_client(
             &host,
             port,
             &username,
@@ -690,8 +712,30 @@ pub async fn connect(input: Value) -> Result<Value, String> {
             encrypt,
             trust_cert,
         )
-        .await
-        {
+        .await;
+
+        let mut connected_database = database.clone();
+
+        // Fallback: if connecting to the specified database fails, retry with driver default ("master" for SQL Server)
+        if client_res.is_err() && database != "master" {
+            let fallback_res = mssql::create_client(
+                &host,
+                port,
+                &username,
+                &password,
+                Some("master"),
+                encrypt,
+                trust_cert,
+            )
+            .await;
+
+            if fallback_res.is_ok() {
+                client_res = fallback_res;
+                connected_database = "master".to_string();
+            }
+        }
+
+        match client_res {
             Ok(mut client) => {
                 let databases = mssql::list_databases(&mut client)
                     .await
@@ -711,9 +755,9 @@ pub async fn connect(input: Value) -> Result<Value, String> {
 
                 // Update last_connected_at and last_database_used
                 let _ = conn.execute(
-            "UPDATE connections SET last_connected_at = datetime('now'), last_database_used = ?1, timezone = COALESCE(timezone, ?2) WHERE id = ?3",
-            params![database, detected_timezone.as_deref(), id],
-        );
+                    "UPDATE connections SET last_connected_at = datetime('now'), last_database_used = ?1, timezone = COALESCE(timezone, ?2) WHERE id = ?3",
+                    params![connected_database, detected_timezone.as_deref(), id],
+                );
 
                 Ok(json!({
                   "ok": true,
@@ -721,7 +765,7 @@ pub async fn connect(input: Value) -> Result<Value, String> {
                   "name": name,
                   "host": host,
                   "port": port,
-                  "database": database,
+                  "database": connected_database,
                   "databases": databases,
                   "serverVersion": "MySQL 8.0",
                   "serverName": host,

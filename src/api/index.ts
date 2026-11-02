@@ -1186,7 +1186,7 @@ export const api = {
       name: target?.name || 'SQL Server',
       host: target?.host || '127.0.0.1',
       port: target?.port || 1433,
-      database: res?.database || target?.database || target?.lastDatabaseUsed || target?.databaseName || (isMysql ? '' : 'master'),
+      database: (res?.database !== undefined && res?.database !== null) ? res.database : target?.database || target?.lastDatabaseUsed || target?.databaseName || (isMysql ? '' : 'master'),
       databases: isMysql
         ? [
             { name: 'information_schema', isSystem: true, isOnline: true },
