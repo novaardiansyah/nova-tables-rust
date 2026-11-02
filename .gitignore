@@ -31,5 +31,13 @@ AGENTS.md
 *.sln
 *.sw?
 
+# Certificates and private keys
+*.pfx
+*.p12
+*.key
+*.pem
+*.cer
+*.crt
+
 obsidian
 skills
