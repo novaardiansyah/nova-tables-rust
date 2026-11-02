@@ -539,10 +539,28 @@ export function useSessionManager({
       const current = sessionsRef.current[saved.id]
       if (!current) return
 
-      const reconnectKeys = ['host', 'port', 'username', 'database', 'encrypt', 'trustServerCertificate', 'hasPassword']
-      const needsReconnect = reconnectKeys.some(
-        (key) => (current.connection?.[key] ?? null) !== (saved[key] ?? null),
-      )
+      const reconnectKeys = [
+        'host',
+        'port',
+        'username',
+        'database',
+        'databaseName',
+        'encrypt',
+        'trustServerCertificate',
+        'hasPassword',
+      ]
+      const nextDb = saved.database || saved.databaseName || ''
+      const currentDb =
+        current.connection?.database ||
+        current.connection?.databaseName ||
+        current.activeDatabase ||
+        ''
+      const dbChanged = Boolean(nextDb !== currentDb)
+      const needsReconnect =
+        dbChanged ||
+        reconnectKeys.some(
+          (key) => (current.connection?.[key] ?? null) !== (saved[key] ?? null),
+        )
 
       if (needsReconnect) {
         await closeSession(saved.id)

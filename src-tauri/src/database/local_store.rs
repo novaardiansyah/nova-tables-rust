@@ -298,6 +298,16 @@ impl LocalStore {
             .filter(|p| !p.is_empty())
             .or_else(|| item.password_cipher.as_deref().filter(|p| !p.is_empty()));
         let driver_type = item.driver_type.as_deref().unwrap_or("sqlserver");
+        let db_name = item
+            .database_name
+            .as_deref()
+            .map(|s| s.trim())
+            .unwrap_or("");
+        let last_database_param = item
+            .last_database_used
+            .as_deref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty());
         conn.execute(
       "INSERT INTO connections (id, name, host, port, username, database_name, folder_id, environment, encrypt, trust_server_certificate, driver_type, timezone, password_cipher, last_database_used, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, datetime('now'), datetime('now'))
@@ -319,6 +329,7 @@ impl LocalStore {
          END,
          last_database_used = CASE
            WHEN excluded.database_name = '' THEN NULL
+           WHEN excluded.database_name IS NOT connections.database_name THEN excluded.database_name
            ELSE COALESCE(excluded.last_database_used, connections.last_database_used)
          END,
          updated_at = datetime('now')",
@@ -328,7 +339,7 @@ impl LocalStore {
          item.host,
          item.port as i32,
          item.username,
-         item.database_name.as_deref().unwrap_or(""),
+         db_name,
          item.folder_id,
          item.environment.as_deref().unwrap_or(""),
          if item.encrypt { 1 } else { 0 },
@@ -336,7 +347,7 @@ impl LocalStore {
          driver_type,
          item.timezone.as_deref(),
          password,
-         item.last_database_used.as_deref(),
+         last_database_param,
        ],
      )?;
         Ok(())
@@ -993,5 +1004,44 @@ mod tests {
             .expect("exists");
         assert_eq!(loaded.database_name.as_deref(), Some(""));
         assert_eq!(loaded.last_database_used.as_deref(), None);
+    }
+
+    #[test]
+    fn test_edit_connection_database_name_persists() {
+        let conn = LocalStore::init_memory().expect("in-memory db");
+        let conn_id = "test-conn-db-edit".to_string();
+        let item = DbConnectionItem {
+            id: conn_id.clone(),
+            name: "Initial DB Conn".to_string(),
+            host: "localhost".to_string(),
+            port: 1433,
+            username: "sa".to_string(),
+            password: Some("secret".to_string()),
+            database_name: Some("initial_db".to_string()),
+            folder_id: None,
+            environment: None,
+            encrypt: true,
+            trust_server_certificate: true,
+            timezone: None,
+            password_cipher: None,
+            driver_type: Some("sqlserver".to_string()),
+            last_connected_at: None,
+            last_database_used: Some("initial_db".to_string()),
+            created_at: None,
+            updated_at: None,
+        };
+        LocalStore::save_connection(&conn, &item).expect("save initial");
+
+        // Edit database_name
+        let mut edit_item = item.clone();
+        edit_item.database_name = Some("updated_db".to_string());
+        edit_item.last_database_used = None;
+        LocalStore::save_connection(&conn, &edit_item).expect("save edit db");
+
+        let loaded = LocalStore::get_connection(&conn, &conn_id)
+            .expect("get")
+            .expect("exists");
+        assert_eq!(loaded.database_name.as_deref(), Some("updated_db"));
+        assert_eq!(loaded.last_database_used.as_deref(), Some("updated_db"));
     }
 }

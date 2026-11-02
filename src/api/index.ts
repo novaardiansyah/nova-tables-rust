@@ -521,7 +521,7 @@ export const api = {
     const res = await callCommand<{ version?: string }>('get_system_info')
     return {
       name: 'Nova Tables',
-      version: res?.version || '2.2.1',
+      version: res?.version || '2.2.2',
     }
   },
 
@@ -659,6 +659,13 @@ export const api = {
   },
 
   saveConnection: async (connection: Partial<ConnectionModel>): Promise<ConnectionModel> => {
+    const hasDbField =
+      (connection.databaseName !== undefined && connection.databaseName !== null) ||
+      (connection.database !== undefined && connection.database !== null)
+    const dbName = hasDbField
+      ? String(connection.databaseName ?? connection.database ?? '').trim()
+      : ''
+
     const payload: ConnectionModel = {
       ...connection,
       id:
@@ -670,12 +677,10 @@ export const api = {
       host: connection.host || '127.0.0.1',
       port: Number(connection.port) || 1433,
       username: connection.username || '',
-      databaseName:
-        connection.databaseName !== undefined && connection.databaseName !== null
-          ? connection.databaseName
-          : connection.database !== undefined && connection.database !== null
-          ? connection.database
-          : '',
+      databaseName: hasDbField ? dbName : (connection.databaseName || ''),
+      lastDatabaseUsed: hasDbField
+        ? (dbName || null)
+        : (connection.lastDatabaseUsed || null),
       folderId: connection.folderId || null,
       environment: connection.environment || '',
       encrypt: connection.encrypt !== false,
@@ -698,16 +703,17 @@ export const api = {
         (saved.passwordCipher && saved.passwordCipher.length > 0) ||
         connection.hasPassword,
     )
+    const effectiveDb =
+      saved.databaseName !== undefined && saved.databaseName !== null
+        ? saved.databaseName
+        : saved.database !== undefined && saved.database !== null
+        ? saved.database
+        : dbName
     return {
       ...saved,
-      database:
-        saved.databaseName !== undefined && saved.databaseName !== null
-          ? saved.databaseName
-          : saved.database || '',
-      databaseName:
-        saved.databaseName !== undefined && saved.databaseName !== null
-          ? saved.databaseName
-          : saved.database || '',
+      database: effectiveDb,
+      databaseName: effectiveDb,
+      lastDatabaseUsed: hasDbField ? (dbName || null) : (saved.lastDatabaseUsed || null),
       hasPassword,
     }
   },
