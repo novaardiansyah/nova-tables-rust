@@ -258,6 +258,7 @@ export default function App() {
     setSettingsOpen,
     setDialog: sessionManager.setDialog,
     handleRun: queryExecution.handleRun,
+    handleCancel: queryExecution.handleCancel,
     handleSaveQuery: () => {
       if (activeTab && Object.keys(activeTab.edits || {}).length > 0) {
         queryExecution.handleReRun()
@@ -429,6 +430,7 @@ export default function App() {
           lastConnectedId={sessionManager.lastConnectedId}
           onOpen={sessionManager.handleConnect}
           onNewConnection={() => sessionManager.setDialog({ mode: 'new' })}
+          onNewConnectionInFolder={sessionManager.handleNewConnectionInFolder}
           onEditConnection={(connection) => sessionManager.setDialog({ mode: 'edit', connection })}
           onDuplicateConnection={sessionManager.handleDuplicateConnection}
           onDeleteConnection={(connection) => sessionManager.setDeleteTarget(connection)}

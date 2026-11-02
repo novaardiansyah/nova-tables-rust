@@ -77,6 +77,7 @@ export interface ResultsPanelProps {
   state: ResultsPanelState
   activeSet?: number
   onSelectSet: (index: number) => void
+  onCancel?: () => void
   relations?: ResultRelation[] | null
   onRelationClick?: (relation: ResultRelation, value: unknown) => void
   onCopyText?: (payload: string, message?: string) => void
@@ -103,6 +104,7 @@ export default function ResultsPanel({
   state,
   activeSet = 0,
   onSelectSet,
+  onCancel,
   relations,
   onRelationClick,
   onCopyText,
@@ -537,10 +539,23 @@ export default function ResultsPanel({
         ) : null}
 
         {status === 'running' ? (
-          <span className="flex items-center gap-1.5 px-2 text-[length:var(--app-text-11)] text-text-soft">
-            <Spinner size={12} />
-            Running query…
-          </span>
+          <div className="flex items-center justify-between w-full px-2" >
+            <span className="flex items-center gap-1.5 text-[length:var(--app-text-11)] text-text-soft">
+              <Spinner size={12} />
+              Running query…
+            </span>
+            {onCancel ? (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="flex h-5 items-center gap-1 rounded bg-danger/15 px-1.5 text-[length:var(--app-text-10)] font-medium text-danger transition-colors hover:bg-danger/25"
+                title="Cancel running query"
+              >
+                <Icon name="x" size={10} />
+                Cancel
+              </button>
+            ) : null}
+          </div>
         ) : null}
 
         {status !== 'error' && status !== 'running' && resultSets.length === 0 && view !== 'messages' ? (

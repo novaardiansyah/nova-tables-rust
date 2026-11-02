@@ -60,6 +60,7 @@ export interface ConnectionsScreenProps {
   lastConnectedId?: string | null
   onOpen: (connection: ConnectionItem) => void
   onNewConnection: () => void
+  onNewConnectionInFolder?: (folderId: string) => void
   onEditConnection: (connection: ConnectionItem) => void
   onDeleteConnection: (connection: ConnectionItem) => void
   onDuplicateConnection: (connection: ConnectionItem) => void
@@ -86,6 +87,7 @@ export default function ConnectionsScreen({
   lastConnectedId,
   onOpen,
   onNewConnection,
+  onNewConnectionInFolder,
   onEditConnection,
   onDeleteConnection,
   onDuplicateConnection,
@@ -600,7 +602,11 @@ export default function ConnectionsScreen({
       label: openFolders.has(folder.id) ? 'Collapse folder' : 'Expand folder',
       onSelect: () => toggleFolder(folder.id),
     },
-    { id: 'new', label: 'New subfolder', onSelect: () => openCreatePrompt(folder.id) },
+    {
+      id: 'new',
+      label: 'New subfolder',
+      onSelect: () => openCreatePrompt(folder.id),
+    },
     {
       id: 'rename',
       label: 'Rename folder',
@@ -621,6 +627,11 @@ export default function ConnectionsScreen({
         selectOnly('folder', folder.id)
         setDeleteTarget(folder)
       },
+    },
+    {
+      id: 'new-connection',
+      label: 'New connection in folder',
+      onSelect: () => onNewConnectionInFolder?.(folder.id),
     },
   ]
 

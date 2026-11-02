@@ -71,8 +71,25 @@ export function useQueryExecution({
     }
   }, [])
 
+  const cancelRequestedRef = useRef(false)
+
+  const handleCancel = useCallback(() => {
+    cancelRequestedRef.current = true
+    const current = activeSession()
+    if (current) {
+      updateTab(current.connectionId, current.activeTabId, {
+        state: {
+          status: 'error',
+          result: null,
+          error: { message: 'Query was cancelled by user' },
+        },
+      })
+    }
+  }, [activeSession, updateTab])
+
   const execute = useCallback(
     async (sql: string, tabId: string) => {
+      cancelRequestedRef.current = false
       const current = activeSession()
       if (!current) {
         showBanner('warn', 'Open a connection before running a query.')
@@ -112,6 +129,7 @@ export function useQueryExecution({
           sql,
           recordHistory: true,
         })
+        if (cancelRequestedRef.current) return
         const firstFilled = result.resultSets.findIndex((set) => set.rowCount > 0)
         updateTab(current.connectionId, tabId, {
           state: { status: 'success', result, error: null },
@@ -151,6 +169,7 @@ export function useQueryExecution({
           }
         }
       } catch (error: any) {
+        if (cancelRequestedRef.current) return
         updateTab(current.connectionId, tabId, {
           state: {
             status: 'error',
@@ -613,6 +632,7 @@ export function useQueryExecution({
     execute,
     runWithGuard,
     handleRun,
+    handleCancel,
     handleReRun,
     handleEstimatedPlan,
     handleGuardConfirm,

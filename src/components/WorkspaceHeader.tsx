@@ -36,6 +36,7 @@ export interface WorkspaceHeaderProps {
   onDropDatabase?: () => void
   onManageUsers?: () => void
   onRun?: () => void
+  onCancel?: () => void
   onEstimatedPlan?: () => void
   onDisconnect?: () => void
   onShowShortcuts?: () => void
@@ -64,6 +65,7 @@ export default function WorkspaceHeader({
   onDropDatabase,
   onManageUsers,
   onRun,
+  onCancel,
   onEstimatedPlan,
   onDisconnect,
   onShowShortcuts,
@@ -158,18 +160,30 @@ export default function WorkspaceHeader({
           Estimated plan
         </button>
 
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={onRun}
-          disabled={!session || running}
-          title="Run query (Ctrl+Enter)"
-        >
-          {running ? <Spinner size={13} /> : <Icon name="play" size={12} />}
-          Run
-          <span className="kbd border-on-accent/40 bg-transparent text-on-accent">Ctrl</span>
-          <span className="kbd border-on-accent/40 bg-transparent text-on-accent">↵</span>
-        </button>
+        {running ? (
+          <button
+            type="button"
+            className="btn-danger h-8 px-3 text-[length:var(--app-text-12)]"
+            onClick={onCancel}
+            title="Cancel running query"
+          >
+            <Icon name="x" size={12} />
+            Cancel
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={onRun}
+            disabled={!session}
+            title="Run query (Ctrl+Enter)"
+          >
+            <Icon name="play" size={12} />
+            Run
+            <span className="kbd border-on-accent/40 bg-transparent text-on-accent">Ctrl</span>
+            <span className="kbd border-on-accent/40 bg-transparent text-on-accent">↵</span>
+          </button>
+        )}
 
         {session ? (
           <button type="button" className="icon-btn" onClick={onDisconnect} title="Close connection">

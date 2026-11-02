@@ -636,6 +636,13 @@ export function useSessionManager({
     }
   }, [showBanner])
 
+  const handleNewConnectionInFolder = useCallback(
+    (folderId: string) => {
+      setDialog({ mode: 'new', connection: { folderId } })
+    },
+    [],
+  )
+
   return {
     connections,
     folders,
@@ -686,5 +693,6 @@ export function useSessionManager({
     handleMoveConnection,
     handleReorderTree,
     handleReloadConnections,
+    handleNewConnectionInFolder,
   }
 }

@@ -131,9 +131,11 @@ export default function ConnectionDialog({
       trustServerCertificate: form.trustServerCertificate,
       driverType: form.driverType,
     }
+    if (connection?.folderId) {
+      data.folderId = connection.folderId
+    }
     if (isEdit && connection?.id) {
       data.id = connection.id
-      data.folderId = connection.folderId ?? null
     }
     if (!isEdit || form.password !== '') data.password = form.password
     return data

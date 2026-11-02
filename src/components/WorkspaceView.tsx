@@ -215,6 +215,7 @@ export default function WorkspaceView({
             onDropDatabase={handleOpenDropDatabase}
             onManageUsers={databaseUsers.handleOpenDatabaseUsers}
             onRun={handleRun}
+            onCancel={queryExecution.handleCancel}
             onEstimatedPlan={handleEstimatedPlan}
             onDisconnect={() => closeSession(session.connectionId)}
             onShowShortcuts={onShowShortcuts}
@@ -307,6 +308,7 @@ export default function WorkspaceView({
               tabTitle={activeTab?.title}
               executionPlan={activeTab?.executionPlan ?? null}
               onCopyPlan={(raw) => handleCopyText(raw, 'Copied execution plan XML.')}
+              onCancel={queryExecution.handleCancel}
               onOpenStructure={handleOpenStructure}
             />
           </div>
