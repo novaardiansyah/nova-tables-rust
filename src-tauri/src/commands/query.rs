@@ -1,4 +1,4 @@
-use crate::database::local_store::{LocalStore, QueryHistoryItem};
+use crate::database::local_store::{LocalStore, QueryHistoryItem, SavedQueryItem};
 use crate::database::mssql;
 use crate::database::mysql;
 use crate::file_system::FileSystem;
@@ -832,33 +832,117 @@ pub fn list_saved_queries(
     connection_id: Option<String>,
     database: Option<String>,
 ) -> Result<Value, String> {
-    let _ = (connection_id, database);
+    let Some(connection_id) = connection_id.as_deref().filter(|value| !value.is_empty()) else {
+        return Ok(json!({ "ok": true, "queries": [] }));
+    };
+    let Some(database) = database.as_deref().filter(|value| !value.is_empty()) else {
+        return Ok(json!({ "ok": true, "queries": [] }));
+    };
+
+    let db_path = FileSystem::get_database_path()?;
+    let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
+    let queries = LocalStore::list_saved_queries(&conn, connection_id, database)
+        .map_err(|e| e.to_string())?;
+
     Ok(json!({
-      "ok": true,
-      "queries": []
+        "ok": true,
+        "queries": queries
     }))
 }
 
 #[tauri::command]
 pub fn save_saved_query(input: Value) -> Result<Value, String> {
+    let connection_id = input_text(&input, "connectionId");
+    let database = input_text(&input, "databaseName");
+    let name = input_text(&input, "name");
+    let sql = input_text(&input, "sql");
+
+    if connection_id.is_empty() {
+        return Err("Connection ID is required.".to_string());
+    }
+    if database.is_empty() {
+        return Err("Database name is required.".to_string());
+    }
+    if name.is_empty() {
+        return Err("Query name is required.".to_string());
+    }
+
+    let db_path = FileSystem::get_database_path()?;
+    let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let existing = LocalStore::find_saved_query_by_name(&conn, &connection_id, &database, &name)
+        .map_err(|e| e.to_string())?;
+
+    let item = match existing {
+        Some(found) => SavedQueryItem {
+            id: found.id,
+            connection_id,
+            database,
+            name,
+            sql,
+            created_at: found.created_at,
+            updated_at: now,
+        },
+        None => SavedQueryItem {
+            id: uuid::Uuid::new_v4().to_string(),
+            connection_id,
+            database,
+            name,
+            sql,
+            created_at: now.clone(),
+            updated_at: now,
+        },
+    };
+
+    LocalStore::save_saved_query(&conn, &item).map_err(|e| e.to_string())?;
+
     Ok(json!({
-      "ok": true,
-      "query": input
+        "ok": true,
+        "query": item
     }))
 }
 
 #[tauri::command]
 pub fn rename_saved_query(input: Value) -> Result<Value, String> {
+    let id = input_text(&input, "id");
+    let name = input_text(&input, "name");
+
+    if id.is_empty() {
+        return Err("Saved query ID is required.".to_string());
+    }
+    if name.is_empty() {
+        return Err("Query name cannot be empty.".to_string());
+    }
+
+    let db_path = FileSystem::get_database_path()?;
+    let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    let updated = LocalStore::rename_saved_query(&conn, &id, &name, &now)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Saved query not found.".to_string())?;
+
     Ok(json!({
-      "ok": true,
-      "query": input
+        "ok": true,
+        "query": updated
     }))
 }
 
 #[tauri::command]
 pub fn delete_saved_query(id: String) -> Result<Value, String> {
-    let _ = id;
-    Ok(json!({ "ok": true }))
+    if id.is_empty() {
+        return Err("Saved query ID is required.".to_string());
+    }
+
+    let db_path = FileSystem::get_database_path()?;
+    let conn = LocalStore::init(&db_path).map_err(|e| e.to_string())?;
+    let deleted = LocalStore::delete_saved_query(&conn, &id).map_err(|e| e.to_string())?;
+
+    Ok(json!({
+        "ok": true,
+        "deleted": deleted > 0
+    }))
 }
 
 #[tauri::command]

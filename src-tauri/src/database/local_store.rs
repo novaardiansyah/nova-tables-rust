@@ -48,6 +48,33 @@ pub struct FolderItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavedQueryItem {
+    pub id: String,
+    #[serde(rename = "connectionId")]
+    pub connection_id: String,
+    #[serde(rename = "databaseName")]
+    pub database: String,
+    pub name: String,
+    pub sql: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
+fn map_saved_query_row(row: &rusqlite::Row<'_>) -> Result<SavedQueryItem> {
+    Ok(SavedQueryItem {
+        id: row.get(0)?,
+        connection_id: row.get(1)?,
+        database: row.get(2)?,
+        name: row.get(3)?,
+        sql: row.get(4)?,
+        created_at: row.get(5)?,
+        updated_at: row.get(6)?,
+    })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryHistoryItem {
     pub id: String,
     #[serde(rename = "connectionId")]
@@ -676,5 +703,98 @@ encrypt INTEGER NOT NULL DEFAULT 1,
             params![key, value],
         )?;
         Ok(())
+    }
+
+    pub fn list_saved_queries(
+        conn: &SqliteConnection,
+        connection_id: &str,
+        database: &str,
+    ) -> Result<Vec<SavedQueryItem>> {
+        let mut stmt = conn.prepare(
+            "SELECT id, connection_id, database_name, name, sql, created_at, updated_at
+             FROM saved_queries
+             WHERE connection_id = ?1 AND database_name = ?2
+             ORDER BY updated_at DESC, name ASC",
+        )?;
+        let rows = stmt.query_map(params![connection_id, database], map_saved_query_row)?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    pub fn save_saved_query(
+        conn: &SqliteConnection,
+        item: &SavedQueryItem,
+    ) -> Result<()> {
+        conn.execute(
+            "INSERT INTO saved_queries (id, connection_id, database_name, name, sql, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(id) DO UPDATE SET
+               name = excluded.name,
+               sql = excluded.sql,
+               updated_at = excluded.updated_at",
+            params![
+                item.id,
+                item.connection_id,
+                item.database,
+                item.name,
+                item.sql,
+                item.created_at,
+                item.updated_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn find_saved_query_by_name(
+        conn: &SqliteConnection,
+        connection_id: &str,
+        database: &str,
+        name: &str,
+    ) -> Result<Option<SavedQueryItem>> {
+        let mut stmt = conn.prepare(
+            "SELECT id, connection_id, database_name, name, sql, created_at, updated_at
+             FROM saved_queries
+             WHERE connection_id = ?1 AND database_name = ?2 AND name = ?3
+             LIMIT 1",
+        )?;
+        let mut rows = stmt.query_map(params![connection_id, database, name], map_saved_query_row)?;
+        if let Some(row) = rows.next() {
+            Ok(Some(row?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn rename_saved_query(
+        conn: &SqliteConnection,
+        id: &str,
+        name: &str,
+        updated_at: &str,
+    ) -> Result<Option<SavedQueryItem>> {
+        let updated = conn.execute(
+            "UPDATE saved_queries SET name = ?1, updated_at = ?2 WHERE id = ?3",
+            params![name, updated_at, id],
+        )?;
+        if updated == 0 {
+            return Ok(None);
+        }
+        let mut stmt = conn.prepare(
+            "SELECT id, connection_id, database_name, name, sql, created_at, updated_at
+             FROM saved_queries
+             WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query_map(params![id], map_saved_query_row)?;
+        if let Some(row) = rows.next() {
+            Ok(Some(row?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn delete_saved_query(conn: &SqliteConnection, id: &str) -> Result<usize> {
+        conn.execute("DELETE FROM saved_queries WHERE id = ?1", params![id])
     }
 }
