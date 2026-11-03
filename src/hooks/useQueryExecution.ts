@@ -436,7 +436,7 @@ export function useQueryExecution({
       const where = buildFilterWhere(conditions, driverType)
       if (!where) return
 
-      const sql = buildFilteredSql(baseSql, where)
+      const sql = buildFilteredSql(baseSql, where, driverType)
       const previousColumns = tab.state.result?.resultSets?.[0]?.columns ?? []
       const cachedColumns = previousColumns.length > 0 ? previousColumns : (tab.cachedColumns ?? [])
 

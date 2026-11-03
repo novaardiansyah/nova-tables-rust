@@ -127,7 +127,10 @@ export function buildFilterWhere(conditions: FilterCondition[], driverType?: str
   return parts.join('\n  ')
 }
 
-export function buildFilteredSql(sql: string, where: string): string {
-  const source = String(sql).trim().replace(/;+\s*$/, '')
+export function buildFilteredSql(sql: string, where: string, driverType?: string | null): string {
+  let source = String(sql).trim().replace(/;+\s*$/, '')
+  if (driverType !== 'mysql' && /\border\s+by\b/i.test(source) && !/\b(top|offset)\b/i.test(source)) {
+    source = source.replace(/^(\s*select\s+(?:distinct\s+)?)/i, '$1TOP (100) PERCENT ')
+  }
   return `SELECT * FROM (\n${source}\n) AS _nova_filter\nWHERE ${where}\n`
 }
