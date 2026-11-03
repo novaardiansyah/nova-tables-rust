@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { encryptExportPayload, decryptImportPayload } from '@/api/crypto'
 
 export interface IpcErrorPayload {
@@ -598,6 +599,19 @@ export const api = {
     }
     // Fallback: use document.execCommand('copy') with a hidden textarea
     return legacyCopyText(value)
+  },
+
+  openExternal: async (url: string): Promise<void> => {
+    if (isTauri()) {
+      try {
+        await openUrl(url)
+        return
+      } catch {
+      }
+    }
+    if (typeof window !== 'undefined') {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
   },
 
   saveFile: async (input: unknown): Promise<{ saved?: boolean; filePath?: string;[key: string]: unknown }> => {

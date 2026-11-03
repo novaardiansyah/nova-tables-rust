@@ -1069,8 +1069,28 @@ export default function ConnectionsScreen({
       </div>
 
       <footer className="flex h-9 shrink-0 items-center justify-between border-t border-line px-6 text-[length:var(--app-text-10)] text-text-faint">
-        <span>Microsoft SQL Server client</span>
-        <span>v{appVersion}</span>
+        <a
+          href="https://novaardiansyah.id"
+          onClick={(e) => {
+            e.preventDefault()
+            void api.openExternal('https://novaardiansyah.id')
+          }}
+          className="transition-colors hover:text-text hover:underline"
+        >
+          by Nova Ardiansyah
+        </a>
+        {appVersion ? (
+          <a
+            href="https://nova-tables.novaardiansyah.id"
+            onClick={(e) => {
+              e.preventDefault()
+              void api.openExternal('https://nova-tables.novaardiansyah.id')
+            }}
+            className="transition-colors hover:text-text hover:underline"
+          >
+            v{appVersion}
+          </a>
+        ) : null}
       </footer>
 
       {prompt ? (

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { api } from '@/api'
 import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu'
 import Icon, { BrandMark, Spinner } from '@/components/common/Icon'
 
@@ -521,8 +522,28 @@ export default function Sidebar({
       </div>
 
       <div className="flex h-8 shrink-0 items-center justify-between border-t border-line px-4 text-[length:var(--app-text-10)] text-text-faint">
-        <span>Microsoft SQL Server</span>
-        <span>{appVersion ? `v${appVersion}` : ''}</span>
+        <a
+          href="https://novaardiansyah.id"
+          onClick={(e) => {
+            e.preventDefault()
+            void api.openExternal('https://novaardiansyah.id')
+          }}
+          className="transition-colors hover:text-text hover:underline"
+        >
+          by Nova Ardiansyah
+        </a>
+        {appVersion ? (
+          <a
+            href="https://nova-tables.novaardiansyah.id"
+            onClick={(e) => {
+              e.preventDefault()
+              void api.openExternal('https://nova-tables.novaardiansyah.id')
+            }}
+            className="transition-colors hover:text-text hover:underline"
+          >
+            v{appVersion}
+          </a>
+        ) : null}
       </div>
     </>
   )
