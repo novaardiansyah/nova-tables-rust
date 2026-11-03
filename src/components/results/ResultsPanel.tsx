@@ -380,67 +380,8 @@ export default function ResultsPanel({
 
   const menuItems = useMemo<ContextMenuItem[]>(() => {
     if (!menu) return []
-    const isMultiSelection = Boolean(
-      selectionBounds &&
-        (selectionBounds.rowStart !== selectionBounds.rowEnd ||
-          selectionBounds.colStart !== selectionBounds.colEnd),
-    )
 
     const items: ContextMenuItem[] = [
-      {
-        id: 'inspect-value',
-        label: isMultiSelection
-          ? `Inspect ${wholeRowSelection ? 'Rows' : 'Selection'}`
-          : 'Inspect Value',
-        onSelect: () => {
-          if (isMultiSelection) {
-            setInspectTarget({
-              type: wholeRowSelection ? 'rows' : 'selection',
-              title: wholeRowSelection && selectionBounds
-                ? `Rows ${selectionBounds.rowStart + 1}–${selectionBounds.rowEnd + 1}`
-                : `Selection (${selectionRows.length} × ${selectionColumnNames.length})`,
-              subtitle: `${selectionRows.length} row${selectionRows.length === 1 ? '' : 's'} · ${selectionColumnNames.length} column${selectionColumnNames.length === 1 ? '' : 's'}`,
-              columnNames: selectionColumnNames,
-              matrix: selectionMatrix,
-            })
-            return
-          }
-          const row = menu.row >= 0 ? menu.row : (selectionBounds?.rowStart ?? 0)
-          const colIndex =
-            menu.columnIndex !== null && menu.columnIndex !== undefined
-              ? menu.columnIndex
-              : (selectionBounds?.colStart ?? 0)
-          openInspector(colIndex, row)
-        },
-      },
-      {
-        id: 'filter-by-value',
-        label: 'Filter by this value',
-        onSelect: () => {
-          const colIndex =
-            menu.columnIndex !== null && menu.columnIndex !== undefined
-              ? menu.columnIndex
-              : (selectionBounds?.colStart ?? 0)
-          const row = menu.row >= 0 ? menu.row : (selectionBounds?.rowStart ?? 0)
-          const column = activeResultSet?.columns[colIndex]
-          if (!column) return
-          const rawValue = activeResultSet?.rows[row]?.[colIndex]
-          const isNull = rawValue === null || rawValue === undefined
-          onApplyFilter?.([
-            {
-              column: column.name,
-              operator: isNull ? 'is-null' : 'equals',
-              value: isNull ? '' : String(rawValue),
-            },
-          ])
-        },
-      },
-      {
-        id: 'copy-text',
-        label: 'Copy Text',
-        onSelect: () =>
-          copy(cleanText(selectionMatrix, timezone), `Copied selected ${selectionLabel} as clean text.`),
-      },
       {
         id: 'copy-json',
         label: 'Copy JSON',
@@ -462,68 +403,17 @@ export default function ResultsPanel({
         },
       },
       {
-        id: 'export-selected',
-        label: 'Export Selection',
-        children: [
-          {
-            id: 'export-selected-csv',
-            label: 'CSV File (.csv)',
-            onSelect: () =>
-              onExport?.({
-                format: 'csv',
-                filename: `${tabTitle || 'selection'}_selected`,
-                columnNames: selectionColumnNames,
-                rows: selectionMatrix,
-              }),
-          },
-          {
-            id: 'export-selected-json',
-            label: 'JSON File (.json)',
-            onSelect: () =>
-              onExport?.({
-                format: 'json',
-                filename: `${tabTitle || 'selection'}_selected`,
-                columnNames: selectionColumnNames,
-                rows: selectionMatrix,
-              }),
-          },
-        ],
+        id: 'copy-text',
+        label: 'Copy Text',
+        onSelect: () =>
+          copy(cleanText(selectionMatrix, timezone), `Copied selected ${selectionLabel} as clean text.`),
       },
     ]
-
-    if (editable && menu.column && (!editableColumns || editableColumns.has(menu.column.name))) {
-      items.push({
-        id: 'set-value',
-        label: 'Set Value',
-        children: specialOptionsForDriver(driverType).map((option) => ({
-          id: option.id,
-          label: option.label,
-          onSelect: () => {
-            if (!selectionBounds || !menu.column) return
-            setEditMode(true)
-            for (let row = selectionBounds.rowStart; row <= selectionBounds.rowEnd; row += 1) {
-              onSetCellValue?.(row, menu.column.name, option.value)
-            }
-          },
-        })),
-      })
-    }
-
-    if (editable) {
-      items.push({
-        id: 'edit-result',
-        label: editMode ? 'Stop Editing' : 'Edit Result',
-        onSelect: () => {
-          setSelection(null)
-          setEditMode(!editMode)
-        },
-      })
-    }
 
     if (deletable && onDeleteRows && selectionBounds) {
       items.push({
         id: 'delete-rows',
-        label: 'Delete',
+        label: 'Delete Row',
         onSelect: () => {
           const rowIndexes: number[] = []
           for (let r = selectionBounds.rowStart; r <= selectionBounds.rowEnd; r += 1) {
@@ -534,29 +424,51 @@ export default function ResultsPanel({
       })
     }
 
+    items.push({
+      id: 'export-selected',
+      label: 'Export Selection',
+      children: [
+        {
+          id: 'export-selected-csv',
+          label: 'CSV File (.csv)',
+          onSelect: () =>
+            onExport?.({
+              format: 'csv',
+              filename: `${tabTitle || 'selection'}_selected`,
+              columnNames: selectionColumnNames,
+              rows: selectionMatrix,
+            }),
+        },
+        {
+          id: 'export-selected-json',
+          label: 'JSON File (.json)',
+          onSelect: () =>
+            onExport?.({
+              format: 'json',
+              filename: `${tabTitle || 'selection'}_selected`,
+              columnNames: selectionColumnNames,
+              rows: selectionMatrix,
+            }),
+        },
+      ],
+    })
+
+    items.sort((a, b) => a.label.localeCompare(b.label))
+
     return items
   }, [
-    activeResultSet?.columns,
-    activeResultSet?.rows,
     copy,
     deletable,
-    editMode,
-    editable,
-    editableColumns,
     menu,
-    onApplyFilter,
     onDeleteRows,
     onExport,
-    onSetCellValue,
-    openInspector,
     selectionBounds,
     selectionColumnNames,
     selectionLabel,
     selectionMatrix,
-    selectionRows,
     tabTitle,
     table,
-    wholeRowSelection,
+    timezone,
   ])
 
   return (
