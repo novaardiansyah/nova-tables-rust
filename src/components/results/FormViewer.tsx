@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import Icon from '@/components/common/Icon'
 import { formatDateTime, isDateTimeString } from '@/resultFormats'
 import { specialValuesForDriver, SpecialValueOption } from '@/components/results/ResultGridCell'
@@ -36,9 +36,42 @@ function parseValue(raw: string, original: unknown, specialValues: SpecialValueO
   const exact = specialValues.find((option) => option.label.toLowerCase() === text.toLowerCase())
   if (exact) return exact.value
   if (isSpecial(original)) return text === '' ? null : raw
+  if (typeof original === 'boolean') {
+    const lower = text.toLowerCase()
+    if (lower === 'true' || lower === '1') return true
+    if (lower === 'false' || lower === '0') return false
+    return raw
+  }
   if (typeof original !== 'number') return raw
   const parsed = Number(raw)
   return Number.isFinite(parsed) ? parsed : raw
+}
+
+const LONG_TYPE_RE = /text|json|xml|blob|clob|max/i
+const NON_TEXT_TYPE_RE = /int|float|decimal|numeric|real|money|double|date|time|bit|bool|guid|uniqueidentifier|binary|image/i
+const LONG_FIELD_NAME_RE = /^(?:old_?value|new_?value|payload|exception|error(?:_message)?|stack(?:_trace)?|description|desc|detail(?:s)?|comment(?:s)?|note(?:s)?|remark(?:s)?|message(?:s)?|content(?:s)?|body|query|sql|address|bio|summary|log(?:s)?|data|config|json|xml)$/i
+
+function isLongField(name: string, type: string, draft: string, original: unknown): boolean {
+  if (draft.includes('\n') || draft.includes('\r')) return true
+  if (LONG_TYPE_RE.test(type)) return true
+  if (NON_TEXT_TYPE_RE.test(type)) return false
+  if (typeof original === 'number' || typeof original === 'boolean' || original instanceof Date) return false
+  if (draft.length > 30) return true
+  if (LONG_FIELD_NAME_RE.test(name.trim())) return true
+  return false
+}
+
+function isNumericType(type: string): boolean {
+  const t = type.toLowerCase()
+  return (
+    t.includes('int') ||
+    t.includes('numeric') ||
+    t.includes('decimal') ||
+    t.includes('float') ||
+    t.includes('real') ||
+    t.includes('double') ||
+    t.includes('money')
+  )
 }
 
 function FormField({
@@ -64,10 +97,45 @@ function FormField({
   const [menuOpen, setMenuOpen] = useState(false)
   const focused = useRef(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const fieldRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
+  const selectionRef = useRef<{ start: number; end: number } | null>(null)
+  const userResizedRef = useRef(false)
+  const prevHeightRef = useRef<number | null>(null)
+
+  const useTextarea = isLongField(label, type, draft, value)
+  const isNumeric = isNumericType(type) || typeof value === 'number'
 
   useEffect(() => {
+    userResizedRef.current = false
     if (!focused.current) setDraft(toText(value, timezone))
   }, [value, timezone])
+
+  const adjustTextareaHeight = useCallback(() => {
+    const el = fieldRef.current as HTMLTextAreaElement | null
+    if (!el || el.tagName !== 'TEXTAREA') return
+    if (userResizedRef.current) return
+    const prevScrollTop = el.scrollTop
+    el.style.height = 'auto'
+    const borderOffset = el.offsetHeight - el.clientHeight
+    const nextHeight = Math.max(el.scrollHeight + borderOffset, 32)
+    el.style.height = `${nextHeight}px`
+    el.scrollTop = prevScrollTop
+  }, [])
+
+  useEffect(() => {
+    if (useTextarea) {
+      adjustTextareaHeight()
+    }
+  }, [draft, useTextarea, adjustTextareaHeight])
+
+  useEffect(() => {
+    if (focused.current && fieldRef.current && document.activeElement !== fieldRef.current) {
+      fieldRef.current.focus()
+      if (selectionRef.current) {
+        fieldRef.current.setSelectionRange(selectionRef.current.start, selectionRef.current.end)
+      }
+    }
+  })
 
   useEffect(() => {
     if (!menuOpen) return undefined
@@ -91,6 +159,29 @@ function FormField({
     if (optionValue === null) return value === null || value === undefined
     if (isSpecial(optionValue) && isSpecial(value)) return optionValue.special === value.special
     return false
+  }
+
+  const commonProps = {
+    id,
+    value: draft,
+    placeholder: value === null || value === undefined ? 'NULL' : '',
+    onFocus: () => {
+      focused.current = true
+    },
+    onBlur: () => {
+      focused.current = false
+    },
+    onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const nextVal = event.target.value
+      selectionRef.current = {
+        start: event.target.selectionStart ?? nextVal.length,
+        end: event.target.selectionEnd ?? nextVal.length,
+      }
+      setDraft(nextVal)
+      onChange(parseValue(nextVal, value, specialValues, timezone))
+    },
+    style: { fontSize: 'var(--json-font-size)' },
+    spellCheck: false,
   }
 
   return (
@@ -138,24 +229,47 @@ function FormField({
           ) : null}
         </div>
       </div>
-      <input
-        id={id}
-        type="text"
-        value={draft}
-        placeholder={value === null || value === undefined ? 'NULL' : ''}
-        onFocus={() => {
-          focused.current = true
-        }}
-        onBlur={() => {
-          focused.current = false
-        }}
-        onChange={(event) => {
-          setDraft(event.target.value)
-          onChange(parseValue(event.target.value, value, specialValues, timezone))
-        }}
-        className="w-full rounded border border-line-strong bg-base px-2 py-1 font-mono text-[length:var(--app-text-12)] text-text outline-none transition-colors select-text focus:border-accent/70"
-        style={{ fontSize: 'var(--json-font-size)' }}
-      />
+      {useTextarea ? (
+        <textarea
+          {...commonProps}
+          ref={(el) => {
+            fieldRef.current = el
+            if (el && !userResizedRef.current) {
+              const prevScrollTop = el.scrollTop
+              el.style.height = 'auto'
+              const borderOffset = el.offsetHeight - el.clientHeight
+              const nextHeight = Math.max(el.scrollHeight + borderOffset, 32)
+              el.style.height = `${nextHeight}px`
+              el.scrollTop = prevScrollTop
+            }
+          }}
+          onMouseDown={() => {
+            const el = fieldRef.current
+            if (el) prevHeightRef.current = el.offsetHeight
+          }}
+          onMouseUp={() => {
+            const el = fieldRef.current
+            if (el && prevHeightRef.current !== null && Math.abs(el.offsetHeight - prevHeightRef.current) > 2) {
+              userResizedRef.current = true
+            }
+          }}
+          onDoubleClick={() => {
+            userResizedRef.current = false
+            adjustTextareaHeight()
+          }}
+          className="w-full min-h-[32px] resize-y overflow-y-auto rounded border border-line-strong bg-base px-2 py-1 font-mono text-[length:var(--app-text-12)] leading-relaxed text-text outline-none transition-colors select-text focus:border-accent/70"
+        />
+      ) : (
+        <input
+          {...commonProps}
+          type="text"
+          inputMode={isNumeric ? 'decimal' : 'text'}
+          ref={(el) => {
+            fieldRef.current = el
+          }}
+          className="w-full rounded border border-line-strong bg-base px-2 py-1 font-mono text-[length:var(--app-text-12)] text-text outline-none transition-colors select-text focus:border-accent/70"
+        />
+      )}
     </div>
   )
 }
