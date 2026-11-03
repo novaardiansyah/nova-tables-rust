@@ -165,6 +165,7 @@ export default function Select({
         left: coords.left !== undefined ? `${coords.left}px` : undefined,
         right: coords.right !== undefined ? `${coords.right}px` : undefined,
         minWidth: `${coords.minWidth}px`,
+        width: panelClassName?.includes('w-full') ? `${coords.minWidth}px` : undefined,
         maxHeight: `${coords.maxHeight}px`,
       }}
       className={`fixed z-50 flex flex-col overflow-hidden rounded-lg border border-line-strong bg-elevated shadow-2xl shadow-black/60 ${

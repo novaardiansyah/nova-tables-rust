@@ -40,11 +40,16 @@ export default function FilterDialog({
   onApply,
   driverType = null,
 }: FilterDialogProps) {
-  const [conditions, setConditions] = useState<FilterCondition[]>(() => [createCondition(initialColumn)])
+  const [conditions, setConditions] = useState<FilterCondition[]>(() => [
+    createCondition(initialColumn || columns[0]?.name || ''),
+  ])
 
   useEffect(() => {
-    if (open) setConditions([createCondition(initialColumn)])
-  }, [open, initialColumn])
+    if (open) {
+      const defaultCol = initialColumn || columns[0]?.name || ''
+      setConditions([createCondition(defaultCol)])
+    }
+  }, [open, initialColumn, columns])
 
   useEffect(() => {
     if (!open) return undefined
@@ -71,7 +76,8 @@ export default function FilterDialog({
   }
 
   const addCondition = () => {
-    setConditions((prev) => [...prev, createCondition(initialColumn)])
+    const defaultCol = initialColumn || columns[0]?.name || ''
+    setConditions((prev) => [...prev, createCondition(defaultCol)])
   }
 
   const removeCondition = (index: number) => {
@@ -85,15 +91,15 @@ export default function FilterDialog({
         if (event.target === event.currentTarget) onCancel()
       }}
     >
-      <div className="w-full max-w-2xl animate-fade-in overflow-visible rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70">
-        <div className="flex items-start gap-3 px-5 py-4">
+      <div className="w-full max-w-2xl animate-fade-in overflow-hidden rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70 flex flex-col max-h-[85vh]">
+        <div className="flex items-start gap-3 px-5 py-4 shrink-0">
           <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
-            <Icon name="search" size={15} />
+            <Icon name="filter" size={15} />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-[length:var(--app-text-14)] font-semibold text-text-strong">Filter by column</h2>
+            <h2 className="text-[length:var(--app-text-14)] font-semibold text-text-strong">Filter Data</h2>
             <p className="mt-1 text-[length:var(--app-text-12)] leading-[calc(var(--app-text-12)+8px)] text-text-soft">
-              Build a condition and the query runs again with it applied.
+              Build conditions to filter the query results.
             </p>
           </div>
           <button type="button" className="icon-btn h-6 w-6" onClick={onCancel} title="Close">
@@ -101,66 +107,80 @@ export default function FilterDialog({
           </button>
         </div>
 
-        <div className="space-y-2 border-t border-line px-5 py-4">
+        <div className="space-y-2.5 border-t border-line px-5 py-4 max-h-[60vh] overflow-y-auto overflow-x-hidden min-h-0 flex-1">
           {conditions.map((condition, index) => {
             const operator = filterOperatorById(condition.operator)
             return (
               <div key={index} className="flex items-center gap-2">
-                {index > 0 ? (
-                  <div className="flex shrink-0 items-center rounded-md border border-line-strong bg-base p-0.5">
-                    {LOGIC_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => update(index, { logic: option.value as FilterLogic })}
-                        className={`rounded px-1.5 py-0.5 text-[length:var(--app-text-10)] font-semibold transition-colors ${
-                          condition.logic === option.value
-                            ? 'bg-accent-soft text-accent'
-                            : 'text-text-muted hover:text-text'
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
+                <div className="w-[72px] shrink-0 flex items-center justify-center">
+                  {index > 0 ? (
+                    <div className="flex w-full items-center justify-center rounded-md border border-line-strong bg-base p-0.5">
+                      {LOGIC_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => update(index, { logic: option.value as FilterLogic })}
+                          className={`flex-1 rounded py-0.5 text-center text-[length:var(--app-text-10)] font-semibold transition-colors ${
+                            condition.logic === option.value
+                              ? 'bg-accent-soft text-accent'
+                              : 'text-text-muted hover:text-text'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-[length:var(--app-text-11)] font-medium text-text-muted">Where</span>
+                  )}
+                </div>
 
-                <Select
-                  value={condition.column}
-                  options={columnOptions}
-                  onChange={(value) => update(index, { column: value })}
-                  className="min-w-0 flex-1"
-                  icon="table"
-                  placeholder="Select column"
-                  emptyLabel="No columns"
-                  panelClassName="w-full"
-                />
-
-                <Select
-                  value={condition.operator}
-                  options={OPERATOR_OPTIONS}
-                  onChange={(value) => update(index, { operator: value as FilterOperatorId })}
-                  className="min-w-0 flex-1"
-                  icon="code"
-                  placeholder="Select operator"
-                  emptyLabel="No operators"
-                  panelClassName="w-full"
-                />
-
-                {operator?.needsValue ? (
-                  <input
-                    className="field min-w-0 flex-1"
-                    value={String(condition.value ?? '')}
-                    onChange={(event) => update(index, { value: event.target.value })}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' && where) onApply(conditions)
-                    }}
-                    placeholder="Value"
-                    spellCheck={false}
+                <div className="w-48 shrink-0 min-w-0">
+                  <Select
+                    value={condition.column}
+                    options={columnOptions}
+                    onChange={(value) => update(index, { column: value })}
+                    className="w-full"
+                    icon="table"
+                    placeholder="Select column"
+                    emptyLabel="No columns"
+                    searchable
+                    searchPlaceholder="Search column…"
+                    panelClassName="w-48"
                   />
-                ) : (
-                  <span className="min-w-0 flex-1" />
-                )}
+                </div>
+
+                <div className="w-44 shrink-0 min-w-0">
+                  <Select
+                    value={condition.operator}
+                    options={OPERATOR_OPTIONS}
+                    onChange={(value) => update(index, { operator: value as FilterOperatorId })}
+                    className="w-full"
+                    icon="code"
+                    placeholder="Select operator"
+                    emptyLabel="No operators"
+                    panelClassName="w-44"
+                  />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  {operator?.needsValue ? (
+                    <input
+                      className="field min-w-0 w-full"
+                      value={String(condition.value ?? '')}
+                      onChange={(event) => update(index, { value: event.target.value })}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && where) onApply(conditions)
+                      }}
+                      placeholder="Value"
+                      spellCheck={false}
+                    />
+                  ) : (
+                    <div className="flex h-8 w-full items-center rounded-md border border-dashed border-line bg-tint/[0.02] px-2.5 text-[length:var(--app-text-11)] text-text-faint">
+                      No value needed
+                    </div>
+                  )}
+                </div>
 
                 <button
                   type="button"

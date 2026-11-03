@@ -137,7 +137,7 @@ export default function ResultsPanel({
   const [view, setView] = useState<'results' | 'messages' | 'plan'>('results')
   const [menu, setMenu] = useState<{ x: number; y: number; column: ResultColumn | null; columnIndex: number; row: number } | null>(null)
   const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number; column: ResultColumn } | null>(null)
-  const [filterColumn, setFilterColumn] = useState<string | null>(null)
+  const [filterDialogOpen, setFilterDialogOpen] = useState(false)
   const [exportMenu, setExportMenu] = useState<{ x: number; y: number } | null>(null)
   const [inspectTarget, setInspectTarget] = useState<InspectorTarget | null>(null)
 
@@ -701,6 +701,17 @@ export default function ResultsPanel({
           {status === 'error' && error?.code ? (
             <span className="font-mono text-[length:var(--app-text-10)] text-text-faint">{error.code}</span>
           ) : null}
+          {status === 'success' && activeResultSet?.columns && activeResultSet.columns.length > 0 && view !== 'messages' ? (
+            <button
+              type="button"
+              onClick={() => setFilterDialogOpen(true)}
+              title="Filter data"
+              className="flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[length:var(--app-text-11)] text-text-muted transition-colors hover:bg-tint/[0.03] hover:text-text"
+            >
+              <Icon name="filter" size={11} />
+              Filter
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -792,13 +803,8 @@ export default function ResultsPanel({
           items={[
             {
               id: 'copy-object-name',
-              label: 'Copy object name',
+              label: 'Copy Object Name',
               onSelect: () => copy(headerMenu.column.name, `Copied column name ${headerMenu.column.name}.`),
-            },
-            {
-              id: 'filter-by-column',
-              label: 'Filter by column',
-              onSelect: () => setFilterColumn(headerMenu.column.name),
             },
           ]}
           onClose={() => setHeaderMenu(null)}
@@ -806,13 +812,13 @@ export default function ResultsPanel({
       ) : null}
 
       <FilterDialog
-        open={filterColumn !== null}
+        open={filterDialogOpen}
         columns={activeResultSet?.columns ?? []}
-        initialColumn={filterColumn ?? ''}
+        initialColumn={activeResultSet?.columns[0]?.name ?? ''}
         driverType={driverType}
-        onCancel={() => setFilterColumn(null)}
+        onCancel={() => setFilterDialogOpen(false)}
         onApply={(conditions) => {
-          setFilterColumn(null)
+          setFilterDialogOpen(false)
           onApplyFilter?.(conditions)
         }}
       />
