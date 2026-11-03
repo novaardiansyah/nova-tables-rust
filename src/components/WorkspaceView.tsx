@@ -352,6 +352,7 @@ export default function WorkspaceView({
         onCellChange={handleCellChange}
         driverType={session?.connection?.driverType ?? null}
         timezone={settings.timezone}
+        onCopyText={handleCopyText}
       />
     </div>
   )

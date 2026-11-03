@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import Icon from '@/components/common/Icon'
+import ContextMenu from '@/components/common/ContextMenu'
 import { formatDateTime, isDateTimeString } from '@/resultFormats'
 import { specialValuesForDriver, SpecialValueOption } from '@/components/results/ResultGridCell'
 
@@ -11,6 +12,7 @@ export interface FormViewerProps {
   onCellChange?: (rowIndex: number, columnName: string, nextValue: unknown, prevValue: unknown) => void
   driverType?: string | null
   timezone?: string
+  onCopyText?: (payload: string, message?: string) => void
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/
@@ -83,6 +85,7 @@ function FormField({
   onSpecial,
   specialValues,
   timezone,
+  onLabelContextMenu,
 }: {
   id: string
   label: string
@@ -92,6 +95,7 @@ function FormField({
   onSpecial?: (special: unknown) => void
   specialValues: SpecialValueOption[]
   timezone?: string
+  onLabelContextMenu?: (event: React.MouseEvent, label: string) => void
 }) {
   const [draft, setDraft] = useState(() => toText(value, timezone))
   const [menuOpen, setMenuOpen] = useState(false)
@@ -187,7 +191,12 @@ function FormField({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
-        <label htmlFor={id} className="select-text min-w-0 text-[length:var(--app-text-11)] font-medium text-text-soft truncate" title={label}>
+        <label
+          htmlFor={id}
+          className="select-text min-w-0 text-[length:var(--app-text-11)] font-medium text-text-soft truncate cursor-context-menu"
+          title={label}
+          onContextMenu={(event) => onLabelContextMenu?.(event, label)}
+        >
           {label}
         </label>
         <div className="relative flex shrink-0 items-center gap-1.5" ref={menuRef}>
@@ -282,7 +291,21 @@ export default function FormViewer({
   onCellChange,
   driverType,
   timezone,
+  onCopyText,
 }: FormViewerProps) {
+  const [filter, setFilter] = useState('')
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; fieldName: string } | null>(null)
+
+  const handleLabelContextMenu = useCallback((event: React.MouseEvent, fieldName: string) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      fieldName,
+    })
+  }, [])
+
   if (!columns.length) {
     return (
       <div className="flex flex-1 items-center justify-center p-4 text-[length:var(--app-text-11)] text-text-faint">
@@ -293,36 +316,93 @@ export default function FormViewer({
 
   const specialValues = specialValuesForDriver(driverType)
   const displayedRows = rows.length ? rows : [[]]
+  const normalizedFilter = filter.trim().toLowerCase()
+
+  const visibleColumnEntries = columns
+    .map((name, index) => ({ name, index }))
+    .filter((entry) => !normalizedFilter || entry.name.toLowerCase().includes(normalizedFilter))
 
   return (
-    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-2">
-      {displayedRows.map((row, rowIdx) => {
-        const rowIndex = rowIndexes?.[rowIdx] ?? rowIdx
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="shrink-0 px-3 pt-2 pb-1">
+        <div className="flex items-center gap-1.5 rounded-md border border-line bg-base px-2 py-[5px] focus-within:border-accent/70 focus-within:ring-2 focus-within:ring-accent/20">
+          <Icon name="search" size={12} className="shrink-0 text-text-faint" />
+          <input
+            type="text"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            placeholder="Search fields.."
+            aria-label="Search fields"
+            className="w-full min-w-0 bg-transparent text-[length:var(--app-text-12)] text-text placeholder:text-text-muted outline-none"
+          />
+          {filter ? (
+            <button
+              type="button"
+              className="icon-btn h-4 w-4 text-text-faint hover:text-text"
+              title="Clear Filter"
+              aria-label="Clear Filter"
+              onClick={() => setFilter('')}
+            >
+              <Icon name="x" size={11} />
+            </button>
+          ) : null}
+        </div>
+      </div>
 
-        return (
-          <section key={`${rowIdx}-${rowIndex}`} className="flex flex-col gap-2 rounded-md border border-line bg-base p-3">
-            {displayedRows.length > 1 ? (
-              <p className="text-[length:var(--app-text-10)] font-mono uppercase tracking-wide text-text-faint">Row {rowIndex + 1}</p>
-            ) : null}
-            {columns.map((columnName, colIdx) => {
-              const original = row[colIdx]
-              return (
-                <FormField
-                  key={columnName}
-                  id={`form-field-${rowIndex}-${columnName}`}
-                  label={columnName}
-                  type={columnTypes[colIdx] ?? (original === null ? 'null' : typeof original)}
-                  value={original}
-                  onChange={(next) => onCellChange?.(rowIndex, columnName, next, original)}
-                  onSpecial={onCellChange ? (special) => onCellChange(rowIndex, columnName, special, original) : undefined}
-                  specialValues={specialValues}
-                  timezone={timezone}
-                />
-              )
-            })}
-          </section>
-        )
-      })}
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-2">
+        {visibleColumnEntries.length === 0 ? (
+          <p className="py-4 text-center text-[length:var(--app-text-11)] text-text-faint">
+            No fields match &quot;{filter}&quot;
+          </p>
+        ) : (
+          displayedRows.map((row, rowIdx) => {
+            const rowIndex = rowIndexes?.[rowIdx] ?? rowIdx
+
+            return (
+              <div key={`${rowIdx}-${rowIndex}`} className="flex flex-col gap-2.5">
+                {displayedRows.length > 1 ? (
+                  <p className="border-b border-line pb-1 text-[length:var(--app-text-10)] font-mono uppercase tracking-wide text-text-faint">
+                    Row {rowIndex + 1}
+                  </p>
+                ) : null}
+                {visibleColumnEntries.map(({ name: columnName, index: colIdx }) => {
+                  const original = row[colIdx]
+                  return (
+                    <FormField
+                      key={columnName}
+                      id={`form-field-${rowIndex}-${columnName}`}
+                      label={columnName}
+                      type={columnTypes[colIdx] ?? (original === null ? 'null' : typeof original)}
+                      value={original}
+                      onChange={(next) => onCellChange?.(rowIndex, columnName, next, original)}
+                      onSpecial={onCellChange ? (special) => onCellChange(rowIndex, columnName, special, original) : undefined}
+                      specialValues={specialValues}
+                      timezone={timezone}
+                      onLabelContextMenu={handleLabelContextMenu}
+                    />
+                  )
+                })}
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {contextMenu ? (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={[
+            {
+              id: 'copy-object-name',
+              label: 'Copy Object Name',
+              onSelect: () =>
+                onCopyText?.(contextMenu.fieldName, `Copied column name ${contextMenu.fieldName}.`),
+            },
+          ]}
+          onClose={() => setContextMenu(null)}
+        />
+      ) : null}
     </div>
   )
 }
