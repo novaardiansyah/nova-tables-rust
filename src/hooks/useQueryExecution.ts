@@ -130,9 +130,20 @@ export function useQueryExecution({
           recordHistory: true,
         })
         if (cancelRequestedRef.current) return
-        const firstFilled = result.resultSets.findIndex((set) => set.rowCount > 0)
+        let resultSets = result.resultSets
+        const tabNow = current.tabs.find((item) => item.id === tabId)
+        if (resultSets.length === 0 && tabNow?.filterConditions && tabNow?.cachedColumns?.length) {
+          resultSets = [
+            {
+              columns: tabNow.cachedColumns,
+              rows: [],
+              rowCount: 0,
+            },
+          ]
+        }
+        const firstFilled = resultSets.findIndex((set) => set.rowCount > 0)
         updateTab(current.connectionId, tabId, {
-          state: { status: 'success', result, error: null },
+          state: { status: 'success', result: { ...result, resultSets }, error: null },
           activeSet: firstFilled === -1 ? 0 : firstFilled,
         })
         if (inferredTable) {
@@ -426,16 +437,37 @@ export function useQueryExecution({
       if (!where) return
 
       const sql = buildFilteredSql(baseSql, where)
+      const previousColumns = tab.state.result?.resultSets?.[0]?.columns ?? []
+      const cachedColumns = previousColumns.length > 0 ? previousColumns : (tab.cachedColumns ?? [])
 
       updateTab(current.connectionId, tab.id, {
         filterConditions: conditions,
         baseSql,
+        cachedColumns,
       })
 
       execute(sql, tab.id)
     },
     [activeSession, execute, showBanner, sqlRef, updateTab],
   )
+
+  const handleResetFilter = useCallback(async () => {
+    const current = activeSession()
+    if (!current) return
+    const tab = current.tabs.find((item) => item.id === current.activeTabId)
+    if (!tab || tab.kind !== 'query') return
+
+    const originalSql = (tab.baseSql || sqlRef.current).trim()
+    updateTab(current.connectionId, tab.id, {
+      filterConditions: undefined,
+      baseSql: undefined,
+      cachedColumns: undefined,
+    })
+
+    if (originalSql) {
+      execute(originalSql, tab.id)
+    }
+  }, [activeSession, execute, sqlRef, updateTab])
 
   const handleEditConfirmApply = useCallback(async () => {
     const target = editConfirmTarget
@@ -636,6 +668,7 @@ export function useQueryExecution({
     handleDeleteRows,
     handleRunUpdate,
     handleApplyFilter,
+    handleResetFilter,
     handleEditConfirmApply,
     handleEditConfirmDiscard,
     handleEditConfirmCopy,

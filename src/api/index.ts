@@ -151,7 +151,7 @@ export interface DatabaseModule {
 export interface QueryResult {
   ok?: boolean
   resultSets: {
-    columns: { name: string; type?: string; [key: string]: unknown }[]
+    columns: { name: string; type?: string;[key: string]: unknown }[]
     rows: unknown[][]
     rowCount: number
     [key: string]: unknown
@@ -167,7 +167,7 @@ export interface QueryResult {
   rowCount?: number
   truncated?: boolean
   maxRows?: number
-  columns?: { name: string; type?: string; [key: string]: unknown }[]
+  columns?: { name: string; type?: string;[key: string]: unknown }[]
   rows?: unknown[][]
   executionTimeMs?: number
   message?: string
@@ -521,7 +521,7 @@ export const api = {
     const res = await callCommand<{ version?: string }>('get_system_info')
     return {
       name: 'Nova Tables',
-      version: res?.version || '2.2.2',
+      version: res?.version || '2.2.3',
     }
   },
 
@@ -600,21 +600,21 @@ export const api = {
     return legacyCopyText(value)
   },
 
-  saveFile: async (input: unknown): Promise<{ saved?: boolean; filePath?: string; [key: string]: unknown }> => {
+  saveFile: async (input: unknown): Promise<{ saved?: boolean; filePath?: string;[key: string]: unknown }> => {
     const res = await callCommand<any>('save_file', { input })
     return res || { saved: false }
   },
 
   onOpenConnection: (_handler: unknown): (() => void) => {
-    return () => {}
+    return () => { }
   },
 
   onNewConnection: (_handler: unknown): (() => void) => {
-    return () => {}
+    return () => { }
   },
 
   onPreferences: (_handler: unknown): (() => void) => {
-    return () => {}
+    return () => { }
   },
 
   listConnections: async (): Promise<ConnectionModel[]> => {
@@ -625,12 +625,12 @@ export const api = {
         conn.databaseName !== undefined && conn.databaseName !== null
           ? conn.databaseName
           : conn.database !== undefined && conn.database !== null
-          ? conn.database
-          : conn.lastDatabaseUsed || ''
+            ? conn.database
+            : conn.lastDatabaseUsed || ''
       const hasPassword = Boolean(
         conn.hasPassword ||
-          (conn.password && conn.password.length > 0) ||
-          (conn.passwordCipher && conn.passwordCipher.length > 0),
+        (conn.password && conn.password.length > 0) ||
+        (conn.passwordCipher && conn.passwordCipher.length > 0),
       )
       return {
         ...conn,
@@ -699,16 +699,16 @@ export const api = {
     const saved = res?.connection || payload
     const hasPassword = Boolean(
       saved.hasPassword ||
-        (saved.password && saved.password.length > 0) ||
-        (saved.passwordCipher && saved.passwordCipher.length > 0) ||
-        connection.hasPassword,
+      (saved.password && saved.password.length > 0) ||
+      (saved.passwordCipher && saved.passwordCipher.length > 0) ||
+      connection.hasPassword,
     )
     const effectiveDb =
       saved.databaseName !== undefined && saved.databaseName !== null
         ? saved.databaseName
         : saved.database !== undefined && saved.database !== null
-        ? saved.database
-        : dbName
+          ? saved.database
+          : dbName
     return {
       ...saved,
       database: effectiveDb,
@@ -728,8 +728,8 @@ export const api = {
       conn.databaseName !== undefined && conn.databaseName !== null
         ? conn.databaseName
         : conn.database !== undefined && conn.database !== null
-        ? conn.database
-        : ''
+          ? conn.database
+          : ''
     return {
       ...conn,
       database: explicitDb,
@@ -1014,11 +1014,11 @@ export const api = {
     const imported = includeConnections
       ? await applyImportedConnections(payload)
       : {
-          importedCount: 0,
-          importedFolderCount: 0,
-          connections: await api.listConnections(),
-          folders: await api.listFolders(),
-        }
+        importedCount: 0,
+        importedFolderCount: 0,
+        connections: await api.listConnections(),
+        folders: await api.listFolders(),
+      }
 
     const settings =
       includeSettings && payload.settings && typeof payload.settings === 'object'
@@ -1052,10 +1052,10 @@ export const api = {
     return callCommand('delete_folder', { id })
   },
 
-  reorderTree: async (input: unknown): Promise<{ connections: ConnectionModel[]; folders: FolderModel[]; [key: string]: unknown }> => {
+  reorderTree: async (input: unknown): Promise<{ connections: ConnectionModel[]; folders: FolderModel[];[key: string]: unknown }> => {
     try {
       localStorage.setItem('nova_tables_tree_order', JSON.stringify(input))
-    } catch {}
+    } catch { }
     const res = await callCommand<any>('reorder_tree', { input })
     return {
       connections: res?.connections || (await api.listConnections()),
@@ -1126,7 +1126,7 @@ export const api = {
           JSON.stringify({ connections: nextConnections, folders: nextFolders }),
         )
       }
-    } catch {}
+    } catch { }
 
     return result
   },
@@ -1195,17 +1195,17 @@ export const api = {
       database: (res?.database !== undefined && res?.database !== null) ? res.database : target?.database || target?.lastDatabaseUsed || target?.databaseName || (isMysql ? '' : 'master'),
       databases: isMysql
         ? [
-            { name: 'information_schema', isSystem: true, isOnline: true },
-            { name: 'mysql', isSystem: true, isOnline: true },
-            { name: 'performance_schema', isSystem: true, isOnline: true },
-            { name: 'sys', isSystem: true, isOnline: true },
-          ]
+          { name: 'information_schema', isSystem: true, isOnline: true },
+          { name: 'mysql', isSystem: true, isOnline: true },
+          { name: 'performance_schema', isSystem: true, isOnline: true },
+          { name: 'sys', isSystem: true, isOnline: true },
+        ]
         : [
-            { name: 'master', isSystem: true, isOnline: true },
-            { name: 'model', isSystem: true, isOnline: true },
-            { name: 'msdb', isSystem: true, isOnline: true },
-            { name: 'tempdb', isSystem: true, isOnline: true },
-          ],
+          { name: 'master', isSystem: true, isOnline: true },
+          { name: 'model', isSystem: true, isOnline: true },
+          { name: 'msdb', isSystem: true, isOnline: true },
+          { name: 'tempdb', isSystem: true, isOnline: true },
+        ],
       serverVersion: 'Microsoft SQL Server',
       serverName: target?.host || '127.0.0.1',
       edition: 'Developer Edition',
@@ -1235,11 +1235,11 @@ export const api = {
     )
   },
 
-  createDatabase: async (input: { connectionId: string; database: string; [key: string]: unknown }): Promise<unknown> => {
+  createDatabase: async (input: { connectionId: string; database: string;[key: string]: unknown }): Promise<unknown> => {
     return callCommand('create_database', { input })
   },
 
-  dropDatabase: async (input: { connectionId: string; database: string; confirmName?: string; acknowledged?: boolean; [key: string]: unknown }): Promise<unknown> => {
+  dropDatabase: async (input: { connectionId: string; database: string; confirmName?: string; acknowledged?: boolean;[key: string]: unknown }): Promise<unknown> => {
     return callCommand('drop_database', { input })
   },
 
@@ -1363,7 +1363,7 @@ export const api = {
     schema: string,
     name: string,
     type?: string
-  ): Promise<{ definition?: string; statement?: string; [key: string]: unknown }> => {
+  ): Promise<{ definition?: string; statement?: string;[key: string]: unknown }> => {
     const res = await callCommand<any>('module_definition', {
       connectionId,
       database,

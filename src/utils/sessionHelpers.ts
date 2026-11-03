@@ -4,6 +4,7 @@ import { EditSource } from '@/edits'
 import { SavedQueryItem } from '@/api'
 import { TableDesign } from '@/designSql'
 import { ResultsPanelState } from '@/components/results/ResultsPanel'
+import { ResultColumn } from '@/components/results/ResultGrid'
 import { FilterCondition } from '@/filters'
 
 export const STARTER_SQL = `-- Nova Tables
@@ -68,6 +69,7 @@ export interface SessionTab {
   lastExecutedSql?: string | null
   baseSql?: string
   filterConditions?: FilterCondition[]
+  cachedColumns?: ResultColumn[]
   // Design properties
   target?: any
   design?: TableDesign | null

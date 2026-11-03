@@ -6,9 +6,10 @@ import FilterDialog from '@/components/results/FilterDialog'
 import ResultGrid, { GridSelection, ResultColumn, ResultRelation } from '@/components/results/ResultGrid'
 import ValueInspectorDialog, { InspectorTarget } from '@/components/results/ValueInspectorDialog'
 import ExecutionPlanView from '@/components/results/ExecutionPlanView'
+import { CompletedState, ErrorState, IdleState, MessageList } from '@/components/results/ResultPanelStates'
 import { cleanText, formatDuration, formatNumber, jsonRecords, sqlInsertRows } from '@/resultFormats'
 import { editEditableColumns, editHasKeys, EditSource } from '@/edits'
-import { FilterCondition } from '@/filters'
+import { FilterCondition, filterOperatorById } from '@/filters'
 import { ParsedPlan } from '@/planParser'
 
 export function specialOptionsForDriver(driverType?: string | null): { id: string; label: string; value: unknown }[] {
@@ -92,6 +93,7 @@ export interface ResultsPanelProps {
   onConfirmOpen?: () => void
   onDeleteConfirmOpen?: () => void
   onApplyFilter?: (conditions: FilterCondition[]) => void
+  onResetFilter?: () => void
   filterConditions?: FilterCondition[]
   onActiveDataChange?: (data: ActiveDataPayload | null) => void
   onExport?: (data: ExportDataPayload) => void
@@ -120,6 +122,7 @@ export default function ResultsPanel({
   onConfirmOpen,
   onDeleteConfirmOpen,
   onApplyFilter,
+  onResetFilter,
   filterConditions,
   onActiveDataChange,
   onExport,
@@ -148,6 +151,37 @@ export default function ResultsPanel({
     () => (activeResultSet?.columns ?? []).map((column) => column.name),
     [activeResultSet],
   )
+
+  const cachedColumnsRef = useRef<ResultColumn[]>([])
+  useEffect(() => {
+    if (activeResultSet?.columns && activeResultSet.columns.length > 0) {
+      cachedColumnsRef.current = activeResultSet.columns
+    }
+  }, [activeResultSet?.columns])
+
+  const effectiveColumns = useMemo(() => {
+    if (activeResultSet?.columns && activeResultSet.columns.length > 0) {
+      return activeResultSet.columns
+    }
+    return cachedColumnsRef.current
+  }, [activeResultSet?.columns])
+
+  const activeConditions = useMemo(() => {
+    const list = filterConditions ?? savedConditions ?? []
+    return list.filter((c) => {
+      const op = filterOperatorById(c.operator)
+      if (!op) return false
+      if (op.needsValue && String(c.value ?? '').trim() === '') return false
+      return Boolean(c.column)
+    })
+  }, [filterConditions, savedConditions])
+
+  const hasActiveFilter = activeConditions.length > 0
+  const activeFilterCount = activeConditions.length
+
+  const canFilter =
+    (status === 'success' || hasActiveFilter) &&
+    (effectiveColumns.length > 0 || hasActiveFilter)
 
   const hasKey = editHasKeys(editSource)
   const editableColumns = useMemo(() => editEditableColumns(editSource), [editSource])
@@ -704,16 +738,41 @@ export default function ResultsPanel({
           {status === 'error' && error?.code ? (
             <span className="font-mono text-[length:var(--app-text-10)] text-text-faint">{error.code}</span>
           ) : null}
-          {status === 'success' && activeResultSet?.columns && activeResultSet.columns.length > 0 && view !== 'messages' ? (
-            <button
-              type="button"
-              onClick={() => setFilterDialogOpen(true)}
-              title="Filter data"
-              className="flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[length:var(--app-text-11)] text-text-muted transition-colors hover:bg-tint/[0.03] hover:text-text"
-            >
-              <Icon name="filter" size={11} />
-              Filter
-            </button>
+          {canFilter ? (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setFilterDialogOpen(true)}
+                title={hasActiveFilter ? `${activeFilterCount} active filter${activeFilterCount > 1 ? 's' : ''}` : 'Filter data'}
+                className={`flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[length:var(--app-text-11)] transition-colors ${
+                  hasActiveFilter
+                    ? 'bg-accent/15 font-medium text-accent hover:bg-accent/25'
+                    : 'text-text-muted hover:bg-tint/[0.03] hover:text-text'
+                }`}
+              >
+                <Icon name="filter" size={11} />
+                <span>Filter</span>
+                {hasActiveFilter ? (
+                  <span className="rounded-full bg-accent/20 px-1.5 text-[length:var(--app-text-9)] font-semibold text-accent">
+                    {activeFilterCount}
+                  </span>
+                ) : null}
+              </button>
+              {hasActiveFilter && onResetFilter ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSavedConditions(null)
+                    onResetFilter()
+                  }}
+                  title="Reset Filter"
+                  className="flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-[length:var(--app-text-11)] text-text-muted transition-colors hover:bg-danger/10 hover:text-danger"
+                >
+                  <Icon name="x" size={10} />
+                  <span>Reset Filter</span>
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </div>
@@ -733,9 +792,9 @@ export default function ResultsPanel({
         ) : null}
         {view !== 'plan' && status === 'error' ? <ErrorState error={error} /> : null}
         {view !== 'plan' && status === 'success' && result ? (
-          view === 'messages' ? (
+          view === 'messages' && resultSets.length === 0 && !hasActiveFilter ? (
             <MessageList messages={messages} />
-          ) : resultSets.length === 0 ? (
+          ) : resultSets.length === 0 && !hasActiveFilter ? (
             <CompletedState rowsAffected={rowsAffected} elapsedMs={result.elapsedMs} />
           ) : (
             <div className="flex h-full flex-col">
@@ -748,8 +807,8 @@ export default function ResultsPanel({
               <div className="min-h-0 flex-1">
                 <ResultGrid
                   key={activeIndex}
-                  columns={activeResultSet.columns}
-                  rows={activeResultSet.rows}
+                  columns={activeResultSet?.columns ?? effectiveColumns}
+                  rows={activeResultSet?.rows ?? []}
                   relations={relations}
                   timezone={timezone}
                   onRelationClick={onRelationClick}
@@ -816,8 +875,8 @@ export default function ResultsPanel({
 
       <FilterDialog
         open={filterDialogOpen}
-        columns={activeResultSet?.columns ?? []}
-        initialColumn={activeResultSet?.columns[0]?.name ?? ''}
+        columns={effectiveColumns}
+        initialColumn={effectiveColumns[0]?.name ?? ''}
         initialConditions={filterConditions ?? savedConditions ?? undefined}
         driverType={driverType}
         onCancel={() => setFilterDialogOpen(false)}
@@ -826,6 +885,14 @@ export default function ResultsPanel({
           setFilterDialogOpen(false)
           onApplyFilter?.(conditions)
         }}
+        onReset={
+          hasActiveFilter && onResetFilter
+            ? () => {
+                setSavedConditions(null)
+                onResetFilter()
+              }
+            : undefined
+        }
         onCopy={onCopyText}
       />
 
@@ -864,127 +931,5 @@ export default function ResultsPanel({
         onCopy={onCopyText}
       />
     </section>
-  )
-}
-
-function MessageList({ messages }: { messages: QueryResultMessage[] }) {
-  if (!messages.length) {
-    return (
-      <div className="flex h-full items-center justify-center text-[length:var(--app-text-12)] text-text-faint">
-        No messages.
-      </div>
-    )
-  }
-
-  return (
-    <div className="h-full overflow-auto p-3">
-      <ul className="space-y-1 font-mono text-[length:var(--app-text-12)] leading-[calc(var(--app-text-12)+8px)] text-text-soft">
-        {messages.map((message, index) => (
-          <li key={index} className="whitespace-pre-wrap break-words">
-            {message.type === 'rows'
-              ? `(${formatNumber(message.count ?? 0)} row${message.count === 1 ? '' : 's'} affected)`
-              : message.text}
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-function IdleState() {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-      <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-line-strong bg-elevated text-text-faint">
-        <Icon name="grid" size={19} />
-      </span>
-      <div>
-        <p className="text-[length:var(--app-text-13)] text-text-soft">No query results yet</p>
-        <p className="mt-1 text-[length:var(--app-text-11)] text-text-faint">
-          Run a query with <span className="kbd">Ctrl</span> + <span className="kbd">↵</span> to see the
-          output here.
-        </p>
-      </div>
-    </div>
-  )
-}
-
-function ErrorState({ error }: { error?: QueryErrorData | null }) {
-  const [copied, setCopied] = useState(false)
-
-  useEffect(() => {
-    if (!copied) return undefined
-    const timer = setTimeout(() => setCopied(false), 1400)
-    return () => clearTimeout(timer)
-  }, [copied])
-
-  const handleCopy = async () => {
-    try {
-      const ok = await api.copyText(error?.message || 'Unknown error')
-      setCopied(ok)
-    } catch {
-      // Keep the message visible even if the clipboard is unavailable.
-    }
-  }
-
-  const details = [
-    error?.number ? `Error ${error.number}` : null,
-    error?.severity ? `Level ${error.severity}` : null,
-    error?.lineNumber ? `Line ${error.lineNumber}` : null,
-    error?.state ? `State ${error.state}` : null,
-  ].filter(Boolean)
-
-  return (
-    <div className="h-full overflow-auto p-4">
-      <div className="rounded-lg border border-danger/25 bg-danger/[0.06] p-4">
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-danger/15 text-danger">
-            <Icon name="alert-triangle" size={13} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[length:var(--app-text-10)] font-semibold uppercase tracking-wider text-danger/80">
-              Query failed
-            </p>
-            <p className="mt-1 whitespace-pre-wrap break-words font-mono text-[length:var(--app-text-12)] leading-[calc(var(--app-text-12)+8px)] text-danger">
-              {error?.message || 'Unknown error'}
-            </p>
-            {details.length > 0 ? (
-              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[length:var(--app-text-10)] text-danger/60">
-                {details.map((detail) => (
-                  <span key={detail}>{detail}</span>
-                ))}
-              </div>
-            ) : null}
-            <div className="mt-3 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="icon-btn h-5 w-5 shrink-0 text-danger/60 hover:text-danger"
-                title={copied ? 'Copied' : 'Copy error'}
-              >
-                <Icon name={copied ? 'check' : 'copy'} size={13} />
-              </button>
-              {copied ? (
-                <p className="text-[length:var(--app-text-10)] text-danger/60">Copied</p>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function CompletedState({ rowsAffected, elapsedMs }: { rowsAffected: number; elapsedMs: number }) {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-success/10 text-success">
-        <Icon name="check-circle" size={18} />
-      </span>
-      <p className="text-[length:var(--app-text-13)] text-text">Query completed successfully</p>
-      <p className="text-[length:var(--app-text-11)] text-text-muted">
-        {rowsAffected > 0 ? `${formatNumber(rowsAffected)} rows affected` : 'No rows returned'} ·{' '}
-        {formatDuration(elapsedMs)}
-      </p>
-    </div>
   )
 }

@@ -88,6 +88,7 @@ export default function WorkspaceView({
     handleSetCellValue,
     handleDeleteRows,
     handleApplyFilter,
+    handleResetFilter,
   } = queryExecution
 
   const {
@@ -311,6 +312,7 @@ export default function WorkspaceView({
               }}
               onDeleteRows={handleDeleteRows}
               onApplyFilter={handleApplyFilter}
+              onResetFilter={handleResetFilter}
               filterConditions={activeTab?.filterConditions}
               onActiveDataChange={setActiveResultData}
               onExport={handleExportResult}

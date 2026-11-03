@@ -33,6 +33,7 @@ export interface FilterDialogProps {
   initialConditions?: FilterCondition[]
   onCancel: () => void
   onApply: (conditions: FilterCondition[]) => void
+  onReset?: () => void
   onCopy?: (text: string, message?: string) => void
   driverType?: string | null
 }
@@ -44,6 +45,7 @@ export default function FilterDialog({
   initialConditions,
   onCancel,
   onApply,
+  onReset,
   onCopy,
   driverType = null,
 }: FilterDialogProps) {
@@ -253,18 +255,34 @@ export default function FilterDialog({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3.5">
-          <button type="button" className="btn-soft" onClick={onCancel}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={!where}
-            onClick={() => onApply(conditions)}
-          >
-            Apply filter
-          </button>
+        <div className="flex items-center justify-between border-t border-line px-5 py-3.5">
+          {onReset ? (
+            <button
+              type="button"
+              className="btn-soft text-danger hover:bg-danger/10"
+              onClick={() => {
+                onReset()
+                onCancel()
+              }}
+            >
+              Reset Filter
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="flex items-center gap-2">
+            <button type="button" className="btn-soft" onClick={onCancel}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={!where}
+              onClick={() => onApply(conditions)}
+            >
+              Apply filter
+            </button>
+          </div>
         </div>
       </div>
     </div>

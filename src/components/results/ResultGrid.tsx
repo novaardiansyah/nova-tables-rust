@@ -554,9 +554,27 @@ export default function ResultGrid({
             </tr>
           </thead>
           <tbody>
-            {visibleRows.map(({ row, origIndex }, visibleIdx) => (
-              <tr
-                key={origIndex}
+            {visibleRows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={(columns.length || 1) + 1}
+                  className="px-4 py-16 text-center text-[length:var(--app-text-12)] text-text-muted"
+                >
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-line-strong bg-elevated text-text-faint">
+                      <Icon name="filter" size={16} />
+                    </span>
+                    <span className="font-medium text-text-soft">No rows match the filter</span>
+                    <span className="text-[length:var(--app-text-11)] text-text-faint">
+                      Try modifying your conditions or resetting the filter.
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              visibleRows.map(({ row, origIndex }, visibleIdx) => (
+                <tr
+                  key={origIndex}
                 className={`group ${rowSelected(origIndex) ? 'bg-tint/[0.04]' : ''} ${
                   deleteMode && deletingRows.includes(origIndex) ? 'bg-danger/[0.08]' : ''
                 }`}
@@ -630,7 +648,8 @@ export default function ResultGrid({
                   )
                 })}
               </tr>
-            ))}
+            ))
+          )}
           </tbody>
         </table>
 
