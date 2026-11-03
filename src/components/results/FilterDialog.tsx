@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { api } from '@/api'
 import Icon from '@/components/common/Icon'
 import Select from '@/components/common/Select'
 import {
@@ -12,7 +13,9 @@ import {
 } from '@/filters'
 
 const LOGIC_OPTIONS = FILTER_LOGICS.map((item) => ({ value: item.id, label: item.label }))
-const OPERATOR_OPTIONS = FILTER_OPERATORS.map((item) => ({ value: item.id, label: item.label }))
+const OPERATOR_OPTIONS = [...FILTER_OPERATORS]
+  .map((item) => ({ value: item.id, label: item.label }))
+  .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))
 
 function createCondition(column: string, operator: FilterOperatorId = 'contains'): FilterCondition {
   return { logic: 'AND', column, operator, value: '' }
@@ -27,8 +30,10 @@ export interface FilterDialogProps {
   open: boolean
   columns?: FilterColumnItem[]
   initialColumn?: string
+  initialConditions?: FilterCondition[]
   onCancel: () => void
   onApply: (conditions: FilterCondition[]) => void
+  onCopy?: (text: string, message?: string) => void
   driverType?: string | null
 }
 
@@ -36,20 +41,29 @@ export default function FilterDialog({
   open,
   columns = [],
   initialColumn = '',
+  initialConditions,
   onCancel,
   onApply,
+  onCopy,
   driverType = null,
 }: FilterDialogProps) {
-  const [conditions, setConditions] = useState<FilterCondition[]>(() => [
-    createCondition(initialColumn || columns[0]?.name || ''),
-  ])
+  const [conditions, setConditions] = useState<FilterCondition[]>(() => {
+    if (initialConditions && initialConditions.length > 0) {
+      return initialConditions
+    }
+    return [createCondition(initialColumn || columns[0]?.name || '')]
+  })
 
   useEffect(() => {
     if (open) {
-      const defaultCol = initialColumn || columns[0]?.name || ''
-      setConditions([createCondition(defaultCol)])
+      if (initialConditions && initialConditions.length > 0) {
+        setConditions(initialConditions)
+      } else {
+        const defaultCol = initialColumn || columns[0]?.name || ''
+        setConditions([createCondition(defaultCol)])
+      }
     }
-  }, [open, initialColumn, columns])
+  }, [open, initialConditions, initialColumn, columns])
 
   useEffect(() => {
     if (!open) return undefined
@@ -61,13 +75,30 @@ export default function FilterDialog({
   }, [open, onCancel])
 
   const columnOptions = useMemo(
-    () => columns.map((column) => ({ value: column.name, label: column.name })),
+    () =>
+      [...columns]
+        .map((column) => ({ value: column.name, label: column.name }))
+        .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })),
     [columns],
   )
 
   const where = useMemo(() => buildFilterWhere(conditions, driverType), [conditions, driverType])
 
   if (!open) return null
+
+  const handleCopyWhere = async () => {
+    if (!where) return
+    const clause = `WHERE ${where}`
+    if (onCopy) {
+      onCopy(clause, 'Copied WHERE clause to clipboard.')
+    } else {
+      try {
+        await api.copyText(clause)
+      } catch {
+        await navigator.clipboard.writeText(clause)
+      }
+    }
+  }
 
   const update = (index: number, patch: Partial<FilterCondition>) => {
     setConditions((prev) =>
@@ -203,9 +234,21 @@ export default function FilterDialog({
           </div>
 
           <div className="pt-2">
-            <span className="field-label">Where clause</span>
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="field-label mb-0">Where clause</span>
+              <button
+                type="button"
+                onClick={handleCopyWhere}
+                disabled={!where}
+                className="flex items-center gap-1.5 rounded px-2 py-0.5 text-[length:var(--app-text-11)] text-text-muted transition-colors hover:bg-tint/[0.05] hover:text-text disabled:pointer-events-none disabled:opacity-40"
+                title="Copy WHERE clause to clipboard"
+              >
+                <Icon name="copy" size={12} />
+                <span>Copy</span>
+              </button>
+            </div>
             <pre className="whitespace-pre-wrap break-words rounded-md border border-line bg-base px-2.5 py-2 font-mono text-[length:var(--app-text-11)] leading-[calc(var(--app-text-11)+6px)] text-text-muted">
-              {where || 'Add a condition to build the filter.'}
+              {where ? `WHERE ${where}` : 'Add a condition to build the filter.'}
             </pre>
           </div>
         </div>

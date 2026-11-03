@@ -93,7 +93,13 @@ export default function DatabaseUsersDialog({
     () => state.users.find((user: DatabaseUserDetail) => user.name === selectedName) ?? null,
     [selectedName, state.users],
   )
-  const loginOptions = state.logins.map((item) => ({ value: item.name, label: item.name }))
+  const loginOptions = useMemo(
+    () =>
+      state.logins
+        .map((item) => ({ value: item.name, label: item.name }))
+        .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })),
+    [state.logins],
+  )
   const selectedLogin = state.logins.find((item) => item.name === login) ?? null
   const roleOptions = state.roles.map((name) => ({ name, hint: ROLE_HINTS[name] ?? 'Fixed database role.' }))
 

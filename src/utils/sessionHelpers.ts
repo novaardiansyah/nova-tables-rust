@@ -4,6 +4,7 @@ import { EditSource } from '@/edits'
 import { SavedQueryItem } from '@/api'
 import { TableDesign } from '@/designSql'
 import { ResultsPanelState } from '@/components/results/ResultsPanel'
+import { FilterCondition } from '@/filters'
 
 export const STARTER_SQL = `-- Nova Tables
 -- Pick a table in the sidebar or write a query, then press Ctrl+Enter to run it.
@@ -65,6 +66,8 @@ export interface SessionTab {
   edits: Record<string, { value: unknown; original?: unknown }>
   deletingRows: number[]
   lastExecutedSql?: string | null
+  baseSql?: string
+  filterConditions?: FilterCondition[]
   // Design properties
   target?: any
   design?: TableDesign | null

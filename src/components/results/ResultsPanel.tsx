@@ -92,6 +92,7 @@ export interface ResultsPanelProps {
   onConfirmOpen?: () => void
   onDeleteConfirmOpen?: () => void
   onApplyFilter?: (conditions: FilterCondition[]) => void
+  filterConditions?: FilterCondition[]
   onActiveDataChange?: (data: ActiveDataPayload | null) => void
   onExport?: (data: ExportDataPayload) => void
   tabTitle?: string
@@ -119,6 +120,7 @@ export default function ResultsPanel({
   onConfirmOpen,
   onDeleteConfirmOpen,
   onApplyFilter,
+  filterConditions,
   onActiveDataChange,
   onExport,
   tabTitle,
@@ -138,6 +140,7 @@ export default function ResultsPanel({
   const [menu, setMenu] = useState<{ x: number; y: number; column: ResultColumn | null; columnIndex: number; row: number } | null>(null)
   const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number; column: ResultColumn } | null>(null)
   const [filterDialogOpen, setFilterDialogOpen] = useState(false)
+  const [savedConditions, setSavedConditions] = useState<FilterCondition[] | null>(null)
   const [exportMenu, setExportMenu] = useState<{ x: number; y: number } | null>(null)
   const [inspectTarget, setInspectTarget] = useState<InspectorTarget | null>(null)
 
@@ -815,12 +818,15 @@ export default function ResultsPanel({
         open={filterDialogOpen}
         columns={activeResultSet?.columns ?? []}
         initialColumn={activeResultSet?.columns[0]?.name ?? ''}
+        initialConditions={filterConditions ?? savedConditions ?? undefined}
         driverType={driverType}
         onCancel={() => setFilterDialogOpen(false)}
         onApply={(conditions) => {
+          setSavedConditions(conditions)
           setFilterDialogOpen(false)
           onApplyFilter?.(conditions)
         }}
+        onCopy={onCopyText}
       />
 
       <ValueInspectorDialog

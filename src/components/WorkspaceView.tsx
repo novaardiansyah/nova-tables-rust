@@ -311,6 +311,7 @@ export default function WorkspaceView({
               }}
               onDeleteRows={handleDeleteRows}
               onApplyFilter={handleApplyFilter}
+              filterConditions={activeTab?.filterConditions}
               onActiveDataChange={setActiveResultData}
               onExport={handleExportResult}
               tabTitle={activeTab?.title}

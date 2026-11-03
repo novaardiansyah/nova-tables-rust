@@ -411,36 +411,30 @@ export function useQueryExecution({
         showBanner('warn', 'Open a connection before filtering a result.')
         return
       }
-      const source = sqlRef.current.trim()
-      if (!source) {
+      const tab = current.tabs.find((item) => item.id === current.activeTabId)
+      if (!tab || tab.kind !== 'query') {
+        showBanner('warn', 'Open a query tab before filtering a result.')
+        return
+      }
+      const baseSql = (tab.baseSql || tab.lastExecutedSql || sqlRef.current).trim()
+      if (!baseSql) {
         showBanner('warn', 'There is no query to filter.')
         return
       }
       const driverType = current.connection?.driverType ?? null
       const where = buildFilterWhere(conditions, driverType)
       if (!where) return
-      const tab = activeQueryTab()?.tab ?? null
-      const inherited = tab?.editSource && tab.editSource.sql === source ? tab.editSource : null
-      const sql = buildFilteredSql(source, where)
-      const editSource =
-        (inherited && { ...inherited, sql }) ||
-        (await describeEditSource(
-          current.connectionId,
-          current.activeDatabase || 'master',
-          sql,
-          current.tables?.tables ?? [],
-          driverType,
-        ))
-      const column = conditions[0]?.column ?? null
-      const tabId = openTab(
-        current.connectionId,
-        column ? `Filter ${column}` : 'Filtered',
-        sql,
-        editSource,
-      )
-      execute(sql, tabId)
+
+      const sql = buildFilteredSql(baseSql, where)
+
+      updateTab(current.connectionId, tab.id, {
+        filterConditions: conditions,
+        baseSql,
+      })
+
+      execute(sql, tab.id)
     },
-    [activeQueryTab, activeSession, describeEditSource, execute, openTab, showBanner, sqlRef],
+    [activeSession, execute, showBanner, sqlRef, updateTab],
   )
 
   const handleEditConfirmApply = useCallback(async () => {
