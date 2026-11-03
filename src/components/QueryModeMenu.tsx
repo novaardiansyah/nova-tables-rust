@@ -39,13 +39,14 @@ export default function QueryModeMenu({ value, onChange }: QueryModeMenuProps) {
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        title="Query execution mode"
-        className="flex h-8 w-[200px] items-center gap-2 rounded-md border border-line bg-panel px-2.5 text-[length:var(--app-text-11)] text-text-soft transition-colors hover:border-line-strong hover:text-text"
+        title={`Query execution mode: ${current.label} (${current.description})`}
+        aria-label={`Query execution mode: ${current.label}`}
+        className="icon-btn relative hover:text-accent"
       >
-        <Icon name="lock" size={14} />
-        <span className="truncate">{current.label}</span>
-        <span className={`ml-auto h-2 w-2 shrink-0 rounded-full ${TONE_CLASS[current.tone] || ''}`} />
-        <Icon name="chevron-down" size={12} />
+        <Icon name="lock" size={15} />
+        <span
+          className={`absolute bottom-0.5 right-0.5 h-1.5 w-1.5 rounded-full ${TONE_CLASS[current.tone] || ''}`}
+        />
       </button>
 
       {open ? (

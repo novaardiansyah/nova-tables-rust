@@ -147,49 +147,47 @@ export default function WorkspaceHeader({
           <Icon name="question" size={15} />
         </button>
 
+        {session ? (
+          <button type="button" className="icon-btn hover:text-danger" onClick={onDisconnect} title="Close connection">
+            <Icon name="power" size={15} />
+          </button>
+        ) : null}
+
         <QueryModeMenu value={queryExecutionMode} onChange={onChangeExecutionMode} />
 
         <button
           type="button"
-          className="btn-soft h-8 px-2.5 text-[length:var(--app-text-12)]"
+          className="icon-btn hover:text-accent disabled:pointer-events-none disabled:opacity-40"
           onClick={onEstimatedPlan}
           disabled={!session || running}
           title="Display Estimated Execution Plan"
+          aria-label="Display Estimated Execution Plan"
         >
-          <Icon name="plan" size={13} />
-          Estimated plan
+          <Icon name="plan" size={15} />
         </button>
 
         {running ? (
           <button
             type="button"
-            className="btn-danger h-8 px-3 text-[length:var(--app-text-12)]"
+            className="icon-btn text-danger hover:bg-danger/10 hover:text-danger"
             onClick={onCancel}
             title="Cancel running query"
+            aria-label="Cancel running query"
           >
-            <Icon name="x" size={12} />
-            Cancel
+            <Icon name="x" size={15} />
           </button>
         ) : (
           <button
             type="button"
-            className="btn-primary"
+            className="icon-btn text-accent hover:text-accent disabled:pointer-events-none disabled:opacity-40"
             onClick={onRun}
             disabled={!session}
             title="Run query (Ctrl+Enter)"
+            aria-label="Run query (Ctrl+Enter)"
           >
-            <Icon name="play" size={12} />
-            Run
-            <span className="kbd border-on-accent/40 bg-transparent text-on-accent">Ctrl</span>
-            <span className="kbd border-on-accent/40 bg-transparent text-on-accent">↵</span>
+            <Icon name="play" size={15} />
           </button>
         )}
-
-        {session ? (
-          <button type="button" className="icon-btn" onClick={onDisconnect} title="Close connection">
-            <Icon name="power" size={15} />
-          </button>
-        ) : null}
       </div>
     </header>
   )
