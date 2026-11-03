@@ -6,6 +6,7 @@ export interface ContextMenuItemData {
   id: string
   label: string
   onSelect?: () => void
+  disabled?: boolean
   children?: ContextMenuItemData[]
 }
 
@@ -88,11 +89,17 @@ function MenuItem({ item, onClose }: { item: ContextMenuItemData; onClose: () =>
       <button
         type="button"
         role="menuitem"
+        disabled={item.disabled}
         onClick={() => {
+          if (item.disabled) return
           item.onSelect?.()
           onClose()
         }}
-        className="flex w-full items-center px-3 py-[5px] text-left text-[length:var(--app-text-12)] text-text hover:bg-tint/[0.06] hover:text-text-strong"
+        className={`flex w-full items-center px-3 py-[5px] text-left text-[length:var(--app-text-12)] ${
+          item.disabled
+            ? 'cursor-not-allowed opacity-40 text-text-muted'
+            : 'text-text hover:bg-tint/[0.06] hover:text-text-strong'
+        }`}
       >
         {item.label}
       </button>

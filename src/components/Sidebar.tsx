@@ -73,9 +73,16 @@ export interface SidebarProps {
   onWidthChange: (width: number) => void
   collapsed?: boolean
   onToggleCollapsed: (collapsed: boolean) => void
+  onOpenCreateDatabase?: (connectionId?: string) => void
+  onOpenDropDatabase?: (connectionId?: string) => void
+  onManageUsers?: (connectionId?: string) => void
+  canCreateDatabase?: boolean
+  canDropDatabase?: boolean
+  canManageUsers?: boolean
 }
 
 type MenuState =
+  | { x: number; y: number; kind: 'connection'; item: SidebarSessionItem }
   | { x: number; y: number; kind: 'table'; table: SidebarTable }
   | { x: number; y: number; kind: 'module'; module: SidebarModule }
   | { x: number; y: number; kind: 'tables-header'; item: SidebarSessionItem }
@@ -112,6 +119,12 @@ export default function Sidebar({
   onWidthChange,
   collapsed = false,
   onToggleCollapsed,
+  onOpenCreateDatabase,
+  onOpenDropDatabase,
+  onManageUsers,
+  canCreateDatabase = true,
+  canDropDatabase = true,
+  canManageUsers = true,
 }: SidebarProps) {
   const [expanded, setExpanded] = useState(true)
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
@@ -214,6 +227,15 @@ export default function Sidebar({
     if (!schema || schema === 'dbo') return false
     if (item.connection.driverType === 'mysql' && schema === item.activeDatabase) return false
     return true
+  }
+
+  const handleConnectionContextMenu = (event: React.MouseEvent, item: SidebarSessionItem) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (item.connectionId !== activeConnectionId) {
+      onActivateSession(item.connectionId)
+    }
+    setMenu({ x: event.clientX, y: event.clientY, kind: 'connection', item })
   }
 
   const handleTableContextMenu = (event: React.MouseEvent, table: SidebarTable) => {
@@ -393,6 +415,7 @@ export default function Sidebar({
     return (
       <div key={item.connectionId} className="mb-1">
         <div
+          onContextMenu={(event) => handleConnectionContextMenu(event, item)}
           className={`group relative flex items-center gap-1.5 rounded-md pr-1 ${
             isActive ? 'bg-accent-soft' : 'hover:bg-tint/[0.03]'
           }`}
@@ -422,25 +445,6 @@ export default function Sidebar({
               </span>
             </span>
           </button>
-
-          <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100">
-            <button
-              type="button"
-              className="icon-btn h-6 w-6"
-              title="Refresh Databases"
-              onClick={() => onRefreshDatabases(item.connectionId)}
-            >
-              <Icon name="refresh" size={13} />
-            </button>
-            <button
-              type="button"
-              className="icon-btn h-6 w-6"
-              title="Close Connection"
-              onClick={() => onCloseSession(item.connectionId)}
-            >
-              <Icon name="power" size={13} />
-            </button>
-          </div>
         </div>
 
         {isActive ? (
@@ -528,7 +532,38 @@ export default function Sidebar({
       x={menu.x}
       y={menu.y}
       items={
-        menu.kind === 'module'
+        menu.kind === 'connection'
+          ? ([
+              {
+                id: 'close-connection',
+                label: 'Close Connection',
+                onSelect: () => onCloseSession(menu.item.connectionId),
+              },
+              {
+                id: 'delete-database',
+                label: 'Delete Database',
+                disabled: !canDropDatabase,
+                onSelect: () => onOpenDropDatabase?.(menu.item.connectionId),
+              },
+              {
+                id: 'new-database',
+                label: 'New Database',
+                disabled: !canCreateDatabase,
+                onSelect: () => onOpenCreateDatabase?.(menu.item.connectionId),
+              },
+              {
+                id: 'refresh-connection',
+                label: 'Refresh',
+                onSelect: () => onRefreshDatabases(menu.item.connectionId),
+              },
+              {
+                id: 'users-permissions',
+                label: 'User & Permission',
+                disabled: !canManageUsers,
+                onSelect: () => onManageUsers?.(menu.item.connectionId),
+              },
+            ] as ContextMenuItem[])
+          : menu.kind === 'module'
           ? ([
               {
                 id: 'open-new-tab',

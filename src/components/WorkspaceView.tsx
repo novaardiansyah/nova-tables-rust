@@ -196,6 +196,12 @@ export default function WorkspaceView({
         onWidthChange={setSidebarWidth}
         collapsed={sidebarCollapsed}
         onToggleCollapsed={setSidebarCollapsed}
+        onOpenCreateDatabase={handleOpenCreateDatabase}
+        onOpenDropDatabase={handleOpenDropDatabase}
+        onManageUsers={databaseUsers.handleOpenDatabaseUsers}
+        canCreateDatabase={createState.allowed}
+        canDropDatabase={dropState.allowed}
+        canManageUsers={manageUsers.allowed}
       />
 
       <main className="flex min-w-0 flex-1 flex-col bg-base">

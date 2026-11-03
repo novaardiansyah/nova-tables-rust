@@ -81,52 +81,14 @@ export default function WorkspaceHeader({
   return (
     <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line bg-panel px-4">
       {session ? (
-        <>
-          <Select
-            value={activeDatabase ?? ''}
-            options={options}
-            onChange={(val) => onSelectDatabase?.(String(val))}
-            disabled={options.length === 0}
-            searchable
-            searchPlaceholder="Search database…"
-          />
-          <span className="inline-flex" title={manageUsersHint}>
-            <button
-              type="button"
-              className="icon-btn hover:text-accent disabled:pointer-events-none disabled:opacity-40"
-              onClick={onManageUsers}
-              disabled={!canManageUsers}
-              title={manageUsersHint}
-              aria-label="Users and permissions"
-            >
-              <Icon name="users" size={14} />
-            </button>
-          </span>
-          <span className="inline-flex" title={createDatabaseHint}>
-            <button
-              type="button"
-              className="icon-btn hover:text-accent disabled:pointer-events-none disabled:opacity-40"
-              onClick={onCreateDatabase}
-              disabled={!canCreateDatabase}
-              title={createDatabaseHint}
-              aria-label="New database"
-            >
-              <Icon name="plus" size={14} />
-            </button>
-          </span>
-          <span className="inline-flex" title={dropDatabaseHint}>
-            <button
-              type="button"
-              className="icon-btn hover:bg-danger/10 hover:text-danger disabled:pointer-events-none disabled:opacity-40"
-              onClick={onDropDatabase}
-              disabled={!canDropDatabase}
-              title={dropDatabaseHint}
-              aria-label="Drop database"
-            >
-              <Icon name="trash" size={14} />
-            </button>
-          </span>
-        </>
+        <Select
+          value={activeDatabase ?? ''}
+          options={options}
+          onChange={(val) => onSelectDatabase?.(String(val))}
+          disabled={options.length === 0}
+          searchable
+          searchPlaceholder="Search database…"
+        />
       ) : (
         <>
           <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-line-strong" />
