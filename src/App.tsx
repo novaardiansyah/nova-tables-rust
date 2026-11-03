@@ -42,7 +42,7 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [banner])
 
-  const layout = useWorkspaceLayout()
+  const layout = useWorkspaceLayout(settings.timezone)
   const { sqlRef, selectionRef, seedEditor } = layout
 
   const workspaceRef = useRef<WorkspaceState>(DEFAULT_WORKSPACE_STATE)

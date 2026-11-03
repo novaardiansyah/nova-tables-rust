@@ -12,7 +12,7 @@ export interface QueryState {
   focus: boolean
 }
 
-export function useWorkspaceLayout() {
+export function useWorkspaceLayout(timezone?: string) {
   const [query, setQuery] = useState<QueryState>({ id: 0, value: STARTER_SQL, focus: true })
   const [editorHeight, setEditorHeight] = useState(EDITOR_DEFAULT_HEIGHT)
   const [headerCollapsed, setHeaderCollapsed] = useState(false)
@@ -81,8 +81,8 @@ export function useWorkspaceLayout() {
 
   const jsonPanelVisible = !jsonPanelCollapsed || jsonPanelHovered
   const jsonText = useMemo(
-    () => (jsonPanelVisible && activeResultData ? jsonRecords(activeResultData.columnNames, activeResultData.rows) : ''),
-    [jsonPanelVisible, activeResultData],
+    () => (jsonPanelVisible && activeResultData ? jsonRecords(activeResultData.columnNames, activeResultData.rows, timezone) : ''),
+    [jsonPanelVisible, activeResultData, timezone],
   )
 
   return {

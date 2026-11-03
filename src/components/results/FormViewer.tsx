@@ -13,19 +13,24 @@ export interface FormViewerProps {
   timezone?: string
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/
+
 function isSpecial(value: unknown): value is { special: unknown } {
   return Boolean(value && typeof value === 'object' && 'special' in value)
 }
 
-function toText(value: unknown, timezone: string): string {
+function toText(value: unknown, timezone?: string): string {
   if (value === null || value === undefined) return ''
   if (isSpecial(value)) return String(value.special)
+  if (value instanceof Date) return formatDateTime(value, timezone)
   if (typeof value === 'object') return JSON.stringify(value, null, 2)
-  const text = String(value)
-  return isDateTimeString(text) ? formatDateTime(text, timezone) : text
+  const rawText = String(value)
+  const isDate = isDateTimeString(rawText) || DATE_RE.test(rawText)
+  return isDate ? formatDateTime(rawText, timezone) : rawText
 }
 
-function parseValue(raw: string, original: unknown, specialValues: SpecialValueOption[]): unknown {
+function parseValue(raw: string, original: unknown, specialValues: SpecialValueOption[], timezone?: string): unknown {
+  if (raw === toText(original, timezone)) return original
   const text = raw.trim()
   if (text === '') return null
   const exact = specialValues.find((option) => option.label.toLowerCase() === text.toLowerCase())
@@ -53,7 +58,7 @@ function FormField({
   onChange: (next: unknown) => void
   onSpecial?: (special: unknown) => void
   specialValues: SpecialValueOption[]
-  timezone: string
+  timezone?: string
 }) {
   const [draft, setDraft] = useState(() => toText(value, timezone))
   const [menuOpen, setMenuOpen] = useState(false)
@@ -146,7 +151,7 @@ function FormField({
         }}
         onChange={(event) => {
           setDraft(event.target.value)
-          onChange(parseValue(event.target.value, value, specialValues))
+          onChange(parseValue(event.target.value, value, specialValues, timezone))
         }}
         className="w-full rounded border border-line-strong bg-base px-2 py-1 font-mono text-[length:var(--app-text-12)] text-text outline-none transition-colors select-text focus:border-accent/70"
         style={{ fontSize: 'var(--json-font-size)' }}
@@ -162,7 +167,7 @@ export default function FormViewer({
   rowIndexes,
   onCellChange,
   driverType,
-  timezone = 'UTC',
+  timezone,
 }: FormViewerProps) {
   if (!columns.length) {
     return (

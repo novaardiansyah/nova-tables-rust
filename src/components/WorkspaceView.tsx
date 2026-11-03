@@ -342,6 +342,7 @@ export default function WorkspaceView({
         rowIndexes={activeResultData?.rowIndexes ?? []}
         onCellChange={handleCellChange}
         driverType={session?.connection?.driverType ?? null}
+        timezone={settings.timezone}
       />
     </div>
   )

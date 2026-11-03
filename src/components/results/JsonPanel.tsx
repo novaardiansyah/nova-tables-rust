@@ -23,6 +23,7 @@ export interface JsonPanelProps {
   rowIndexes?: number[]
   onCellChange?: (row: number, columnName: string, nextValue: unknown, prevValue: unknown) => void
   driverType?: string | null
+  timezone?: string
 }
 
 export default function JsonPanel({
@@ -41,6 +42,7 @@ export default function JsonPanel({
   rowIndexes = [],
   onCellChange,
   driverType,
+  timezone,
 }: JsonPanelProps) {
   const [panelView, setPanelView] = useState<'json' | 'form'>('json')
   const [hoverOpen, setHoverOpen] = useState(false)
@@ -186,6 +188,7 @@ export default function JsonPanel({
             rowIndexes={rowIndexes}
             onCellChange={onCellChange}
             driverType={driverType}
+            timezone={timezone}
           />
         ) : jsonText ? (
           <JsonView text={jsonText} />
