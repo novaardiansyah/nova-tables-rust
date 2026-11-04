@@ -52,17 +52,41 @@ pub async fn start_oauth_listener(state: String) -> Result<Value, String> {
         }
       }
 
-      let (title, message, color) = if !error.is_empty() {
-        ("Sign in Failed", "Authentication cancelled or denied.", "#ef4444")
+      let (title, message, badge_text, status_color, status_bg, status_border, icon_svg) = if !error.is_empty() {
+        (
+          "Sign in Failed",
+          "Authentication cancelled or denied.",
+          "Authentication issue",
+          "#f87171",
+          "rgba(239, 68, 68, 0.12)",
+          "rgba(239, 68, 68, 0.28)",
+          "<svg width=\"28\" height=\"28\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#f87171\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><line x1=\"12\" y1=\"8\" x2=\"12\" y2=\"12\"></line><line x1=\"12\" y1=\"16\" x2=\"12.01\" y2=\"16\"></line></svg>",
+        )
       } else if !code.is_empty() {
-        ("Sign in Successful", "You may return to Nova Tables.", "#10b981")
+        (
+          "Sign in Successful",
+          "You may return to Nova Tables.",
+          "Authentication complete",
+          "#10b981",
+          "rgba(16, 185, 129, 0.12)",
+          "rgba(16, 185, 129, 0.28)",
+          "<svg width=\"28\" height=\"28\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#10b981\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 11.08V12a10 10 0 1 1-5.93-9.14\"></path><polyline points=\"22 4 12 14.01 9 11.01\"></polyline></svg>",
+        )
       } else {
-        ("Sign in", "Processing...", "#3b82f6")
+        (
+          "Sign in",
+          "Processing...",
+          "Authenticating",
+          "#3b82f6",
+          "rgba(59, 130, 246, 0.12)",
+          "rgba(59, 130, 246, 0.28)",
+          "<svg width=\"28\" height=\"28\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#3b82f6\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle></svg>",
+        )
       };
 
       let html = format!(
-        "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>{} - Nova Tables</title><style>body{{background-color:#0b0e13;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;}}.card{{background:#151922;border:1px solid #232a3b;border-radius:12px;padding:32px;max-width:420px;text-align:center;box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);}}h1{{color:{};font-size:20px;margin:0 0 12px 0;}}p{{color:#94a3b8;font-size:14px;line-height:1.5;margin:0;}}</style></head><body><div class=\"card\"><h1>{}</h1><p>{}</p></div></body></html>",
-        title, color, title, message
+        "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{} — Nova Tables</title><style>*,*::before,*::after{{box-sizing:border-box;margin:0;padding:0;}}:root{{color-scheme:light dark;--bg:#09100c;--card-bg:#111a14;--card-border:rgba(255,255,255,0.08);--ink:#eef3ef;--ink-muted:#9aa79f;--line:rgba(255,255,255,0.08);}}@media (prefers-color-scheme: light){{:root{{--bg:#f7f8f7;--card-bg:#ffffff;--card-border:rgba(8,15,11,0.12);--ink:#080f0b;--ink-muted:#53615a;--line:rgba(8,15,11,0.08);}}}}body{{background-color:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;-webkit-font-smoothing:antialiased;}}.wrapper{{width:100%;max-width:440px;display:flex;flex-direction:column;align-items:center;gap:20px;}}.brand{{display:inline-flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink);font-weight:600;font-size:15px;letter-spacing:-0.01em;}}.card{{background:var(--card-bg);border:1px solid var(--card-border);border-radius:16px;padding:36px 32px;width:100%;text-align:center;box-shadow:0 20px 40px -15px rgba(0,0,0,0.35);position:relative;overflow:hidden;}}.card::before{{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:{};}}.badge{{display:inline-flex;align-items:center;gap:6px;background:{};border:1px solid {};color:{};font-size:11px;font-weight:600;padding:4px 10px;border-radius:9999px;margin-bottom:20px;text-transform:uppercase;letter-spacing:0.04em;}}.icon-wrapper{{width:56px;height:56px;margin:0 auto 20px auto;border-radius:14px;background:{};border:1px solid {};display:flex;align-items:center;justify-content:center;}}h1{{font-size:21px;font-weight:700;letter-spacing:-0.02em;margin-bottom:8px;color:var(--ink);}}p{{color:var(--ink-muted);font-size:14px;line-height:1.55;margin-bottom:24px;}}.footer-action{{border-top:1px solid var(--line);padding-top:20px;display:flex;flex-direction:column;gap:8px;align-items:center;}}.action-hint{{font-size:12px;color:var(--ink-muted);}}</style></head><body><div class=\"wrapper\"><div class=\"brand\"><span>Nova Tables</span></div><div class=\"card\"><div class=\"badge\">{}</div><div class=\"icon-wrapper\">{}</div><h1>{}</h1><p>{}</p><div class=\"footer-action\"><span class=\"action-hint\">You may now close this browser tab and continue using Nova Tables.</span></div></div></div></body></html>",
+        title, status_color, status_bg, status_border, status_color, status_bg, status_border, badge_text, icon_svg, title, message
       );
 
       let response = format!(
