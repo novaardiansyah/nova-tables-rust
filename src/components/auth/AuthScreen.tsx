@@ -9,7 +9,8 @@ export interface AuthScreenProps {
 
 export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenProps) {
   const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login')
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
+  const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -29,8 +30,10 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
 
     if (mode === 'forgot') {
       const nextErrors: Record<string, string | undefined> = {}
-      if (!username.trim()) {
-        nextErrors.username = 'Please enter your username or email.'
+      if (!email.trim()) {
+        nextErrors.email = 'Please enter your email.'
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+        nextErrors.email = 'Please enter a valid email address.'
       }
       if (!password) {
         nextErrors.password = 'Please enter a new password.'
@@ -54,12 +57,12 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
     }
 
     const nextErrors: Record<string, string | undefined> = {}
-    const trimmedUser = username.trim()
+    const trimmedEmail = email.trim().toLowerCase()
 
-    if (!trimmedUser) {
-      nextErrors.username = 'Please enter a username.'
-    } else if (trimmedUser.length < 3) {
-      nextErrors.username = 'Username must be at least 3 characters.'
+    if (!trimmedEmail) {
+      nextErrors.email = 'Please enter an email.'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      nextErrors.email = 'Please enter a valid email address.'
     }
 
     if (!password) {
@@ -86,22 +89,22 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
 
     try {
       if (mode === 'login') {
-        const user = await api.loginUser(trimmedUser, password)
+        const user = await api.loginUser(trimmedEmail, password)
         onLoginSuccess(user)
       } else {
-        const user = await api.registerUser(trimmedUser, password)
+        const user = await api.registerUser(trimmedEmail, password, name.trim() || undefined)
         onLoginSuccess(user)
       }
     } catch (err: unknown) {
       const errorObj = err as { message?: string }
       const msg = errorObj?.message || 'Authentication failed. Please check your credentials.'
 
-      if (/username already exists/i.test(msg)) {
-        setFieldErrors({ username: 'Username is already taken.' })
-      } else if (/invalid username or password/i.test(msg)) {
+      if (/email.*taken|already exists/i.test(msg)) {
+        setFieldErrors({ email: 'Email is already taken.' })
+      } else if (/invalid email or password|invalid credentials/i.test(msg)) {
         setFieldErrors({
-          username: ' ',
-          password: 'Invalid username or password.',
+          email: ' ',
+          password: 'Invalid email or password.',
         })
       } else {
         setGeneralError(msg)
@@ -164,24 +167,40 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
                 </div>
               ) : null}
 
+              {mode === 'register' ? (
+                <div>
+                  <label className="block text-[length:var(--app-text-11)] font-medium text-text-muted">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    disabled={busy}
+                    placeholder="Enter your name"
+                    className="field mt-1"
+                  />
+                </div>
+              ) : null}
+
               <div>
                 <label className="block text-[length:var(--app-text-11)] font-medium text-text-muted">
-                  {mode === 'forgot' ? 'Username or Email' : 'Username'}
+                  Email
                 </label>
                 <input
-                  type="text"
-                  value={username}
+                  type="email"
+                  value={email}
                   onChange={(e) => {
-                    setUsername(e.target.value)
-                    clearFieldError('username')
+                    setEmail(e.target.value)
+                    clearFieldError('email')
                   }}
                   disabled={busy}
                   autoFocus
-                  autoComplete="username"
-                  placeholder={mode === 'forgot' ? 'Enter username or email' : 'Enter username'}
-                  className={`field mt-1 ${fieldErrors.username ? 'border-danger focus:border-danger focus:ring-danger/20' : ''}`}
+                  autoComplete="email"
+                  placeholder="name@example.com"
+                  className={`field mt-1 ${fieldErrors.email ? 'border-danger focus:border-danger focus:ring-danger/20' : ''}`}
                 />
-                <FieldError message={fieldErrors.username} />
+                <FieldError message={fieldErrors.email} />
               </div>
 
               <div>

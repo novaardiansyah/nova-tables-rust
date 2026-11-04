@@ -433,7 +433,7 @@ export default function App() {
     },
     {
       id: 'account',
-      label: currentUser ? currentUser.username : 'Account',
+      label: currentUser ? (currentUser.name || currentUser.email || 'Account') : 'Account',
       items: [
         {
           id: 'sign-out',

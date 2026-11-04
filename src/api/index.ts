@@ -81,10 +81,10 @@ function legacyCopyText(text: string): boolean {
 }
 
 export const api = {
-  registerUser: async (username: string, password: string): Promise<AuthUser> => {
-    const trimmed = username.trim()
-    if (trimmed.length < 3) {
-      throw new Error('Username must be at least 3 characters long.')
+  registerUser: async (email: string, password: string, name?: string): Promise<AuthUser> => {
+    const trimmedEmail = email.trim().toLowerCase()
+    if (!trimmedEmail) {
+      throw new Error('Email is required.')
     }
     if (password.length < 6) {
       throw new Error('Password must be at least 6 characters long.')
@@ -92,7 +92,7 @@ export const api = {
 
     const res = await apiRequest<{ ok: boolean; token: string; user: AuthUser }>('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ username: trimmed, password }),
+      body: JSON.stringify({ email: trimmedEmail, password, name }),
     })
 
     setAuthToken(res.token)
@@ -100,15 +100,15 @@ export const api = {
     return res.user
   },
 
-  loginUser: async (username: string, password: string): Promise<AuthUser> => {
-    const trimmed = username.trim()
-    if (!trimmed || !password) {
-      throw new Error('Username and password are required.')
+  loginUser: async (email: string, password: string): Promise<AuthUser> => {
+    const trimmedEmail = email.trim().toLowerCase()
+    if (!trimmedEmail || !password) {
+      throw new Error('Email and password are required.')
     }
 
     const res = await apiRequest<{ ok: boolean; token: string; user: AuthUser }>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username: trimmed, password }),
+      body: JSON.stringify({ email: trimmedEmail, password }),
     })
 
     setAuthToken(res.token)
