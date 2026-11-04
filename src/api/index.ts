@@ -282,7 +282,7 @@ export const api = {
     const res = await callCommand<{ version?: string }>('get_system_info')
     return {
       name: 'Nova Tables',
-      version: res?.version || '2.2.5',
+      version: res?.version || '2.2.4',
     }
   },
 
@@ -383,21 +383,21 @@ export const api = {
     }
   },
 
-  saveFile: async (input: unknown): Promise<{ saved?: boolean; filePath?: string;[key: string]: unknown }> => {
+  saveFile: async (input: unknown): Promise<{ saved?: boolean; filePath?: string; [key: string]: unknown }> => {
     const res = await callCommand<any>('save_file', { input })
     return res || { saved: false }
   },
 
   onOpenConnection: (_handler: unknown): (() => void) => {
-    return () => { }
+    return () => {}
   },
 
   onNewConnection: (_handler: unknown): (() => void) => {
-    return () => { }
+    return () => {}
   },
 
   onPreferences: (_handler: unknown): (() => void) => {
-    return () => { }
+    return () => {}
   },
 
   listConnections: async (): Promise<ConnectionModel[]> => {
@@ -439,7 +439,25 @@ export const api = {
   },
 
   saveConnection: async (connection: Partial<ConnectionModel>): Promise<ConnectionModel> => {
-    const id = connection.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `conn-${Date.now()}`)
+    let id = connection.id
+    if (!id) {
+      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        id = crypto.randomUUID()
+      } else if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+        const bytes = new Uint8Array(16)
+        crypto.getRandomValues(bytes)
+        bytes[6] = (bytes[6] & 0x0f) | 0x40
+        bytes[8] = (bytes[8] & 0x3f) | 0x80
+        const hex = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
+        id = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+      } else {
+        id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0
+          const v = c === 'x' ? r : (r & 0x3) | 0x8
+          return v.toString(16)
+        })
+      }
+    }
     let resolvedPassword = connection.password ?? null
     if (resolvedPassword && !isCiphertext(resolvedPassword)) {
       resolvedPassword = await encryptConnectionPassword(resolvedPassword, id)
@@ -531,7 +549,7 @@ export const api = {
     })
   },
 
-  reorderTree: async (input: unknown): Promise<{ connections: ConnectionModel[]; folders: FolderModel[];[key: string]: unknown }> => {
+  reorderTree: async (input: unknown): Promise<{ connections: ConnectionModel[]; folders: FolderModel[]; [key: string]: unknown }> => {
     await apiRequest('/api/connections/reorder', {
       method: 'POST',
       body: JSON.stringify(input),
@@ -551,16 +569,23 @@ export const api = {
     folders: FolderModel[]
   }> => {
     const folderIds = input?.folderIds || []
-    const connectionIds = input?.connectionIds || []
+    const connectionIds = [...(input?.connectionIds || [])]
 
     for (const fId of folderIds) {
       try {
-        await api.deleteFolder(fId)
+        const res = (await api.deleteFolder(fId)) as { ok?: boolean; deletedConnectionIds?: string[] } | null
+        if (res && Array.isArray(res.deletedConnectionIds)) {
+          for (const cId of res.deletedConnectionIds) {
+            if (!connectionIds.includes(cId)) {
+              connectionIds.push(cId)
+            }
+          }
+        }
       } catch {
       }
     }
 
-    for (const cId of connectionIds) {
+    for (const cId of input?.connectionIds || []) {
       try {
         await api.deleteConnection(cId)
       } catch {
@@ -655,7 +680,7 @@ export const api = {
       (await callCommand('test_connection', { connection: target }))
 
     if (target?.id && res?.database) {
-      api.updateLastDatabase(target.id, res.database).catch(() => { })
+      api.updateLastDatabase(target.id, res.database).catch(() => {})
     }
 
     try {
@@ -709,11 +734,11 @@ export const api = {
     return res?.databases || []
   },
 
-  createDatabase: async (input: { connectionId: string; database: string;[key: string]: unknown }): Promise<unknown> => {
+  createDatabase: async (input: { connectionId: string; database: string; [key: string]: unknown }): Promise<unknown> => {
     return callCommand('create_database', { input })
   },
 
-  dropDatabase: async (input: { connectionId: string; database: string; confirmName?: string; acknowledged?: boolean;[key: string]: unknown }): Promise<unknown> => {
+  dropDatabase: async (input: { connectionId: string; database: string; confirmName?: string; acknowledged?: boolean; [key: string]: unknown }): Promise<unknown> => {
     return callCommand('drop_database', { input })
   },
 
@@ -847,7 +872,7 @@ export const api = {
     schema: string,
     name: string,
     type?: string
-  ): Promise<{ definition?: string;[key: string]: unknown }> => {
+  ): Promise<{ definition?: string; [key: string]: unknown }> => {
     const res = await callCommand<{ definition?: string }>('module_definition', {
       connectionId,
       database,
@@ -864,7 +889,7 @@ export const api = {
     schema: string,
     name: string,
     type?: string
-  ): Promise<{ definition?: string;[key: string]: unknown }> => {
+  ): Promise<{ definition?: string; [key: string]: unknown }> => {
     return api.getRoutineDefinition(connectionId, database, schema, name, type)
   },
 
@@ -911,7 +936,7 @@ export const api = {
           durationMs: result.elapsedMs || 0,
           rowCount: result.rowCount || 0,
         }),
-      }).catch(() => { })
+      }).catch(() => {})
     }
 
     return result
@@ -970,7 +995,13 @@ export const api = {
   }): Promise<SavedQueryItem | null> => {
     const res = await apiRequest<{ ok: boolean; query: SavedQueryItem }>('/api/saved-queries', {
       method: 'POST',
-      body: JSON.stringify({ input }),
+      body: JSON.stringify({
+        input,
+        connectionId: input.connectionId,
+        databaseName: input.databaseName,
+        name: input.name,
+        sql: input.sql,
+      }),
     })
     return res?.query || null
   },

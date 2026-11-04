@@ -1,4 +1,4 @@
-import { encryptExportPayload, decryptImportPayload, decryptConnectionPassword } from './crypto'
+import { encryptExportPayload, decryptImportPayload, decryptConnectionPassword, isCiphertext } from './crypto'
 import { ConnectionModel, FolderModel, IpcError, ImportFileDialogResult } from './types'
 import { api } from './index'
 
@@ -82,9 +82,11 @@ async function buildConnectionsBundle(
   for (const item of allConnections) {
     if (!targetIds.has(item.id!)) continue
     connectionOrder.push(item.id!)
-    const resolvedPassword = item.password && item.id
-      ? await decryptConnectionPassword(item.password, item.id)
-      : (item.password ?? null)
+    let resolvedPassword = item.password ?? null
+    if (resolvedPassword && item.id && isCiphertext(resolvedPassword)) {
+      const decrypted = await decryptConnectionPassword(resolvedPassword, item.id)
+      resolvedPassword = decrypted || null
+    }
     // Targeted for SQL Server & MySQL: default port is 3306 for MySQL and 1433 for SQL Server.
     const defaultPort = item.driverType === 'mysql' ? 3306 : 1433
     connections.push({
@@ -227,7 +229,16 @@ export async function applyImportedConnections(payload: {
       folderId = await resolveLegacyFolder(item.folderName)
     }
 
-    const resolvedPassword = item.password ?? null
+    let resolvedPassword = item.password ?? null
+    if (resolvedPassword && isCiphertext(resolvedPassword)) {
+      const candidateUid = item.id || item.uid
+      if (candidateUid) {
+        const decrypted = await decryptConnectionPassword(resolvedPassword, String(candidateUid))
+        if (decrypted) {
+          resolvedPassword = decrypted
+        }
+      }
+    }
     // Targeted for SQL Server & MySQL: default port is 3306 for MySQL and 1433 for SQL Server.
     const defaultPort = item.driverType === 'mysql' ? 3306 : 1433
     const saved = await api.saveConnection({

@@ -8,6 +8,7 @@ import {
   formatConnectionSuccess,
   formatConnectionError,
 } from '@/components/connections/connectionTestUtils'
+import { isCiphertext, decryptConnectionPassword } from '@/api/crypto'
 
 export type { ConnectionTestResult } from '@/components/connections/connectionTestUtils'
 
@@ -88,9 +89,33 @@ export default function ConnectionDialog({
 }: ConnectionDialogProps) {
   const isEdit = mode === 'edit' && Boolean(connection?.id)
   const isDuplicate = Boolean(connection?.isDuplicate)
-  const hasSavedPassword = Boolean(
-    connection?.hasPassword || (isEdit && Boolean(connection?.password)),
-  )
+  const [hasSavedPassword, setHasSavedPassword] = useState<boolean>(() => {
+    return Boolean(connection?.hasPassword && connection?.password)
+  })
+
+  useEffect(() => {
+    let active = true
+    async function checkPassword() {
+      if (!isEdit || !connection) {
+        setHasSavedPassword(false)
+        return
+      }
+      if (!connection.hasPassword || !connection.password) {
+        setHasSavedPassword(false)
+        return
+      }
+      if (isCiphertext(connection.password)) {
+        const decrypted = connection.id ? await decryptConnectionPassword(connection.password, connection.id) : ''
+        if (active) setHasSavedPassword(decrypted !== '')
+      } else {
+        if (active) setHasSavedPassword(connection.password.trim() !== '')
+      }
+    }
+    void checkPassword()
+    return () => {
+      active = false
+    }
+  }, [isEdit, connection])
   const [form, setForm] = useState<ConnectionFormState>(() => buildInitial(connection))
   const [showPassword, setShowPassword] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({})

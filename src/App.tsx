@@ -239,6 +239,7 @@ export default function App() {
     showBanner,
     openTab: tabManager.openTab,
     updateTab,
+    sqlRef,
   })
 
   const queryHistory = useQueryHistory({

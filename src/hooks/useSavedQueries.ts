@@ -47,6 +47,7 @@ export interface UseSavedQueriesProps {
     tabId: string,
     updates: any
   ) => void
+  sqlRef?: MutableRefObject<string>
 }
 
 export function useSavedQueries({
@@ -58,6 +59,7 @@ export function useSavedQueries({
   showBanner,
   openTab,
   updateTab,
+  sqlRef,
 }: UseSavedQueriesProps) {
   const [savedQueriesOpen, setSavedQueriesOpen] = useState(false)
   const [savedQueries, setSavedQueries] = useState<SavedQueryItem[]>([])
@@ -123,7 +125,11 @@ export function useSavedQueries({
 
     const tab = current.tabs.find((item: any) => item.id === current.activeTabId) || current.tabs[0]
     if (!tab) return
-    const sql = tab.sql
+    const sql = (sqlRef ? sqlRef.current : tab.sql) ?? tab.sql ?? ''
+    if (!sql.trim()) {
+      showBanner('warn', 'Enter a query before saving.')
+      return
+    }
 
     if (tab.savedQueryId) {
       setQueryBusy(true)
@@ -139,6 +145,7 @@ export function useSavedQueries({
             savedQueryId: saved.id,
             savedQueryName: saved.name,
             title: saved.name,
+            sql,
           })
           await refreshSavedQueries()
           showBanner('success', `Saved “${saved.name}”.`)
@@ -160,7 +167,7 @@ export function useSavedQueries({
       initialName: /^Query \d+$/.test(tab.title) ? '' : tab.title,
       existingNames: savedQueries.map((item) => item.name),
     })
-  }, [activeSession, refreshSavedQueries, savedQueries, showBanner, updateTab])
+  }, [activeSession, refreshSavedQueries, savedQueries, showBanner, sqlRef, updateTab])
 
   const handleSaveQuerySubmit = useCallback(
     async (name: string) => {
@@ -168,19 +175,26 @@ export function useSavedQueries({
       const current = activeSession()
       if (!pending || !current || !current.activeDatabase) return
 
+      const liveSql = pending.sql || (sqlRef ? sqlRef.current : '') || ''
+      if (!liveSql.trim()) {
+        showBanner('warn', 'Enter a query before saving.')
+        return
+      }
+
       setQueryBusy(true)
       try {
         const saved = await api.saveSavedQuery({
           connectionId: current.connectionId,
           databaseName: current.activeDatabase,
           name,
-          sql: pending.sql,
+          sql: liveSql,
         })
         if (saved) {
           updateTab(current.connectionId, pending.tabId, {
             savedQueryId: saved.id,
             savedQueryName: saved.name,
             title: saved.name,
+            sql: liveSql,
           })
           setSaveQueryDialog(null)
           await refreshSavedQueries()
@@ -192,7 +206,7 @@ export function useSavedQueries({
         setQueryBusy(false)
       }
     },
-    [activeSession, refreshSavedQueries, saveQueryDialog, showBanner, updateTab],
+    [activeSession, refreshSavedQueries, saveQueryDialog, showBanner, sqlRef, updateTab],
   )
 
   const handleOpenSavedQueries = useCallback(() => {
