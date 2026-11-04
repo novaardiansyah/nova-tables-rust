@@ -21,7 +21,17 @@ import {
   TableStructureResult,
   TableSummary,
 } from './types'
-import { apiRequest, getAuthToken, getStoredSession, setAuthToken, setStoredSession, onUnauthenticated, notifyUnauthenticated } from './client'
+import {
+  apiRequest,
+  getAuthToken,
+  getRefreshToken,
+  getStoredSession,
+  notifyUnauthenticated,
+  onUnauthenticated,
+  setAuthToken,
+  setRefreshToken,
+  setStoredSession,
+} from './client'
 import {
   exportAppConfig,
   exportConnections,
@@ -36,7 +46,14 @@ import {
 } from './crypto'
 
 export * from './types'
-export { onUnauthenticated, notifyUnauthenticated } from './client'
+export {
+  getAuthToken,
+  getRefreshToken,
+  notifyUnauthenticated,
+  onUnauthenticated,
+  setAuthToken,
+  setRefreshToken,
+} from './client'
 
 declare global {
   interface Window {
@@ -96,13 +113,16 @@ export const api = {
       throw new Error('Password must be at least 6 characters long.')
     }
 
-    const res = await apiRequest<{ ok: boolean; token: string; user: AuthUser }>('/api/auth/register', {
+    const res = await apiRequest<{ ok: boolean; token: string; refreshToken?: string; user: AuthUser }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify({ email: trimmedEmail, password, name }),
     })
 
     setAuthToken(res.token)
-    setStoredSession({ user: res.user, token: res.token })
+    if (res.refreshToken) {
+      setRefreshToken(res.refreshToken)
+    }
+    setStoredSession({ user: res.user, token: res.token, refreshToken: res.refreshToken })
     return res.user
   },
 
@@ -112,13 +132,16 @@ export const api = {
       throw new Error('Email and password are required.')
     }
 
-    const res = await apiRequest<{ ok: boolean; token: string; user: AuthUser }>('/api/auth/login', {
+    const res = await apiRequest<{ ok: boolean; token: string; refreshToken?: string; user: AuthUser }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email: trimmedEmail, password }),
     })
 
     setAuthToken(res.token)
-    setStoredSession({ user: res.user, token: res.token })
+    if (res.refreshToken) {
+      setRefreshToken(res.refreshToken)
+    }
+    setStoredSession({ user: res.user, token: res.token, refreshToken: res.refreshToken })
     return res.user
   },
 
@@ -160,7 +183,7 @@ export const api = {
           })
 
           if (localCheck?.status === 'completed' && localCheck.code) {
-            const exchangeRes = await apiRequest<{ ok: boolean; token: string; user: AuthUser }>(
+            const exchangeRes = await apiRequest<{ ok: boolean; token: string; refreshToken?: string; user: AuthUser }>(
               '/api/auth/google/exchange',
               {
                 method: 'POST',
@@ -172,7 +195,10 @@ export const api = {
             )
 
             setAuthToken(exchangeRes.token)
-            setStoredSession({ user: exchangeRes.user, token: exchangeRes.token })
+            if (exchangeRes.refreshToken) {
+              setRefreshToken(exchangeRes.refreshToken)
+            }
+            setStoredSession({ user: exchangeRes.user, token: exchangeRes.token, refreshToken: exchangeRes.refreshToken })
             return exchangeRes.user
           }
 
@@ -187,13 +213,16 @@ export const api = {
       }
 
       try {
-        const statusRes = await apiRequest<{ ok: boolean; status: string; token?: string; user?: AuthUser; message?: string }>(
+        const statusRes = await apiRequest<{ ok: boolean; status: string; token?: string; refreshToken?: string; user?: AuthUser; message?: string }>(
           `/api/auth/google/status/${encodeURIComponent(redirectRes.state)}`
         )
 
         if (statusRes.status === 'completed' && statusRes.token && statusRes.user) {
           setAuthToken(statusRes.token)
-          setStoredSession({ user: statusRes.user, token: statusRes.token })
+          if (statusRes.refreshToken) {
+            setRefreshToken(statusRes.refreshToken)
+          }
+          setStoredSession({ user: statusRes.user, token: statusRes.token, refreshToken: statusRes.refreshToken })
           return statusRes.user
         }
 
@@ -222,11 +251,13 @@ export const api = {
 
     try {
       const res = await apiRequest<{ ok: boolean; user: AuthUser }>('/api/auth/me')
-      const session: AuthSession = { user: res.user, token }
+      const refreshToken = getRefreshToken()
+      const session: AuthSession = { user: res.user, token: getAuthToken() || token, refreshToken }
       setStoredSession(session)
       return session
     } catch {
       setAuthToken(null)
+      setRefreshToken(null)
       setStoredSession(null)
       return null
     }
@@ -234,10 +265,15 @@ export const api = {
 
   logout: async (): Promise<void> => {
     try {
-      await apiRequest('/api/auth/logout', { method: 'POST' })
+      const refreshToken = getRefreshToken()
+      await apiRequest('/api/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken }),
+      })
     } catch {
     } finally {
       setAuthToken(null)
+      setRefreshToken(null)
       setStoredSession(null)
     }
   },

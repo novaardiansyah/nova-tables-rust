@@ -1,6 +1,7 @@
-import { AuthSession, AuthUser } from './types'
+import { AuthSession } from './types'
 
 const TOKEN_KEY = 'nova_tables_sanctum_token'
+const REFRESH_TOKEN_KEY = 'nova_tables_refresh_token'
 const SESSION_KEY = 'nova_tables_auth_session'
 
 type UnauthenticatedListener = () => void
@@ -46,6 +47,25 @@ export function setAuthToken(token: string | null): void {
   }
 }
 
+export function getRefreshToken(): string | null {
+  try {
+    return localStorage.getItem(REFRESH_TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function setRefreshToken(token: string | null): void {
+  try {
+    if (token) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, token)
+    } else {
+      localStorage.removeItem(REFRESH_TOKEN_KEY)
+    }
+  } catch {
+  }
+}
+
 export function getStoredSession(): AuthSession | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY)
@@ -67,26 +87,112 @@ export function setStoredSession(session: AuthSession | null): void {
   }
 }
 
+let refreshPromise: Promise<string | null> | null = null
+
+export async function refreshAccessTokenSingleFlight(): Promise<string | null> {
+  if (refreshPromise) {
+    return refreshPromise
+  }
+
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) {
+    return null
+  }
+
+  refreshPromise = (async () => {
+    try {
+      const baseUrl = getApiBaseUrl()
+      const res = await fetch(`${baseUrl}/api/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refreshToken }),
+      })
+
+      if (!res.ok) {
+        return null
+      }
+
+      const text = await res.text()
+      let data: any = null
+      try {
+        data = JSON.parse(text)
+      } catch {
+        return null
+      }
+
+      if (!data?.ok || !data?.token) {
+        return null
+      }
+
+      const newAccessToken = data.token as string
+      const newRefreshToken = (data.refreshToken as string) || null
+
+      setAuthToken(newAccessToken)
+      if (newRefreshToken) {
+        setRefreshToken(newRefreshToken)
+      }
+
+      const currentSession = getStoredSession()
+      if (currentSession) {
+        setStoredSession({
+          ...currentSession,
+          user: data.user || currentSession.user,
+          token: newAccessToken,
+          refreshToken: newRefreshToken || currentSession.refreshToken,
+        })
+      }
+
+      return newAccessToken
+    } catch {
+      return null
+    } finally {
+      refreshPromise = null
+    }
+  })()
+
+  return refreshPromise
+}
+
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
   const baseUrl = getApiBaseUrl()
-  const token = getAuthToken()
+  let token = getAuthToken()
   const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
   const url = `${baseUrl}${normalizedEndpoint}`
 
-  const headers: Record<string, string> = {
+  const isAuthRoute =
+    normalizedEndpoint === '/api/auth/login' ||
+    normalizedEndpoint === '/api/auth/register' ||
+    normalizedEndpoint === '/api/auth/refresh' ||
+    normalizedEndpoint.startsWith('/api/auth/google')
+
+  const buildHeaders = (authToken: string | null) => ({
     Accept: 'application/json',
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     ...((options.headers as Record<string, string>) || {}),
-  }
-
-  const response = await fetch(url, {
-    ...options,
-    headers,
   })
+
+  let response = await fetch(url, {
+    ...options,
+    headers: buildHeaders(token),
+  })
+
+  if (response.status === 401 && !isAuthRoute) {
+    const newToken = await refreshAccessTokenSingleFlight()
+    if (newToken) {
+      token = newToken
+      response = await fetch(url, {
+        ...options,
+        headers: buildHeaders(token),
+      })
+    }
+  }
 
   const text = await response.text()
   let data: any = null
@@ -99,13 +205,9 @@ export async function apiRequest<T = any>(
   }
 
   if (!response.ok) {
-    const isAuthRoute =
-      normalizedEndpoint === '/api/auth/login' ||
-      normalizedEndpoint === '/api/auth/register' ||
-      normalizedEndpoint.startsWith('/api/auth/google')
-
     if (response.status === 401 && !isAuthRoute) {
       setAuthToken(null)
+      setRefreshToken(null)
       setStoredSession(null)
       notifyUnauthenticated()
     }
@@ -130,4 +232,3 @@ export async function apiRequest<T = any>(
 
   return (data || {}) as T
 }
-

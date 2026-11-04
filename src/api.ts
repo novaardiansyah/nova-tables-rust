@@ -1,4 +1,13 @@
-export { api, IpcError, onUnauthenticated, notifyUnauthenticated } from '@/api/index'
+export {
+  api,
+  IpcError,
+  onUnauthenticated,
+  notifyUnauthenticated,
+  getAuthToken,
+  setAuthToken,
+  getRefreshToken,
+  setRefreshToken,
+} from '@/api/index'
 export type {
   ConnectionModel,
   FolderModel,
