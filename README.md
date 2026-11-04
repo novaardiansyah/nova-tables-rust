@@ -2,237 +2,169 @@
 
 Hi Future Developer,
 
-Welcome to **Nova Tables**, a modern, high-performance desktop SQL client for **Microsoft SQL Server** and **MySQL** built with **Tauri v2** and **Rust 2021**. It brings your connections, databases, tables, queries and results together in one calm workspace, so you can focus on the work instead of the tooling.
+Welcome to **Nova Tables**, a modern, high-performance desktop SQL client for **Microsoft SQL Server** and **MySQL** built with **Tauri v2** and **Rust 2021**, backed by a synchronized companion API. It brings your connections, databases, tables, queries, and results together in one calm workspace, so you can focus on the work instead of the tooling.
 
-Nova Tables is made for people who work with Microsoft SQL Server and MySQL every day and simply want a tidy place to look something up, write a query and read the answer. By moving from Electron to Tauri and Rust, it delivers lightweight binary sizes, lower memory consumption (~60–80MB), and instant native startup.
+Nova Tables is crafted for developers and database administrators who work with Microsoft SQL Server and MySQL every day and simply want a fast, tidy place to explore schemas, write queries, and inspect results. Built natively with Tauri and Rust, it delivers ultra-lightweight binaries, minimal memory consumption (~60–80MB), instant startup, and bank-grade client-side encryption.
 
-> **Note:** Nova Tables supports Microsoft SQL Server and MySQL (including MariaDB). It is a local desktop application - nothing is uploaded anywhere, and neither your data nor your credentials ever leave your computer.
+> **Note:** Nova Tables supports Microsoft SQL Server and MySQL (including MariaDB). Database queries and connections communicate directly from your local machine to your database instances—database credentials are encrypted with AES-256-GCM on the client before synchronization, ensuring your database credentials remain entirely private.
 
 ---
 
 ## Screenshots
 
-Every image below is captured from Nova Tables connected to a local SQL Server test database.
+Every screenshot below illustrates Nova Tables running live across authentication, connection management, query execution, and preferences.
 
-### Your connections, recent sessions and folders in one place
+### Secure Authentication & Google OAuth 2.0
 
-The connection screen keeps the whole tree together: a recent-connection card for one-click access, environment badges, collapsible folders and a quick connect button that jumps straight into a session.
+Sign in smoothly using your email and password or authenticate with one click via Google OAuth 2.0. The desktop app securely listens on an ephemeral loopback port for the OAuth callback, with single-flight access token rotation and seamless background refresh.
 
-![Connections](./public/demo/connections.png)
+![Desktop Login Page](./public/demo/v2.2.4/desktop-login-page.png)
 
-### Select several connections for bulk actions
+### Branded Google OAuth Flow
 
-Ticking rows reveals a floating action bar, so a group of connections - or a whole folder with everything inside it - can be exported, moved or deleted in one go.
+OAuth authentication opens directly in your browser with immediate visual confirmation upon authorization, cleanly redirecting your session back into the desktop client.
 
-![Connection selection](./public/demo/connections-selection.png)
+![Google Login Success](./public/demo/v2.2.4/google-login-succes.png)
 
-### Export connections and their folders as one encrypted file
+### Your Connections, Folders, and Sessions
 
-The export dialog previews exactly what will be written, including nested folders, before you set the passphrase.
+The connection screen organizes your databases into a structured tree with environment tags (`Production`, `Staging`, `Development`), folder hierarchies, and one-click quick connect.
 
-![Export connections](./public/demo/export-connections.png)
+![Connection Existing State](./public/demo/v2.2.4/connection-existing-state.png)
 
-### Import the file on another machine with the same password
+### A New Connection, Tested Before It Is Saved
 
-Importing asks only for the passphrase; folders are recreated and duplicate names get a safe suffix.
+Configure host, port, credentials, default database, and TLS encryption in a single, intuitive dialog. The live test button verifies connection parameters and confirms the database engine version before saving.
 
-![Import connections](./public/demo/import-connections.png)
+![Add New Connection](./public/demo/v2.2.4/connection-add-new.png)
 
-### A new connection, tested before it is saved
+### Starting Clean: Empty Connection State
 
-Connection details, environment and TLS options live in a single form with a test button that reports the server version before the connection is stored.
+When setting up Nova Tables for the first time or onboarding a new environment, a clean empty state offers quick actions to create your first connection or import an existing configuration file.
 
-![New connection](./public/demo/new-connection.png)
+![Empty Connection State](./public/demo/v2.2.4/connection-empty-state.png)
 
-### A calm workspace: editor above, results below
+### Encrypted Configuration Export
 
-The Monaco SQL editor keeps syntax highlighting, completion and line numbers, while the resizable results grid stays in view. The header holds the database picker, execution guard, estimated plan and the run button.
+Export your connection trees, folders, and saved configurations into an encrypted JSON package protected by PBKDF2 (SHA-256, 100,000 iterations) and AES-256-GCM encryption.
 
-![Workspace](./public/demo/workspace.png)
+![Export Configuration](./public/demo/v2.2.4/settings-export-configuration.png)
 
-### Right-click a table for object actions
+### Seamless Configuration Import
 
-Opening a new tab, scripting a table as `CREATE`, inspecting its structure, renaming, cloning, truncating or dropping it all start from the sidebar context menu.
+Import configuration files onto any workstation with your passphrase. Folders are automatically reconstructed, duplicate names are safely disambiguated, and connection credentials are restored.
 
-![Table context menu](./public/demo/table-menu.png)
+![Import Configuration](./public/demo/v2.2.4/settings-import-configuration.png)
 
-### Inspect and change table structure in the table designer
+### A Calm Workspace: Editor, Tabs, and Results
 
-Columns, lengths, defaults, nullability, identity, primary keys, unique keys and foreign keys are editable side by side, with generated DDL ready to review before it is applied.
+The Monaco SQL editor features dialect-aware syntax highlighting, autocomplete, and horizontal drag-and-drop tab reordering. Query tabs can be rearranged freely while preserving editor contents, unsaved markers, and execution state.
 
-![Table designer](./public/demo/table-designer.png)
+![Workspace Form Viewer](./public/demo/v2.2.4/workspace-form-viewer.png)
 
-### Edit a whole block of cells at once
+### Query Execution Safeguards
 
-Browse a table and type directly into the grid; changed cells stay highlighted, and a counter keeps track of how many edits are pending.
+Protect against unintentional modifications on critical production databases using execution guard modes (`Silent`, `Alert (Read-Only)`, and `Alert`). The execution guard prompts you to review and confirm write operations before they run.
 
-![Editing cells](./public/demo/cell-editing.png)
+![Query Confirmation Modal](./public/demo/v2.2.4/workspace-query-confirmation.png)
 
-### Ready-to-run UPDATE statements from your edits
+### Execution Guard Modes
 
-No edit is written silently. Reviewing changes shows the exact `UPDATE` statements generated per row, with the primary key in the `WHERE` clause, and lets you discard or apply them.
+Switch execution guard modes quickly right from the workspace header to balance execution speed during development with safety during production maintenance.
 
-![Generated UPDATE statements](./public/demo/changes.png)
+![Workspace Secure Options](./public/demo/v2.2.4/workspace-secure-options.png)
 
-### Read a row as a JSON record
+### Form Viewer for Detailed Records
 
-The inspect dialog formats any row or selection as JSON, with raw, wrapped and XML views for long values.
+Inspect single records as an editable vertical form with column data types and auto-resizing textareas that make reading multiline text and JSON values easy.
 
-![JSON viewer](./public/demo/json-viewer.png)
+![Form Viewer](./public/demo/v2.2.4/workspace-form-viewer.png)
 
-### Right-click a cell for inspect, copy and export actions
+### Dedicated JSON Viewer
 
-The cell menu covers value inspection, filtering by the cell value, copying as text, JSON or `INSERT`, and exporting just the current selection.
+Analyze structured JSON values with collapsible syntax highlighting, formatted indentation, and one-click copying.
 
-![Cell context menu](./public/demo/cell-menu.png)
+![JSON Viewer](./public/demo/v2.2.4/workspace-json-viewer.png)
 
-### Revisit what you ran with query history
+### Contextual Cell Actions & Fast Exports
 
-Every execution is logged locally with row count, duration and errors, scoped to the active database and searchable.
+Right-click any cell in the results grid to inspect values, copy text, export selections as JSON or SQL `INSERT` statements, or delete rows with generated preview statements.
 
-![Query history](./public/demo/query-history.png)
+![Cell Actions Menu](./public/demo/v2.2.4/workspace-cell-actions.png)
 
-### Customise themes, fonts and editor typography
+### Save Queries for Quick Reuse
 
-Preferences cover light and dark palettes, app, grid, JSON and editor fonts, sizes, timezone and editor wrapping - persisted to the local SQLite store.
+Save frequently executed queries with custom names and database associations, accessible directly from the workspace sidebar.
 
-![Settings dialog](./public/demo/settings.png)
+![Save Query](./public/demo/v2.2.4/workspace-save-query.png)
 
-### Manage connections from a single screen
+### Searchable Query History
 
-The connection manager lists every saved connection with driver badges, environment badges and quick actions to edit, replicate, move, export or delete.
+Every executed query is logged with execution duration, row counts, timestamps, and error messages, scoped to your active database and searchable for auditing.
 
-![Manage connections](./public/demo/v2.2.0/manage-connection.png)
+![Query History](./public/demo/v2.2.4/workspace-query-history.png)
 
-### An empty connection list, ready for your first server
+### User Profile and Secure Sign-Out
 
-When no connections exist yet, the screen offers a clear starting point to add one manually or import an encrypted file.
+Your full name and user profile are prominently shown in the application interface, with an explicit confirmation dialog when signing out to prevent accidental session termination.
 
-![Empty connection state](./public/demo/v2.2.0/empty-state-connection.png)
+![Sign Out Confirmation](./public/demo/v2.2.4/desktop-signout-confirmation.png)
 
-### Edit or replicate a connection in place
+### Customise Preferences, Typography, and Themes
 
-Connection details, driver, environment and TLS options can be updated or duplicated without recreating the connection from scratch.
+Fine-tune typography, editor font sizes, results grid fonts, timezone alignment (Asia/Jakarta UTC+7), and theme palettes to tailor the environment to your workstation.
 
-![Edit connection](./public/demo/v2.2.0/edit-connection.png)
+![Preferences](./public/demo/v2.2.4/settings-preferences.png)
 
-### Export a connection tree with one click
+### Keyboard Shortcuts at Your Fingertips
 
-Export a single connection or a whole folder into an encrypted file, with a preview of exactly what will be written.
+A comprehensive shortcut sheet lets you master keyboard navigation for running queries (<kbd>Ctrl</kbd>+<kbd>Enter</kbd> / <kbd>Cmd</kbd>+<kbd>Enter</kbd>), switching tabs, navigating results, and formatting code.
 
-![Export connection](./public/demo/v2.2.0/export-connection.png)
-
-### Import connections from an encrypted file
-
-Importing asks only for the passphrase; folders are recreated and duplicate names get a safe suffix.
-
-![Import configuration](./public/demo/v2.2.0/import-configuration.png)
-
-### Delete a folder and its connections safely
-
-Deleting a folder cascades through every connection inside it, with a confirmation dialog that lists what will be removed.
-
-![Delete folder connection](./public/demo/v2.2.0/delete-folder-connection.png)
-
-### Keyboard shortcuts at a glance
-
-A dedicated dialog lists every shortcut for running queries, switching tabs, searching and navigating the grid.
-
-![Keyboard shortcuts](./public/demo/v2.2.0/keyboard-shortcut.png)
-
-### Fine-tune preferences and themes
-
-Preferences are split into clear tabs for content typography, editor settings, timezone and theme selection, persisted to the local SQLite store.
-
-![Settings preference](./public/demo/v2.2.0/setting-preference.png)
-
-![Settings preference theme](./public/demo/v2.2.0/setting-preference-theme.png)
-
-### Run queries with execution guards and estimated plans
-
-The header holds the database picker, execution guard (`silent`, `alert-readonly`, `alert`), estimated plan and the run button.
-
-![Alert mode and estimate plan](./public/demo/v2.2.0/workspace-alert-mode-and-estimate-plan.png)
-
-### Review edits before they are applied
-
-No edit is written silently. Reviewing changes shows the exact `UPDATE` statements generated per row, with the primary key in the `WHERE` clause.
-
-![Edit confirm dialog](./public/demo/v2.2.0/workspace-edit-confirm-dialog.png)
-
-### Read a row as a JSON record
-
-The inspect dialog formats any row or selection as JSON, with raw, wrapped and XML views for long values.
-
-![JSON viewer](./public/demo/v2.2.0/workspace-json-viewer.png)
-
-### Browse a table row as a vertical form
-
-The right panel shows a single row as an editable vertical form, with column types and special value options.
-
-![Form viewer](./public/demo/v2.2.0/workspace-form-viewer.png)
-
-### Write and run queries in a calm workspace
-
-The Monaco SQL editor keeps syntax highlighting, completion and line numbers, while the resizable results grid stays in view.
-
-![Workspace query](./public/demo/v2.2.0/workspace-query.png)
-
-### Inspect and change table structure in the table designer
-
-Columns, lengths, defaults, nullability, identity, primary keys, unique keys and foreign keys are editable side by side, with generated DDL ready to review before it is applied.
-
-![Table designer](./public/demo/v2.2.0/workspace-table-design.png)
-
-### Manage database users and fixed roles
-
-Create, edit and drop database users and assign fixed roles, with support for both SQL Server and MySQL.
-
-![User role permission](./public/demo/v2.2.0/workspace-user-role-permission.png)
+![Keyboard Shortcuts](./public/demo/v2.2.4/help-keyboard-shortcut.png)
 
 ---
 
-
 ## Dazzling Tech Stack
 
-- [Tauri v2](https://v2.tauri.app/) - Native desktop application framework
-- [Rust 2021](https://www.rust-lang.org/) - High-performance native backend
-- [React 18](https://react.dev/) - Sandboxed reactive UI
-- [TypeScript](https://www.typescriptlang.org/) - Strict TypeScript frontend with explicit data contracts
-- [Vite 5](https://vitejs.dev/) - Fast frontend build tool and dev server
-- [Tailwind CSS](https://tailwindcss.com/) - Clean, semantic styling tokens
-- [Monaco Editor](https://microsoft.github.io/monaco-editor/) - Editor engine, the same one behind VS Code
-- [Rusqlite](https://github.com/rusqlite/rusqlite) - Embedded SQLite store with WAL journal mode
-- [Tiberius](https://github.com/prisma/tiberius) & [tokio](https://tokio.rs/) - Native asynchronous TDS protocol for SQL Server
-- [Mysql Async](https://github.com/blackbeam/mysql_async) - Native asynchronous driver for MySQL and MariaDB
+- [Tauri v2](https://v2.tauri.app/) - High-performance desktop application runtime and security framework
+- [Rust 2021](https://www.rust-lang.org/) - Direct database networking and local OS integrations
+- [React 18](https://react.dev/) - Sandboxed reactive UI with component modularity
+- [TypeScript](https://www.typescriptlang.org/) - Strict typing with explicit data models and zero `any` types
+- [Vite 5](https://vitejs.dev/) - Lightning-fast frontend build system and HMR
+- [Tailwind CSS](https://tailwindcss.com/) - Consistent semantic styling tokens
+- [Monaco Editor](https://microsoft.github.io/monaco-editor/) - VS Code's robust code editing engine with SQL dialect support
+- [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API) - Client-side AES-256-GCM and PBKDF2 encryption for connection passwords
+- [Laravel 13 Companion API](https://laravel.com/) - Persistent synchronization for connections, folders, query history, and user settings via Laravel Sanctum & Socialite
+- [Tiberius](https://github.com/prisma/tiberius) & [tokio](https://tokio.rs/) - Direct asynchronous TDS protocol driver for Microsoft SQL Server
+- [Mysql Async](https://github.com/blackbeam/mysql_async) - Direct asynchronous driver for MySQL and MariaDB
 - [Microsoft SQL Server](https://www.microsoft.com/en-us/sql-server/) & [MySQL](https://www.mysql.com/) - Supported database engines
 
 ---
 
 ## What You Can Do
 
-- **Connection Management**: Organize SQL Server and MySQL connections with driver badges, environment badges, and collapsible, nested folders.
-- **Recent Sessions & Quick Connect**: Jump back into recent connections with timestamp badges and dedicated quick-connect actions.
-- **Encrypted Export & Import**: Password-protect your connection tree using AES-256-GCM and PBKDF2 encryption.
-- **Tree Deletion Safety**: Safely delete entire folders and connection subtrees with atomic cascading in SQLite.
-- **Database Navigation**: Browse databases with searchable filtering, and explore tables, views, stored procedures, and functions in a fast sidebar tree.
-- **Monaco SQL Editor**: Write queries with syntax highlighting, auto-completion, line wrapping, execution guards (`silent`, `alert-readonly`, `alert`), and `Ctrl+R` re-run shortcut.
-- **Table Designer**: Inspect and alter table structures visually with column drag-and-drop reordering, searchable data types, and foreign key reference pickers.
-- **Interactive Results Grid**: View results with three-state column sorting, quick filtering by cell value, and foreign key link navigation.
-- **In-Grid Row Editing & Deletion**: Edit cells or mark rows for deletion directly in the grid. Generate verifiable `UPDATE` and `DELETE` SQL statements without silent background modifications.
-- **Execution Plan Inspection**: Analyze query performance with estimated visual execution plan trees (cost analysis and XML).
-- **Exporting & History**: Export query results directly to RFC 4180 CSV or formatted JSON, and review query history anytime.
-- **Theme & Typography**: Switch between dark and light themes (default: `Light Nova`), with responsive auto-detected font sizes (12px laptop / 14px large displays) persisted directly to SQLite.
+- **Connection Management**: Organize SQL Server and MySQL connections with driver badges, environment badges, and collapsible folders.
+- **Client-Side Encryption**: Protect database credentials locally with client-side AES-256-GCM encryption before persistence or synchronization.
+- **Google OAuth 2.0 & Email Authentication**: Authenticate via Google OAuth or email credentials with automatic token rotation and transparent refresh.
+- **Drag-and-Drop Query Tabs**: Reorder query tabs horizontally while keeping active buffers, cursor positions, and result sets intact.
+- **Database Navigation**: Explore schemas, tables, views, stored procedures, functions, and table relationships in a fast sidebar tree.
+- **Monaco SQL Editor**: Write queries with syntax highlighting, autocomplete, line wrapping, execution guards (`Silent`, `Alert (Read-Only)`, `Alert`), and estimated plan analysis.
+- **Table Designer**: Inspect and alter table structures visually with column types, nullability, defaults, primary keys, and foreign key references.
+- **Interactive Results Grid**: Filter results with dual-driver query filtering (bracket vs. backtick quoting, Unicode string escapes), column sorting, and cell inspector.
+- **Verifiable In-Grid Editing**: Edit cells or mark rows for deletion directly in the grid. Generate verifiable `UPDATE` and `DELETE` SQL statements without silent background modifications.
+- **Execution Plan Inspection**: Inspect query performance with visual estimated execution plans on Microsoft SQL Server.
+- **Exporting & Query History**: Export query results directly to CSV or JSON, and review detailed query execution logs anytime.
+- **Preferences & Themes**: Customize dark and light themes, typography, display scaling, and timezone settings.
 
 ---
 
 ## Good to Know
 
-- Saved connections live strictly on your computer inside the OS application data directory (`~/.local/share/nova-tables/connections.sqlite` on Linux or `%APPDATA%\nova-tables\connections.sqlite` on Windows).
-- Passwords stored locally are isolated within the SQLite database.
-- Several connections can stay open at once, and the one on screen owns the tree and tabs.
-- Editing and row deletion are available for tables with a primary key, ensuring generated SQL statements accurately target primary key columns.
-- Query execution and history remain 100% offline and local.
+- Direct database connections (`tiberius` for SQL Server and `mysql_async` for MySQL) are established directly from your local machine to your target servers.
+- Database passwords are encrypted client-side using AES-256-GCM with PBKDF2 key derivation and are decrypted only in memory when establishing direct database sessions.
+- Application state (connections, folders, query history, and preferences) is synchronized securely through the companion Laravel API with Sanctum access token rotation.
+- In-place grid edits never write directly to the database without review; they generate verifiable SQL statements with primary key `WHERE` clauses.
+- Estimated execution plans are supported natively for Microsoft SQL Server connections.
 
 ---
 
