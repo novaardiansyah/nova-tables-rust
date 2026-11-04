@@ -100,15 +100,16 @@ export default function ConnectionDialog({
         setHasSavedPassword(false)
         return
       }
-      if (!connection.hasPassword || !connection.password) {
+      const pwd = typeof connection.password === 'string' ? connection.password : ''
+      if (!connection.hasPassword || !pwd) {
         setHasSavedPassword(false)
         return
       }
-      if (isCiphertext(connection.password)) {
-        const decrypted = connection.id ? await decryptConnectionPassword(connection.password, connection.id) : ''
+      if (isCiphertext(pwd)) {
+        const decrypted = connection.id ? await decryptConnectionPassword(pwd, String(connection.id)) : ''
         if (active) setHasSavedPassword(decrypted !== '')
       } else {
-        if (active) setHasSavedPassword(connection.password.trim() !== '')
+        if (active) setHasSavedPassword(pwd.trim() !== '')
       }
     }
     void checkPassword()

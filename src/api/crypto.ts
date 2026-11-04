@@ -238,6 +238,7 @@ export function isCiphertext(value?: string | null): boolean {
 
 export async function encryptConnectionPassword(password: string, uid: string): Promise<string> {
   if (!password) return ''
+  const normalizedUid = String(uid).trim().toLowerCase()
   const subtle = getSubtleCrypto()
   const salt = new Uint8Array(16)
   const iv = new Uint8Array(12)
@@ -250,7 +251,7 @@ export async function encryptConnectionPassword(password: string, uid: string): 
 
   const keyMaterial = await subtle.importKey(
     'raw',
-    new TextEncoder().encode(`${uid}:${CONNECTION_CIPHER_SECRET}`),
+    new TextEncoder().encode(`${normalizedUid}:${CONNECTION_CIPHER_SECRET}`),
     'PBKDF2',
     false,
     ['deriveKey'],
@@ -274,7 +275,7 @@ export async function encryptConnectionPassword(password: string, uid: string): 
     {
       name: 'AES-GCM',
       iv: iv as unknown as BufferSource,
-      additionalData: new TextEncoder().encode(uid) as unknown as BufferSource,
+      additionalData: new TextEncoder().encode(normalizedUid) as unknown as BufferSource,
       tagLength: 128,
     },
     encKey,
@@ -295,15 +296,7 @@ export async function encryptConnectionPassword(password: string, uid: string): 
   return `enc:v1:${uint8ToBase64(packed)}`
 }
 
-export async function decryptConnectionPassword(cipherWithPrefix?: string | null, uid?: string | null): Promise<string> {
-  if (!cipherWithPrefix) return ''
-  if (!isCiphertext(cipherWithPrefix)) {
-    return cipherWithPrefix
-  }
-  if (!uid) {
-    return ''
-  }
-
+async function decryptWithCandidateUid(cipherWithPrefix: string, candidateUid: string): Promise<string> {
   const subtle = getSubtleCrypto()
   const rawBase64 = cipherWithPrefix.slice(7)
   const packed = base64ToUint8(rawBase64)
@@ -322,7 +315,7 @@ export async function decryptConnectionPassword(cipherWithPrefix?: string | null
 
   const keyMaterial = await subtle.importKey(
     'raw',
-    new TextEncoder().encode(`${uid}:${CONNECTION_CIPHER_SECRET}`),
+    new TextEncoder().encode(`${candidateUid}:${CONNECTION_CIPHER_SECRET}`),
     'PBKDF2',
     false,
     ['deriveKey'],
@@ -346,7 +339,7 @@ export async function decryptConnectionPassword(cipherWithPrefix?: string | null
       {
         name: 'AES-GCM',
         iv: iv as unknown as BufferSource,
-        additionalData: new TextEncoder().encode(uid) as unknown as BufferSource,
+        additionalData: new TextEncoder().encode(candidateUid) as unknown as BufferSource,
         tagLength: 128,
       },
       decKey,
@@ -356,4 +349,30 @@ export async function decryptConnectionPassword(cipherWithPrefix?: string | null
   } catch {
     return ''
   }
+}
+
+export async function decryptConnectionPassword(cipherWithPrefix?: string | null, uid?: string | null): Promise<string> {
+  if (!cipherWithPrefix) return ''
+  if (!isCiphertext(cipherWithPrefix)) {
+    return cipherWithPrefix
+  }
+  if (!uid) {
+    return ''
+  }
+
+  const trimmed = String(uid).trim()
+  const candidates = Array.from(new Set([
+    trimmed.toLowerCase(),
+    trimmed.toUpperCase(),
+    trimmed,
+  ]))
+
+  for (const cand of candidates) {
+    const res = await decryptWithCandidateUid(cipherWithPrefix, cand)
+    if (res !== '') {
+      return res
+    }
+  }
+
+  return ''
 }
