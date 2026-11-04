@@ -6,7 +6,7 @@ Welcome to **Nova Tables**, a modern, high-performance desktop SQL client for **
 
 Nova Tables is crafted for developers and database administrators who work with Microsoft SQL Server and MySQL every day and simply want a fast, tidy place to explore schemas, write queries, and inspect results. Built natively with Tauri and Rust, it delivers ultra-lightweight binaries, minimal memory consumption (~60–80MB), instant startup, and bank-grade client-side encryption.
 
-> **Note:** Nova Tables supports Microsoft SQL Server and MySQL (including MariaDB). Database queries and connections communicate directly from your local machine to your database instances—database credentials are encrypted with AES-256-GCM on the client before synchronization, ensuring your database credentials remain entirely private.
+> **Note:** Nova Tables supports Microsoft SQL Server and MySQL (including MariaDB). Database queries and connections communicate directly from your local machine to your database instances database credentials are encrypted with AES-256-GCM on the client before synchronization, ensuring your database credentials remain entirely private.
 
 ---
 
@@ -24,7 +24,7 @@ Sign in smoothly using your email and password or authenticate with one click vi
 
 OAuth authentication opens directly in your browser with immediate visual confirmation upon authorization, cleanly redirecting your session back into the desktop client.
 
-![Google Login Success](./public/demo/v2.2.4/google-login-succes.png)
+<img src="./public/demo/v2.2.4/google-login-succes.png" alt="Google Login Success" width="200">
 
 ### Your Connections, Folders, and Sessions
 
