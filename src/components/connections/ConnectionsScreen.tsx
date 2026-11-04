@@ -4,7 +4,7 @@ import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu'
 import EnvironmentBadge from '@/components/common/EnvironmentBadge'
 import Icon, { BrandMark, Spinner } from '@/components/common/Icon'
 import PromptDialog from '@/components/common/PromptDialog'
-import { api } from '@/api'
+import { api, AuthUser } from '@/api'
 import {
   ConnectionTestResult,
   formatConnectionSuccess,
@@ -80,6 +80,8 @@ export interface ConnectionsScreenProps {
   onReloadConnections?: () => Promise<unknown> | void
   onNotify?: (type: 'info' | 'warn' | 'error' | 'success', message: string) => void
   onTestConnection?: (connection: ConnectionItem) => Promise<unknown> | void
+  currentUser?: AuthUser | null
+  onLogout?: () => void
 }
 
 export default function ConnectionsScreen({
@@ -88,6 +90,8 @@ export default function ConnectionsScreen({
   openIds,
   connectingId,
   appVersion,
+  currentUser = null,
+  onLogout,
   lastConnectedId,
   onOpen,
   onNewConnection,
@@ -696,6 +700,23 @@ export default function ConnectionsScreen({
         <span className="text-[length:var(--app-text-13)] font-semibold tracking-tight text-text-strong">Nova Tables</span>
 
         <div className="ml-auto flex items-center gap-2">
+          {currentUser ? (
+            <div className="mr-2 flex items-center gap-2 border-r border-line pr-3">
+              <span className="text-[length:var(--app-text-11)] text-text-muted">
+                Signed in as <strong className="text-text-strong">{currentUser.username}</strong>
+              </span>
+              {onLogout ? (
+                <button
+                  type="button"
+                  className="icon-btn hover:text-danger"
+                  onClick={onLogout}
+                  title="Sign out"
+                >
+                  <Icon name="power" size={14} />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           <button
             type="button"
             className="btn-soft"

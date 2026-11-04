@@ -14,12 +14,19 @@ pub fn run() {
         .setup(|_app| {
             // Ensure application database and directories exist
             if let Ok(db_path) = FileSystem::get_database_path() {
-                let _ = LocalStore::init(&db_path);
+                if let Ok(conn) = LocalStore::init(&db_path) {
+                    let _ = crate::database::auth::AuthStore::setup_schema(&conn);
+                }
             }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::system::get_system_info,
+            commands::auth::auth_register,
+            commands::auth::auth_get_user_credentials,
+            commands::auth::auth_create_session,
+            commands::auth::auth_get_current_session,
+            commands::auth::auth_logout,
             commands::system::get_app_info,
             commands::system::greet,
             commands::system::get_settings,

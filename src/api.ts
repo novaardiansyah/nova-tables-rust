@@ -18,4 +18,7 @@ export type {
   SystemInfo,
   IpcErrorPayload,
   ImportFileDialogResult,
+  AuthUser,
+  AuthUserWithCredentials,
+  AuthSession,
 } from '@/api/index'

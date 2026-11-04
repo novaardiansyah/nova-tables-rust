@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { api } from '@/api'
+import { api, AuthUser } from '@/api'
 import { DEFAULT_SETTINGS, applySettings, Settings } from '@/settings'
 import {
   DEFAULT_WORKSPACE_STATE,
@@ -24,8 +24,12 @@ import { ConfigTransferMode } from '@/components/dialogs/ConfigTransferDialog'
 import ConnectionsScreen from '@/components/connections/ConnectionsScreen'
 import WorkspaceView from '@/components/WorkspaceView'
 import AppDialogs from '@/components/dialogs/AppDialogs'
+import AuthScreen from '@/components/auth/AuthScreen'
+import { Spinner } from '@/components/common/Icon'
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
+  const [authChecking, setAuthChecking] = useState(true)
   const [banner, setBanner] = useState<{ type: BannerType; message: string } | null>(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -41,6 +45,26 @@ export default function App() {
     const timer = setTimeout(() => setBanner(null), 2500)
     return () => clearTimeout(timer)
   }, [banner])
+
+  useEffect(() => {
+    let cancelled = false
+    void api
+      .getCurrentSession()
+      .then((sess) => {
+        if (!cancelled) {
+          if (sess?.user) {
+            setCurrentUser(sess.user)
+          }
+          setAuthChecking(false)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAuthChecking(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const layout = useWorkspaceLayout(settings.timezone)
   const { sqlRef, selectionRef, seedEditor } = layout
@@ -278,6 +302,18 @@ export default function App() {
   const activeTab = session ? session.tabs.find((tab) => tab.id === session.activeTabId) || null : null
   const workspaceReady = screen === 'workspace' && Boolean(session)
 
+  const handleLogout = useCallback(async () => {
+    try {
+      await api.logout()
+    } catch {
+    }
+    for (const id of Object.keys(sessions)) {
+      sessionManager.closeSession(id)
+    }
+    setCurrentUser(null)
+    showBanner('info', 'Signed out successfully.')
+  }, [sessions, sessionManager, showBanner])
+
   const menus: MenuBarMenu[] = [
     {
       id: 'file',
@@ -395,7 +431,41 @@ export default function App() {
         },
       ],
     },
+    {
+      id: 'account',
+      label: currentUser ? currentUser.username : 'Account',
+      items: [
+        {
+          id: 'sign-out',
+          label: 'Sign Out',
+          onSelect: handleLogout,
+        },
+      ],
+    },
   ]
+
+  if (authChecking) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-base text-text-muted">
+        <Spinner size={24} />
+      </div>
+    )
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="flex h-full flex-col overflow-hidden">
+        {banner ? <Banner type={banner.type} message={banner.message} onDismiss={() => setBanner(null)} /> : null}
+        <AuthScreen
+          appVersion={sessionManager.appVersion}
+          onLoginSuccess={(user) => {
+            setCurrentUser(user)
+            void sessionManager.handleReloadConnections()
+          }}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -428,6 +498,8 @@ export default function App() {
           connectingId={sessionManager.connectingId}
           appVersion={sessionManager.appVersion}
           lastConnectedId={sessionManager.lastConnectedId}
+          currentUser={currentUser}
+          onLogout={handleLogout}
           onOpen={sessionManager.handleConnect}
           onNewConnection={() => sessionManager.setDialog({ mode: 'new' })}
           onNewConnectionInFolder={sessionManager.handleNewConnectionInFolder}

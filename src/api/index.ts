@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { encryptExportPayload, decryptImportPayload } from '@/api/crypto'
+import { encryptExportPayload, decryptImportPayload, hashPassword } from '@/api/crypto'
 
 export interface IpcErrorPayload {
   message?: string
@@ -214,6 +214,25 @@ export interface SavedQueryItem {
 export interface SystemInfo {
   name: string
   version: string
+}
+
+export interface AuthUser {
+  id: string
+  username: string
+  createdAt: string
+}
+
+export interface AuthUserWithCredentials {
+  id: string
+  username: string
+  passwordHash: string
+  salt: string
+  createdAt: string
+}
+
+export interface AuthSession {
+  user: AuthUser
+  token: string
 }
 
 declare global {
@@ -518,6 +537,115 @@ async function applyImportedConnections(payload: {
 }
 
 export const api = {
+  registerUser: async (username: string, password: string): Promise<AuthUser> => {
+    const trimmed = username.trim()
+    if (trimmed.length < 3) {
+      throw new Error('Username must be at least 3 characters long.')
+    }
+    if (password.length < 6) {
+      throw new Error('Password must be at least 6 characters long.')
+    }
+    const { hash, salt } = await hashPassword(password)
+    if (!isTauri()) {
+      const storedUsersRaw = localStorage.getItem('nova_tables_mock_users')
+      const storedUsers: Record<string, { id: string; username: string; passwordHash: string; salt: string; createdAt: string }> =
+        storedUsersRaw ? JSON.parse(storedUsersRaw) : {}
+      if (storedUsers[trimmed.toLowerCase()]) {
+        throw new Error('Username already exists.')
+      }
+      const user: AuthUser = {
+        id: 'user_' + Date.now(),
+        username: trimmed,
+        createdAt: new Date().toISOString(),
+      }
+      storedUsers[trimmed.toLowerCase()] = {
+        ...user,
+        passwordHash: hash,
+        salt,
+      }
+      localStorage.setItem('nova_tables_mock_users', JSON.stringify(storedUsers))
+      localStorage.setItem('nova_tables_auth_session', JSON.stringify({ user, token: 'mock_token' }))
+      return user
+    }
+    const user = await callCommand<AuthUser>('auth_register', {
+      username: trimmed,
+      passwordHash: hash,
+      salt,
+    })
+    if (!user) {
+      throw new Error('Failed to register user.')
+    }
+    await callCommand('auth_create_session', { userId: user.id })
+    return user
+  },
+
+  loginUser: async (username: string, password: string): Promise<AuthUser> => {
+    const trimmed = username.trim()
+    if (!trimmed || !password) {
+      throw new Error('Username and password are required.')
+    }
+    if (!isTauri()) {
+      const storedUsersRaw = localStorage.getItem('nova_tables_mock_users')
+      const storedUsers: Record<string, { id: string; username: string; passwordHash: string; salt: string; createdAt: string }> =
+        storedUsersRaw ? JSON.parse(storedUsersRaw) : {}
+      const target = storedUsers[trimmed.toLowerCase()]
+      if (!target) {
+        throw new Error('Invalid username or password.')
+      }
+      const { hash } = await hashPassword(password, target.salt)
+      if (hash !== target.passwordHash) {
+        throw new Error('Invalid username or password.')
+      }
+      const user: AuthUser = {
+        id: target.id,
+        username: target.username,
+        createdAt: target.createdAt,
+      }
+      localStorage.setItem('nova_tables_auth_session', JSON.stringify({ user, token: 'mock_token' }))
+      return user
+    }
+    const creds = await callCommand<AuthUserWithCredentials | null>('auth_get_user_credentials', {
+      username: trimmed,
+    })
+    if (!creds) {
+      throw new Error('Invalid username or password.')
+    }
+    const { hash } = await hashPassword(password, creds.salt)
+    if (hash !== creds.passwordHash) {
+      throw new Error('Invalid username or password.')
+    }
+    const session = await callCommand<AuthSession>('auth_create_session', {
+      userId: creds.id,
+    })
+    if (!session?.user) {
+      throw new Error('Failed to create session.')
+    }
+    return session.user
+  },
+
+  getCurrentSession: async (): Promise<AuthSession | null> => {
+    if (!isTauri()) {
+      const stored = localStorage.getItem('nova_tables_auth_session')
+      if (stored) {
+        try {
+          return JSON.parse(stored) as AuthSession
+        } catch {
+          return null
+        }
+      }
+      return null
+    }
+    return callCommand<AuthSession | null>('auth_get_current_session')
+  },
+
+  logout: async (): Promise<void> => {
+    if (!isTauri()) {
+      localStorage.removeItem('nova_tables_auth_session')
+      return
+    }
+    await callCommand('auth_logout')
+  },
+
   appInfo: async (): Promise<SystemInfo> => {
     const res = await callCommand<{ version?: string }>('get_system_info')
     return {

@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod local_store;
 pub mod mssql;
 pub mod mysql;

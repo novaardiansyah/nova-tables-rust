@@ -187,3 +187,43 @@ export async function decryptImportPayload(fileContent: string | Record<string, 
 
   return parsed
 }
+
+export async function hashPassword(password: string, saltInput?: string): Promise<{ hash: string; salt: string }> {
+  const subtle = getSubtleCrypto()
+  let saltBytes: Uint8Array
+  let salt: string
+  if (saltInput) {
+    salt = saltInput
+    saltBytes = base64ToUint8(saltInput)
+  } else {
+    saltBytes = new Uint8Array(16)
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      crypto.getRandomValues(saltBytes)
+    } else {
+      throw new Error('Secure random generator is not available')
+    }
+    salt = uint8ToBase64(saltBytes)
+  }
+
+  const keyMaterial = await subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits'],
+  )
+
+  const derivedBits = await subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: saltBytes as unknown as BufferSource,
+      iterations: EXPORT_KDF_ITERATIONS,
+      hash: 'SHA-256',
+    },
+    keyMaterial,
+    256,
+  )
+
+  const hash = uint8ToBase64(new Uint8Array(derivedBits))
+  return { hash, salt }
+}
