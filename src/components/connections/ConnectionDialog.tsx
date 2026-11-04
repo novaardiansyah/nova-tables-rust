@@ -89,10 +89,7 @@ export default function ConnectionDialog({
   const isEdit = mode === 'edit' && Boolean(connection?.id)
   const isDuplicate = Boolean(connection?.isDuplicate)
   const hasSavedPassword = Boolean(
-    connection?.hasPassword ||
-      (connection as any)?.password_cipher ||
-      (connection as any)?.passwordCipher ||
-      (isEdit && (connection?.password ? true : false)),
+    connection?.hasPassword || (isEdit && Boolean(connection?.password)),
   )
   const [form, setForm] = useState<ConnectionFormState>(() => buildInitial(connection))
   const [showPassword, setShowPassword] = useState(false)

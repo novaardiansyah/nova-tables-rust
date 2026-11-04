@@ -227,3 +227,133 @@ export async function hashPassword(password: string, saltInput?: string): Promis
   const hash = uint8ToBase64(new Uint8Array(derivedBits))
   return { hash, salt }
 }
+
+const CONNECTION_CIPHER_SECRET = 'nova-tables-conn-v1-secret-f8a92b3c4d5e6f7a'
+const CONNECTION_CIPHER_ITERATIONS = 10000
+
+export function isCiphertext(value?: string | null): boolean {
+  if (!value) return false
+  return value.startsWith('enc:v1:')
+}
+
+export async function encryptConnectionPassword(password: string, uid: string): Promise<string> {
+  if (!password) return ''
+  const subtle = getSubtleCrypto()
+  const salt = new Uint8Array(16)
+  const iv = new Uint8Array(12)
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(salt)
+    crypto.getRandomValues(iv)
+  } else {
+    throw new Error('Secure random generator is not available')
+  }
+
+  const keyMaterial = await subtle.importKey(
+    'raw',
+    new TextEncoder().encode(`${uid}:${CONNECTION_CIPHER_SECRET}`),
+    'PBKDF2',
+    false,
+    ['deriveKey'],
+  )
+
+  const encKey = await subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: salt as unknown as BufferSource,
+      iterations: CONNECTION_CIPHER_ITERATIONS,
+      hash: 'SHA-256',
+    },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt'],
+  )
+
+  const raw = new TextEncoder().encode(password)
+  const encBuf = await subtle.encrypt(
+    {
+      name: 'AES-GCM',
+      iv: iv as unknown as BufferSource,
+      additionalData: new TextEncoder().encode(uid) as unknown as BufferSource,
+      tagLength: 128,
+    },
+    encKey,
+    raw as unknown as BufferSource,
+  )
+
+  const encBytes = new Uint8Array(encBuf)
+  const ciphertext = encBytes.slice(0, -16)
+  const tag = encBytes.slice(-16)
+
+  const totalLen = 16 + 12 + 16 + ciphertext.length
+  const packed = new Uint8Array(totalLen)
+  packed.set(salt, 0)
+  packed.set(iv, 16)
+  packed.set(tag, 28)
+  packed.set(ciphertext, 44)
+
+  return `enc:v1:${uint8ToBase64(packed)}`
+}
+
+export async function decryptConnectionPassword(cipherWithPrefix?: string | null, uid?: string | null): Promise<string> {
+  if (!cipherWithPrefix) return ''
+  if (!isCiphertext(cipherWithPrefix)) {
+    return cipherWithPrefix
+  }
+  if (!uid) {
+    return ''
+  }
+
+  const subtle = getSubtleCrypto()
+  const rawBase64 = cipherWithPrefix.slice(7)
+  const packed = base64ToUint8(rawBase64)
+  if (packed.length < 44) {
+    return ''
+  }
+
+  const salt = packed.slice(0, 16)
+  const iv = packed.slice(16, 28)
+  const tag = packed.slice(28, 44)
+  const ciphertext = packed.slice(44)
+
+  const combined = new Uint8Array(ciphertext.length + 16)
+  combined.set(ciphertext, 0)
+  combined.set(tag, ciphertext.length)
+
+  const keyMaterial = await subtle.importKey(
+    'raw',
+    new TextEncoder().encode(`${uid}:${CONNECTION_CIPHER_SECRET}`),
+    'PBKDF2',
+    false,
+    ['deriveKey'],
+  )
+
+  const decKey = await subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: salt as unknown as BufferSource,
+      iterations: CONNECTION_CIPHER_ITERATIONS,
+      hash: 'SHA-256',
+    },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['decrypt'],
+  )
+
+  try {
+    const decryptedBuf = await subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: iv as unknown as BufferSource,
+        additionalData: new TextEncoder().encode(uid) as unknown as BufferSource,
+        tagLength: 128,
+      },
+      decKey,
+      combined as unknown as BufferSource,
+    )
+    return new TextDecoder().decode(decryptedBuf)
+  } catch {
+    return ''
+  }
+}

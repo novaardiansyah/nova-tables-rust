@@ -35,7 +35,6 @@ export interface ConnectionModel {
   port?: number | string
   username?: string | null
   password?: string | null
-  passwordCipher?: string | null
   database?: string | null
   databaseName?: string | null
   lastDatabaseUsed?: string | null

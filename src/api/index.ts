@@ -29,6 +29,11 @@ import {
   importConnections,
   selectImportFile,
 } from './transfer'
+import {
+  isCiphertext,
+  encryptConnectionPassword,
+  decryptConnectionPassword,
+} from './crypto'
 
 export * from './types'
 export { onUnauthenticated, notifyUnauthenticated } from './client'
@@ -369,13 +374,13 @@ export const api = {
           : conn.database !== undefined && conn.database !== null
             ? conn.database
             : conn.lastDatabaseUsed || ''
-      const resolvedPassword = conn.password ?? conn.passwordCipher ?? null
+      const password = conn.password ?? null
       const hasPassword = Boolean(
-        conn.hasPassword || (resolvedPassword && resolvedPassword.length > 0),
+        conn.hasPassword || (password && password.length > 0),
       )
       return {
         ...conn,
-        password: resolvedPassword,
+        password,
         database: explicitDb,
         databaseName: explicitDb,
         hasPassword,
@@ -398,20 +403,34 @@ export const api = {
   },
 
   saveConnection: async (connection: Partial<ConnectionModel>): Promise<ConnectionModel> => {
+    const id = connection.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `conn-${Date.now()}`)
+    let resolvedPassword = connection.password ?? null
+    if (resolvedPassword && !isCiphertext(resolvedPassword)) {
+      resolvedPassword = await encryptConnectionPassword(resolvedPassword, id)
+    }
+
+    const payload: Record<string, unknown> = {
+      ...connection,
+      id,
+    }
+    if (resolvedPassword !== null) {
+      payload.password = resolvedPassword
+    }
+
     const res = await apiRequest<{ ok: boolean; connection: ConnectionModel }>('/api/connections', {
       method: 'POST',
-      body: JSON.stringify(connection),
+      body: JSON.stringify(payload),
     })
 
     const saved = res.connection
     const explicitDb = saved.databaseName || saved.database || ''
-    const resolvedPassword = saved.password ?? saved.passwordCipher ?? connection.password ?? connection.passwordCipher ?? null
+    const password = saved.password ?? resolvedPassword
     return {
       ...saved,
-      password: resolvedPassword,
+      password,
       database: explicitDb,
       databaseName: explicitDb,
-      hasPassword: Boolean(saved.hasPassword || (resolvedPassword && resolvedPassword.length > 0)),
+      hasPassword: Boolean(saved.hasPassword || (password && password.length > 0)),
     }
   },
 
@@ -422,10 +441,14 @@ export const api = {
       throw new Error(`Connection ${id} not found`)
     }
 
+    const rawPassword = target.password && target.id
+      ? await decryptConnectionPassword(target.password, target.id)
+      : null
+
     const duplicatePayload = {
       ...target,
       id: undefined,
-      password: target.password ?? target.passwordCipher ?? null,
+      password: rawPassword,
       name: name || `${target.name} (Copy)`,
     }
 
@@ -518,12 +541,16 @@ export const api = {
 
   testConnection: async (connection: Partial<ConnectionModel>): Promise<any> => {
     let target = { ...connection }
-    if (connection?.id && !connection?.host) {
+    if (connection?.id && (!connection?.host || !connection?.password)) {
       const list = await api.listConnections()
       const found = list.find((c) => c.id === connection.id)
       if (found) {
         target = { ...found, ...connection }
       }
+    }
+
+    if (target.password && target.id && isCiphertext(target.password)) {
+      target.password = await decryptConnectionPassword(target.password, target.id)
     }
 
     const isMysql = target?.driverType === 'mysql'
@@ -542,13 +569,18 @@ export const api = {
 
   testMysqlConnection: async (connection: Partial<ConnectionModel>): Promise<any> => {
     let target = { ...connection, driverType: 'mysql' }
-    if (connection?.id && !connection?.host) {
+    if (connection?.id && (!connection?.host || !connection?.password)) {
       const list = await api.listConnections()
       const found = list.find((c) => c.id === connection.id)
       if (found) {
         target = { ...found, ...connection, driverType: 'mysql' }
       }
     }
+
+    if (target.password && target.id && isCiphertext(target.password)) {
+      target.password = await decryptConnectionPassword(target.password, target.id)
+    }
+
     const res = await callCommand<any>('test_mysql_connection', { connection: target })
     return (
       res || {
@@ -563,7 +595,7 @@ export const api = {
 
   connect: async (connection: Partial<ConnectionModel> | null | undefined): Promise<any> => {
     let target: Partial<ConnectionModel> = connection || {}
-    if (connection?.id && (!connection?.host || !connection?.name)) {
+    if (connection?.id && (!connection?.host || !connection?.name || !connection?.password)) {
       const all = await api.listConnections()
       const found = all.find((c) => c.id === connection.id)
       if (found) {
@@ -577,6 +609,11 @@ export const api = {
         target.database = preferredDb
       }
     }
+
+    if (target.password && target.id && isCiphertext(target.password)) {
+      target.password = await decryptConnectionPassword(target.password, target.id)
+    }
+
     const res =
       (await callCommand('connect', { input: target })) ||
       (await callCommand('test_connection', { connection: target }))
