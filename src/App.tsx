@@ -22,6 +22,7 @@ import Banner, { BannerType } from '@/components/common/Banner'
 import MenuBar, { MenuBarMenu } from '@/components/common/MenuBar'
 import { ConfigTransferMode } from '@/components/dialogs/ConfigTransferDialog'
 import ConnectionsScreen from '@/components/connections/ConnectionsScreen'
+import ConfirmDialog from '@/components/common/ConfirmDialog'
 import WorkspaceView from '@/components/WorkspaceView'
 import AppDialogs from '@/components/dialogs/AppDialogs'
 import AuthScreen from '@/components/auth/AuthScreen'
@@ -34,6 +35,7 @@ export default function App() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [configTransfer, setConfigTransfer] = useState<ConfigTransferMode | null>(null)
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
 
   const showBanner = useCallback((type: BannerType, message: string) => {
@@ -303,6 +305,7 @@ export default function App() {
   const workspaceReady = screen === 'workspace' && Boolean(session)
 
   const handleLogout = useCallback(async () => {
+    setLogoutConfirmOpen(false)
     try {
       await api.logout()
     } catch {
@@ -313,6 +316,10 @@ export default function App() {
     setCurrentUser(null)
     showBanner('info', 'Signed out successfully.')
   }, [sessions, sessionManager, showBanner])
+
+  const requestLogout = useCallback(() => {
+    setLogoutConfirmOpen(true)
+  }, [])
 
   const menus: MenuBarMenu[] = [
     {
@@ -429,17 +436,16 @@ export default function App() {
           shortcut: 'F1',
           onSelect: () => setShortcutsOpen(true),
         },
-      ],
-    },
-    {
-      id: 'account',
-      label: currentUser ? (currentUser.name || currentUser.email || 'Account') : 'Account',
-      items: [
-        {
-          id: 'sign-out',
-          label: 'Sign Out',
-          onSelect: handleLogout,
-        },
+        ...(currentUser
+          ? [
+              {
+                id: 'sign-out',
+                label: 'Sign Out',
+                separatorBefore: true,
+                onSelect: requestLogout,
+              },
+            ]
+          : []),
       ],
     },
   ]
@@ -499,7 +505,7 @@ export default function App() {
           appVersion={sessionManager.appVersion}
           lastConnectedId={sessionManager.lastConnectedId}
           currentUser={currentUser}
-          onLogout={handleLogout}
+          onLogout={requestLogout}
           onOpen={sessionManager.handleConnect}
           onNewConnection={() => sessionManager.setDialog({ mode: 'new' })}
           onNewConnectionInFolder={sessionManager.handleNewConnectionInFolder}
@@ -535,6 +541,16 @@ export default function App() {
         configTransfer={configTransfer}
         setConfigTransfer={setConfigTransfer}
         onNotify={showBanner}
+      />
+
+      <ConfirmDialog
+        open={logoutConfirmOpen}
+        title="Sign Out"
+        message="Are you sure you want to sign out of Nova Tables?"
+        confirmLabel="Sign Out"
+        danger
+        onCancel={() => setLogoutConfirmOpen(false)}
+        onConfirm={handleLogout}
       />
     </div>
   )

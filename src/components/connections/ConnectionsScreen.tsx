@@ -703,7 +703,7 @@ export default function ConnectionsScreen({
           {currentUser ? (
             <div className="mr-2 flex items-center gap-2 border-r border-line pr-3">
               <span className="text-[length:var(--app-text-11)] text-text-muted">
-                Signed in as <strong className="text-text-strong">{currentUser.email || currentUser.name || currentUser.username}</strong>
+                Signed in as <strong className="text-text-strong">{currentUser.name || currentUser.email || currentUser.username}</strong>
               </span>
               {onLogout ? (
                 <button
