@@ -24,7 +24,7 @@ Sign in smoothly using your email and password or authenticate with one click vi
 
 OAuth authentication opens directly in your browser with immediate visual confirmation upon authorization, cleanly redirecting your session back into the desktop client.
 
-<img src="./public/demo/v2.2.4/google-login-succes.png" alt="Google Login Success" width="200">
+<img src="./public/demo/v2.2.4/google-login-succes.png" alt="Google Login Success" width="200px">
 
 ### Your Connections, Folders, and Sessions
 
