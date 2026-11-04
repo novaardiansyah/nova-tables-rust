@@ -15,6 +15,11 @@ export interface WorkspaceHeaderSession {
   name: string
   host: string
   port: number
+  driverType?: string
+  connection?: {
+    driverType?: string
+    [key: string]: unknown
+  }
   databases?: WorkspaceHeaderDatabase[]
   [key: string]: unknown
 }
@@ -73,6 +78,11 @@ export default function WorkspaceHeader({
   const session = sessionProp || connection || null
   const databases = session?.databases ?? databasesProp ?? []
 
+  // MySQL driver: Estimated execution plan is restricted to SQL Server connections only.
+  const isMysql =
+    session?.connection?.driverType === 'mysql' ||
+    session?.driverType === 'mysql'
+
   const options: SelectOption[] = databases.map((database) => ({
     value: database.name,
     label: database.isOnline === false ? `${database.name} (offline)` : database.name,
@@ -117,16 +127,18 @@ export default function WorkspaceHeader({
 
         <QueryModeMenu value={queryExecutionMode} onChange={onChangeExecutionMode} />
 
-        <button
-          type="button"
-          className="icon-btn hover:text-accent disabled:pointer-events-none disabled:opacity-40"
-          onClick={onEstimatedPlan}
-          disabled={!session || running}
-          title="Display Estimated Execution Plan"
-          aria-label="Display Estimated Execution Plan"
-        >
-          <Icon name="plan" size={15} />
-        </button>
+        {!isMysql ? (
+          <button
+            type="button"
+            className="icon-btn hover:text-accent disabled:pointer-events-none disabled:opacity-40"
+            onClick={onEstimatedPlan}
+            disabled={!session || running}
+            title="Display Estimated Execution Plan"
+            aria-label="Display Estimated Execution Plan"
+          >
+            <Icon name="plan" size={15} />
+          </button>
+        ) : null}
 
         {running ? (
           <button

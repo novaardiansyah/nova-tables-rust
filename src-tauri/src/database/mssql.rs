@@ -1173,6 +1173,11 @@ pub async fn get_execution_plan(
     database: Option<&str>,
     sql: &str,
 ) -> Result<Value, String> {
+    let statement = sql.trim();
+    if statement.is_empty() {
+        return Err("Nothing to analyze — write or select a query first.".to_string());
+    }
+
     if let Some(db) = database {
         if !db.is_empty() {
             let switch_query = format!("USE [{}]", db.replace(']', "]]"));
@@ -1180,17 +1185,33 @@ pub async fn get_execution_plan(
         }
     }
 
+    // SQL Server driver: SET SHOWPLAN_XML ON returns query execution plan XML without executing the statement.
     let _ = client.simple_query("SET SHOWPLAN_XML ON").await;
-    let stream = client.simple_query(sql).await.map_err(|e| e.to_string())?;
-    let rows = stream
-        .into_first_result()
-        .await
-        .map_err(|e| e.to_string())?;
+    let rows_result = match client.simple_query(statement).await {
+        Ok(stream) => stream.into_results().await.map_err(|e| e.to_string()),
+        Err(e) => Err(e.to_string()),
+    };
     let _ = client.simple_query("SET SHOWPLAN_XML OFF").await;
 
-    let xml: &str = rows.first().and_then(|r| r.get(0)).unwrap_or("");
+    let results = rows_result?;
+    let mut xml = String::new();
+    for rows in results {
+        for row in rows {
+            if let Some(chunk) = row.get::<&str, _>(0) {
+                xml.push_str(chunk);
+            }
+        }
+    }
+
+    let trimmed = xml.trim();
+    if trimmed.is_empty() {
+        return Err("SQL Server did not return an execution plan.".to_string());
+    }
+
     Ok(json!({
-      "xml": xml
+        "ok": true,
+        "xml": trimmed,
+        "plan": trimmed
     }))
 }
 

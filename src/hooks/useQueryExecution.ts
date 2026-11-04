@@ -265,6 +265,11 @@ export function useQueryExecution({
       showBanner('warn', 'Open a connection before generating an execution plan.')
       return
     }
+    // MySQL driver: Estimated execution plan is restricted to SQL Server connections only per user requirement.
+    if (current.connection?.driverType === 'mysql') {
+      showBanner('warn', 'Estimated execution plan is only available for SQL Server connections.')
+      return
+    }
     const target = activeQueryTab()
     if (!target) return
     const sql = (selectionRef.current || sqlRef.current || '').trim()
@@ -280,12 +285,19 @@ export function useQueryExecution({
         database: current.activeDatabase || 'master',
         sql,
       })
-      const parsed = parseExecutionPlan(res.plan ?? '', current.connection?.driverType)
+      const rawPlan = typeof res?.plan === 'string' ? res.plan.trim() : ''
+      if (!rawPlan) {
+        throw new Error('No execution plan returned by the server.')
+      }
+      const parsed = parseExecutionPlan(rawPlan, current.connection?.driverType)
+      if (!parsed) {
+        throw new Error('Failed to parse the execution plan returned by the server.')
+      }
       updateTab(current.connectionId, target.tab.id, { executionPlan: parsed, busy: false })
       showBanner('success', 'Generated estimated execution plan.')
     } catch (error: any) {
       updateTab(current.connectionId, target.tab.id, { busy: false })
-      showBanner('error', error.message)
+      showBanner('error', error?.message || 'Failed to generate execution plan.')
     }
   }, [activeQueryTab, activeSession, showBanner, updateTab, selectionRef, sqlRef])
 
