@@ -21,7 +21,7 @@ import {
   TableStructureResult,
   TableSummary,
 } from './types'
-import { apiRequest, getAuthToken, getStoredSession, setAuthToken, setStoredSession } from './client'
+import { apiRequest, getAuthToken, getStoredSession, setAuthToken, setStoredSession, onUnauthenticated, notifyUnauthenticated } from './client'
 import {
   exportAppConfig,
   exportConnections,
@@ -31,6 +31,7 @@ import {
 } from './transfer'
 
 export * from './types'
+export { onUnauthenticated, notifyUnauthenticated } from './client'
 
 declare global {
   interface Window {
@@ -220,10 +221,6 @@ export const api = {
       setStoredSession(session)
       return session
     } catch {
-      const cached = getStoredSession()
-      if (cached && cached.token === token) {
-        return cached
-      }
       setAuthToken(null)
       setStoredSession(null)
       return null
@@ -372,13 +369,13 @@ export const api = {
           : conn.database !== undefined && conn.database !== null
             ? conn.database
             : conn.lastDatabaseUsed || ''
+      const resolvedPassword = conn.password ?? conn.passwordCipher ?? null
       const hasPassword = Boolean(
-        conn.hasPassword ||
-        (conn.password && conn.password.length > 0) ||
-        (conn.passwordCipher && conn.passwordCipher.length > 0),
+        conn.hasPassword || (resolvedPassword && resolvedPassword.length > 0),
       )
       return {
         ...conn,
+        password: resolvedPassword,
         database: explicitDb,
         databaseName: explicitDb,
         hasPassword,
@@ -408,11 +405,13 @@ export const api = {
 
     const saved = res.connection
     const explicitDb = saved.databaseName || saved.database || ''
+    const resolvedPassword = saved.password ?? saved.passwordCipher ?? connection.password ?? connection.passwordCipher ?? null
     return {
       ...saved,
+      password: resolvedPassword,
       database: explicitDb,
       databaseName: explicitDb,
-      hasPassword: Boolean(saved.hasPassword || (saved.passwordCipher && saved.passwordCipher.length > 0)),
+      hasPassword: Boolean(saved.hasPassword || (resolvedPassword && resolvedPassword.length > 0)),
     }
   },
 
@@ -426,6 +425,7 @@ export const api = {
     const duplicatePayload = {
       ...target,
       id: undefined,
+      password: target.password ?? target.passwordCipher ?? null,
       name: name || `${target.name} (Copy)`,
     }
 

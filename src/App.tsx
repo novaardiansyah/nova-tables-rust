@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { api, AuthUser } from '@/api'
+import { api, AuthUser, onUnauthenticated } from '@/api'
 import { DEFAULT_SETTINGS, applySettings, Settings } from '@/settings'
 import {
   DEFAULT_WORKSPACE_STATE,
@@ -39,6 +39,15 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
 
   const showBanner = useCallback((type: BannerType, message: string) => {
+    if (
+      type === 'error' &&
+      (message === 'Unauthenticated' ||
+        message === 'Unauthenticated.' ||
+        message.toLowerCase().includes('unauthenticated') ||
+        message.toLowerCase().includes('status 401'))
+    ) {
+      return
+    }
     setBanner({ type, message })
   }, [])
 
@@ -92,6 +101,20 @@ export default function App() {
 
   const { activeSession, patchSession, updateTab, setSessions, tabIdRef, activeConnectionId, screen, sessions } = sessionManager
   const scopeDatabase = activeConnectionId ? sessions[activeConnectionId]?.activeDatabase ?? null : null
+
+  useEffect(() => {
+    const unsubscribe = onUnauthenticated(() => {
+      setBanner(null)
+      setCurrentUser(null)
+      for (const id of Object.keys(sessions)) {
+        sessionManager.closeSession(id)
+      }
+      sessionManager.setScreen('connections')
+    })
+    return () => {
+      unsubscribe()
+    }
+  }, [sessions, sessionManager])
 
   useEffect(() => {
     let cancelled = false

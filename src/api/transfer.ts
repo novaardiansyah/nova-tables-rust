@@ -82,17 +82,20 @@ async function buildConnectionsBundle(
   for (const item of allConnections) {
     if (!targetIds.has(item.id!)) continue
     connectionOrder.push(item.id!)
+    const resolvedPassword = item.password ?? item.passwordCipher ?? null
+    // Targeted for SQL Server & MySQL: default port is 3306 for MySQL and 1433 for SQL Server.
+    const defaultPort = item.driverType === 'mysql' ? 3306 : 1433
     connections.push({
       name: item.name,
       host: item.host,
-      port: item.port,
+      port: item.port ?? defaultPort,
       username: item.username,
       database: item.databaseName || item.database || '',
       environment: item.environment || '',
       encrypt: item.encrypt !== false,
       trustServerCertificate: item.trustServerCertificate !== false,
       driverType: item.driverType ?? null,
-      password: item.password || null,
+      password: resolvedPassword,
       folderId: item.folderId ?? null,
     })
   }
@@ -222,18 +225,21 @@ export async function applyImportedConnections(payload: {
       folderId = await resolveLegacyFolder(item.folderName)
     }
 
+    const resolvedPassword = item.password ?? item.passwordCipher ?? null
+    // Targeted for SQL Server & MySQL: default port is 3306 for MySQL and 1433 for SQL Server.
+    const defaultPort = item.driverType === 'mysql' ? 3306 : 1433
     const saved = await api.saveConnection({
       name,
       host: item.host,
-      port: Number(item.port) || 1433,
+      port: Number(item.port) || defaultPort,
       username: item.username || '',
       databaseName: item.database || item.databaseName || '',
       environment: item.environment || '',
       encrypt: item.encrypt !== false,
       trustServerCertificate: item.trustServerCertificate !== false,
-      driverType: item.driverType,
+      driverType: item.driverType ?? (Number(item.port) === 3306 ? 'mysql' : 'sqlserver'),
       folderId,
-      password: item.password || null,
+      password: resolvedPassword,
     })
 
     imported.push(saved)

@@ -178,6 +178,27 @@ export function useTabManager({
     [activeSession, updateTab],
   )
 
+  const handleReorderTabs = useCallback(
+    (sourceIndex: number, targetIndex: number) => {
+      const current = activeSession()
+      if (!current) return
+      if (sourceIndex === targetIndex || sourceIndex < 0 || targetIndex < 0) return
+      if (sourceIndex >= current.tabs.length || targetIndex >= current.tabs.length) return
+
+      const liveSql = sqlRef.current
+      const tabsWithLiveSql = current.tabs.map((tab) =>
+        tab.id === current.activeTabId ? { ...tab, sql: liveSql } : tab
+      )
+
+      const nextTabs = [...tabsWithLiveSql]
+      const [moved] = nextTabs.splice(sourceIndex, 1)
+      nextTabs.splice(targetIndex, 0, moved)
+
+      patchSession(current.connectionId, { tabs: nextTabs })
+    },
+    [activeSession, patchSession, sqlRef],
+  )
+
   return {
     openTab,
     handleCloseTab,
@@ -188,5 +209,6 @@ export function useTabManager({
     handleCycleTab,
     handleSelectTabIndex,
     handleSelectSet,
+    handleReorderTabs,
   }
 }

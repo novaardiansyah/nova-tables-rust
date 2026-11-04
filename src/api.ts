@@ -1,4 +1,4 @@
-export { api, IpcError } from '@/api/index'
+export { api, IpcError, onUnauthenticated, notifyUnauthenticated } from '@/api/index'
 export type {
   ConnectionModel,
   FolderModel,

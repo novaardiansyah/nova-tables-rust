@@ -118,14 +118,22 @@ export function useSessionManager({
       .then((list) => {
         if (!cancelled) setConnections(list)
       })
-      .catch((error) => showBanner('error', error.message))
+      .catch((error) => {
+        if (error?.status !== 401 && !error?.isUnauthorized) {
+          showBanner('error', error.message)
+        }
+      })
 
     api
       .listFolders()
       .then((list) => {
         if (!cancelled) setFolders(list)
       })
-      .catch((error) => showBanner('error', error.message))
+      .catch((error) => {
+        if (error?.status !== 401 && !error?.isUnauthorized) {
+          showBanner('error', error.message)
+        }
+      })
 
     api
       .getLastConnectedId()
@@ -593,7 +601,9 @@ export function useSessionManager({
       await handleDeleteSelection({ connectionIds: [deleteTarget.id] })
       setDeleteTarget(null)
     } catch (error: any) {
-      showBanner('error', error.message)
+      if (error?.status !== 401 && !error?.isUnauthorized) {
+        showBanner('error', error.message)
+      }
     } finally {
       setDeleting(false)
     }
@@ -659,7 +669,9 @@ export function useSessionManager({
       setConnections(nextConnections)
       if (nextLastId) setLastConnectedId(nextLastId)
     } catch (error: any) {
-      showBanner('error', error.message)
+      if (error?.status !== 401 && !error?.isUnauthorized) {
+        showBanner('error', error.message)
+      }
     }
   }, [showBanner])
 

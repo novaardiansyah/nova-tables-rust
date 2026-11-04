@@ -3,6 +3,25 @@ import { AuthSession, AuthUser } from './types'
 const TOKEN_KEY = 'nova_tables_sanctum_token'
 const SESSION_KEY = 'nova_tables_auth_session'
 
+type UnauthenticatedListener = () => void
+const unauthenticatedListeners = new Set<UnauthenticatedListener>()
+
+export function onUnauthenticated(listener: UnauthenticatedListener): () => void {
+  unauthenticatedListeners.add(listener)
+  return () => {
+    unauthenticatedListeners.delete(listener)
+  }
+}
+
+export function notifyUnauthenticated(): void {
+  unauthenticatedListeners.forEach((listener) => {
+    try {
+      listener()
+    } catch {
+    }
+  })
+}
+
 export function getApiBaseUrl(): string {
   const envUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://127.0.0.1:12143'
   return envUrl.replace(/\/+$/, '')
@@ -80,9 +99,15 @@ export async function apiRequest<T = any>(
   }
 
   if (!response.ok) {
-    if (response.status === 401) {
+    const isAuthRoute =
+      normalizedEndpoint === '/api/auth/login' ||
+      normalizedEndpoint === '/api/auth/register' ||
+      normalizedEndpoint.startsWith('/api/auth/google')
+
+    if (response.status === 401 && !isAuthRoute) {
       setAuthToken(null)
       setStoredSession(null)
+      notifyUnauthenticated()
     }
 
     let message = 'Request failed'
@@ -95,7 +120,12 @@ export async function apiRequest<T = any>(
       message = `Request failed with status ${response.status}`
     }
 
-    throw new Error(message)
+    const error = new Error(message)
+    if (response.status === 401) {
+      ;(error as any).status = 401
+      ;(error as any).isUnauthorized = true
+    }
+    throw error
   }
 
   return (data || {}) as T

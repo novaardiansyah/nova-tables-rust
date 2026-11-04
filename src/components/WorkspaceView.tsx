@@ -74,6 +74,7 @@ export default function WorkspaceView({
     handleCloseTab,
     handleNewTab,
     handleSelectSet,
+    handleReorderTabs,
   } = tabManager
 
   const {
@@ -238,6 +239,7 @@ export default function WorkspaceView({
           onSelect={handleSelectTab}
           onClose={handleCloseTab}
           onNewTab={handleNewTab}
+          onReorderTabs={handleReorderTabs}
           onSaveQuery={savedQueries.handleSaveQuery}
           onOpenSavedQueries={savedQueries.handleOpenSavedQueries}
           onOpenQueryHistory={history.handleOpenQueryHistory}

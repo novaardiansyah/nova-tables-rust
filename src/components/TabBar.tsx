@@ -21,6 +21,7 @@ export interface TabBarProps {
   onSelect: (tabId: string) => void
   onClose: (tabId: string) => void
   onNewTab: () => void
+  onReorderTabs?: (fromIndex: number, toIndex: number) => void
   onSaveQuery?: () => void
   onOpenSavedQueries?: () => void
   onOpenQueryHistory?: () => void
@@ -36,6 +37,7 @@ export default function TabBar({
   onSelect,
   onClose,
   onNewTab,
+  onReorderTabs,
   onSaveQuery,
   onOpenSavedQueries,
   onOpenQueryHistory,
@@ -43,25 +45,87 @@ export default function TabBar({
   headerCollapsed = false,
   onToggleHeader,
 }: TabBarProps) {
+  const [dragIndex, setDragIndex] = React.useState<number | null>(null)
+  const [dragOverState, setDragOverState] = React.useState<{
+    index: number
+    position: 'before' | 'after'
+  } | null>(null)
+
   return (
     <div className="flex h-9 shrink-0 items-stretch border-b border-line bg-panel">
       <div className="tab-strip flex min-w-0 flex-1 items-stretch overflow-x-auto overflow-y-hidden">
-        {tabs.map((tab) => {
+        {tabs.map((tab, index) => {
           const isActive = tab.id === activeTabId
           const status = tab.state.status
+          const isDragging = dragIndex === index
+          const isOver = dragOverState?.index === index
+          const overPos = dragOverState?.position
 
           return (
             <div
               key={tab.id}
-              className={`group flex min-w-0 max-w-[220px] shrink-0 items-center border-r border-line ${
+              draggable
+              onDragStart={(event) => {
+                event.dataTransfer.setData('text/plain', String(index))
+                event.dataTransfer.effectAllowed = 'move'
+                setDragIndex(index)
+              }}
+              onDragEnd={() => {
+                setDragIndex(null)
+                setDragOverState(null)
+              }}
+              onDragOver={(event) => {
+                event.preventDefault()
+                if (dragIndex === null || dragIndex === index) return
+                event.dataTransfer.dropEffect = 'move'
+                const rect = event.currentTarget.getBoundingClientRect()
+                const isLeft = event.clientX - rect.left < rect.width / 2
+                const position = isLeft ? 'before' : 'after'
+                if (dragOverState?.index !== index || dragOverState?.position !== position) {
+                  setDragOverState({ index, position })
+                }
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                  if (dragOverState?.index === index) {
+                    setDragOverState(null)
+                  }
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault()
+                if (dragIndex === null || dragIndex === index) {
+                  setDragIndex(null)
+                  setDragOverState(null)
+                  return
+                }
+                const rect = event.currentTarget.getBoundingClientRect()
+                const isLeft = event.clientX - rect.left < rect.width / 2
+                let targetIndex = isLeft ? index : index + 1
+                if (dragIndex < targetIndex) {
+                  targetIndex -= 1
+                }
+                if (dragIndex !== targetIndex && onReorderTabs) {
+                  onReorderTabs(dragIndex, targetIndex)
+                }
+                setDragIndex(null)
+                setDragOverState(null)
+              }}
+              className={`group relative flex min-w-0 max-w-[220px] shrink-0 items-center border-r border-line ${
                 isActive ? 'bg-base' : 'hover:bg-tint/[0.03]'
-              }`}
+              } ${isDragging ? 'opacity-40' : ''}`}
             >
+              {isOver && overPos === 'before' ? (
+                <div className="pointer-events-none absolute bottom-0 left-0 top-0 z-10 w-[2px] bg-accent" />
+              ) : null}
+              {isOver && overPos === 'after' ? (
+                <div className="pointer-events-none absolute bottom-0 right-0 top-0 z-10 w-[2px] bg-accent" />
+              ) : null}
               <button
                 type="button"
                 onClick={() => onSelect(tab.id)}
                 title={tab.title}
-                className={`flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pl-3 pr-1 text-left text-[length:var(--app-text-12)] ${
+                className={`flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pl-3 pr-1 text-left text-[length:var(--app-text-12)] cursor-grab active:cursor-grabbing ${
                   isActive ? 'text-text-strong' : 'text-text-muted hover:text-text'
                 }`}
               >
@@ -85,7 +149,12 @@ export default function TabBar({
               </button>
               <button
                 type="button"
-                onClick={() => onClose(tab.id)}
+                draggable={false}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onClose(tab.id)
+                }}
                 title="Close tab (Ctrl+W)"
                 className={`icon-btn mr-1 h-5 w-5 shrink-0 ${
                   isActive ? 'opacity-60' : 'opacity-0 group-hover:opacity-60'
