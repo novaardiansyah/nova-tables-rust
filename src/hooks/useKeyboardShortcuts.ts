@@ -8,6 +8,7 @@ export interface UseKeyboardShortcutsProps {
   setSettingsOpen: Dispatch<SetStateAction<boolean>>
   setDialog: Dispatch<SetStateAction<any>>
   handleRun: () => void
+  handleCancel?: () => void
   handleSaveQuery: () => void
   openConnectionScreen: () => void
   handleCloseActiveTab: () => void

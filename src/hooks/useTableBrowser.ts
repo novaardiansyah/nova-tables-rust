@@ -138,7 +138,9 @@ export function useTableBrowser({
           table.schema,
           table.name,
         )
-        openTab(current.connectionId, `${table.name}.sql`, `${structure.statement}\n`)
+        if (structure) {
+          openTab(current.connectionId, `${table.name}.sql`, `${structure.statement}\n`)
+        }
       } catch (error: any) {
         showBanner('error', error.message)
       }

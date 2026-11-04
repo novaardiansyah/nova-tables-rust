@@ -198,7 +198,7 @@ export async function hashPassword(password: string, saltInput?: string): Promis
   } else {
     saltBytes = new Uint8Array(16)
     if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-      crypto.getRandomValues(saltBytes)
+      crypto.getRandomValues(saltBytes as any)
     } else {
       throw new Error('Secure random generator is not available')
     }

@@ -43,3 +43,7 @@ obsidian
 skills
 Makefile
 Makefile.backup
+
+.env
+.env.local
+.env.production

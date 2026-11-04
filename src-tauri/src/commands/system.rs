@@ -21,21 +21,6 @@ pub fn greet(name: &str) -> String {
 
 #[tauri::command]
 pub fn get_settings() -> Result<Value, String> {
-    let db_path = crate::file_system::FileSystem::get_database_path()?;
-    let conn =
-        crate::database::local_store::LocalStore::init(&db_path).map_err(|e| e.to_string())?;
-    let stored = crate::database::local_store::LocalStore::get_meta(&conn, "settings")
-        .map_err(|e| e.to_string())?;
-
-    if let Some(json_str) = stored {
-        if let Ok(val) = serde_json::from_str::<Value>(&json_str) {
-            return Ok(json!({
-              "ok": true,
-              "settings": val
-            }));
-        }
-    }
-
     Ok(json!({
       "ok": true,
       "settings": null
@@ -44,13 +29,6 @@ pub fn get_settings() -> Result<Value, String> {
 
 #[tauri::command]
 pub fn save_settings(settings: Value) -> Result<Value, String> {
-    let db_path = crate::file_system::FileSystem::get_database_path()?;
-    let conn =
-        crate::database::local_store::LocalStore::init(&db_path).map_err(|e| e.to_string())?;
-    let json_str = serde_json::to_string(&settings).map_err(|e| e.to_string())?;
-    crate::database::local_store::LocalStore::set_meta(&conn, "settings", &json_str)
-        .map_err(|e| e.to_string())?;
-
     Ok(json!({
       "ok": true,
       "settings": settings
@@ -59,21 +37,6 @@ pub fn save_settings(settings: Value) -> Result<Value, String> {
 
 #[tauri::command]
 pub fn get_workspace_state() -> Result<Value, String> {
-    let db_path = crate::file_system::FileSystem::get_database_path()?;
-    let conn =
-        crate::database::local_store::LocalStore::init(&db_path).map_err(|e| e.to_string())?;
-    let stored = crate::database::local_store::LocalStore::get_meta(&conn, "workspace")
-        .map_err(|e| e.to_string())?;
-
-    if let Some(json_str) = stored {
-        if let Ok(val) = serde_json::from_str::<Value>(&json_str) {
-            return Ok(json!({
-              "ok": true,
-              "workspace": val
-            }));
-        }
-    }
-
     Ok(json!({
       "ok": true,
       "workspace": null
@@ -82,13 +45,6 @@ pub fn get_workspace_state() -> Result<Value, String> {
 
 #[tauri::command]
 pub fn save_workspace_state(workspace: Value) -> Result<Value, String> {
-    let db_path = crate::file_system::FileSystem::get_database_path()?;
-    let conn =
-        crate::database::local_store::LocalStore::init(&db_path).map_err(|e| e.to_string())?;
-    let json_str = serde_json::to_string(&workspace).map_err(|e| e.to_string())?;
-    crate::database::local_store::LocalStore::set_meta(&conn, "workspace", &json_str)
-        .map_err(|e| e.to_string())?;
-
     Ok(json!({
       "ok": true,
       "workspace": workspace

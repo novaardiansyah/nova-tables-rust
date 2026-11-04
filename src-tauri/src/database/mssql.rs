@@ -422,16 +422,13 @@ pub async fn list_columns(
     }))
 }
 
+// Targeted for SQL Server: connects using Tiberius TDS client configuration retrieved from in-memory connection registry.
 pub async fn get_client_for_connection(
     connection_id: &str,
     database: Option<&str>,
 ) -> Result<MssqlClient, String> {
-    let db_path = crate::file_system::FileSystem::get_database_path()?;
-    let conn =
-        crate::database::local_store::LocalStore::init(&db_path).map_err(|e| e.to_string())?;
-    let item = crate::database::local_store::LocalStore::get_connection(&conn, connection_id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("Connection {} not found", connection_id))?;
+    let item = crate::database::connection_registry::get_active_connection(connection_id)
+        .ok_or_else(|| format!("Active connection {} not found. Please connect first.", connection_id))?;
 
     let password = item.password.or(item.password_cipher).unwrap_or_default();
     let db_to_use = database

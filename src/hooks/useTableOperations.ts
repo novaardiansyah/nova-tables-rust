@@ -109,6 +109,7 @@ export function useTableOperations({
           table.schema,
           table.name,
         )
+        if (!structure) return
         const copyName = `${table.name}_copy`
         const sql = generateCreateTable(cloneDesign(structure, copyName), current?.connection?.driverType ?? null)
         openTab(current.connectionId, copyName, sql)

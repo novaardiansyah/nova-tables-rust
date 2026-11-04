@@ -1,239 +1,36 @@
 import { invoke } from '@tauri-apps/api/core'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { encryptExportPayload, decryptImportPayload, hashPassword } from '@/api/crypto'
+import {
+  AuthSession,
+  AuthUser,
+  ColumnSummary,
+  ConnectionModel,
+  DatabaseInfo,
+  DatabaseModule,
+  DatabaseUserDetail,
+  ExecutionPlanResult,
+  FolderModel,
+  IpcError,
+  QueryHistoryItem,
+  QueryResult,
+  SavedQueryItem,
+  ServerLoginItem,
+  SystemInfo,
+  TableColumnsSummary,
+  TableRelation,
+  TableStructureResult,
+  TableSummary,
+} from './types'
+import { apiRequest, getAuthToken, getStoredSession, setAuthToken, setStoredSession } from './client'
+import {
+  exportAppConfig,
+  exportConnections,
+  importAppConfig,
+  importConnections,
+  selectImportFile,
+} from './transfer'
 
-export interface IpcErrorPayload {
-  message?: string
-  code?: string | null
-  number?: number | null
-  lineNumber?: number | null
-  state?: number | null
-  severity?: number | null
-  fields?: Record<string, unknown> | null
-}
-
-export class IpcError extends Error {
-  code: string | null
-  number: number | null
-  lineNumber: number | null
-  state: number | null
-  severity: number | null
-  fields: Record<string, unknown> | null
-
-  constructor(payload?: IpcErrorPayload | null) {
-    super(payload?.message || 'Unexpected error')
-    this.name = 'IpcError'
-    this.code = payload?.code || null
-    this.number = payload?.number ?? null
-    this.lineNumber = payload?.lineNumber ?? null
-    this.state = payload?.state ?? null
-    this.severity = payload?.severity ?? null
-    this.fields = payload?.fields || null
-  }
-}
-
-export interface ConnectionModel {
-  id?: string
-  name?: string
-  host?: string
-  port?: number | string
-  username?: string
-  password?: string | null
-  passwordCipher?: string | null
-  database?: string
-  databaseName?: string
-  lastDatabaseUsed?: string | null
-  folderId?: string | null
-  environment?: string
-  encrypt?: boolean
-  trustServerCertificate?: boolean
-  driverType?: string
-  createdAt?: string
-  updatedAt?: string
-  lastConnectedAt?: string | null
-  hasPassword?: boolean
-  isDuplicate?: boolean
-  [key: string]: unknown
-}
-
-export interface FolderModel {
-  id: string
-  name: string
-  parentId?: string | null
-  createdAt?: string
-  [key: string]: unknown
-}
-
-export interface DatabaseInfo {
-  name: string
-  isSystem?: boolean
-  isOnline?: boolean
-  [key: string]: unknown
-}
-
-export interface DatabaseUserDetail {
-  name: string
-  type: string
-  defaultSchema?: string | null
-  canManage: boolean
-  reason?: string | null
-  loginName?: string | null
-  roles: string[]
-}
-
-export type DatabaseUser = DatabaseUserDetail
-
-export interface ServerLoginItem {
-  name: string
-  type: string
-  isDisabled?: boolean
-  isLocked?: boolean
-}
-
-export interface TableSummary {
-  schema: string
-  name: string
-  type?: string
-  rowCount?: number | null
-  primaryKey?: string[] | null
-}
-
-export interface TableColumnsSummary {
-  schema: string
-  name: string
-  columns: string[]
-}
-
-export interface ColumnSummary {
-  schema: string
-  table: string
-  name: string
-  column?: string
-  typeName?: string
-  dataType?: string
-  maxLength?: number | null
-  isNullable?: boolean
-  isIdentity?: boolean
-  isPrimaryKey?: boolean
-  updateable?: boolean
-  computed?: boolean
-  [key: string]: unknown
-}
-
-export interface TableStructureResult {
-  schema: string
-  table: string
-  objectName: string
-  statement: string
-  columns: unknown[]
-  primaryKey: any[]
-  uniqueKeys: any[]
-  foreignKeys: any[]
-  indexes: any[]
-  [key: string]: unknown
-}
-
-export interface TableRelation {
-  name: string
-  schema: string
-  table: string
-  referencedSchema: string
-  referencedTable: string
-  columns: { column: string; referencedColumn: string }[]
-}
-
-export interface DatabaseModule {
-  schema: string
-  name: string
-  type: string
-  typeDesc?: string
-}
-
-export interface QueryResult {
-  ok?: boolean
-  resultSets: {
-    columns: { name: string; type?: string;[key: string]: unknown }[]
-    rows: unknown[][]
-    rowCount: number
-    [key: string]: unknown
-  }[]
-  messages: {
-    type?: string
-    count?: number
-    text?: string
-    [key: string]: unknown
-  }[]
-  rowsAffected: number[]
-  elapsedMs: number
-  rowCount?: number
-  truncated?: boolean
-  maxRows?: number
-  columns?: { name: string; type?: string;[key: string]: unknown }[]
-  rows?: unknown[][]
-  executionTimeMs?: number
-  message?: string
-  [key: string]: unknown
-}
-
-export interface ExecutionPlanResult {
-  plan?: string | null
-  xml?: string | null
-  columns?: any[]
-  rows?: any[][]
-  [key: string]: unknown
-}
-
-export interface QueryHistoryItem {
-  id: string
-  connectionId: string
-  databaseName: string
-  sql: string
-  executionTimeMs?: number
-  durationMs?: number
-  rowsAffected?: number
-  rowCount?: number
-  status: string
-  errorMessage?: string | null
-  createdAt: string
-  [key: string]: unknown
-}
-
-export interface SavedQueryItem {
-  id: string
-  connectionId?: string | null
-  databaseName?: string | null
-  database?: string | null
-  name: string
-  sql: string
-  error?: string | null
-  createdAt?: string
-  updatedAt?: string
-  [key: string]: unknown
-}
-
-export interface SystemInfo {
-  name: string
-  version: string
-}
-
-export interface AuthUser {
-  id: string
-  username: string
-  createdAt: string
-}
-
-export interface AuthUserWithCredentials {
-  id: string
-  username: string
-  passwordHash: string
-  salt: string
-  createdAt: string
-}
-
-export interface AuthSession {
-  user: AuthUser
-  token: string
-}
+export * from './types'
 
 declare global {
   interface Window {
@@ -262,11 +59,6 @@ async function callCommand<T = any>(cmd: string, args: Record<string, unknown> =
   }
 }
 
-function cleanText(value: unknown, fallback = ''): string {
-  if (value === undefined || value === null) return fallback
-  return String(value).trim()
-}
-
 function legacyCopyText(text: string): boolean {
   if (typeof document === 'undefined' || !document.body) return false
   const textarea = document.createElement('textarea')
@@ -288,254 +80,6 @@ function legacyCopyText(text: string): boolean {
   }
 }
 
-function exportFolderChain(folderId: string, folderById: Map<string, FolderModel>): string[] {
-  const chain: string[] = []
-  let current: FolderModel | null = folderId ? folderById.get(folderId) ?? null : null
-  while (current && !chain.includes(current.id)) {
-    chain.unshift(current.id)
-    current = current.parentId ? folderById.get(current.parentId) ?? null : null
-  }
-  return chain
-}
-
-function importFolderKey(parentId: string | null, name: string): string {
-  return `${parentId ?? ''}::${String(name).toLowerCase()}`
-}
-
-function importFolderDepth(folder: FolderModel, folderById: Map<string, FolderModel>): number {
-  let depth = 0
-  let current: FolderModel | undefined = folder
-  while (current?.parentId && folderById.has(String(current.parentId)) && depth < 64) {
-    current = folderById.get(String(current.parentId))
-    depth += 1
-  }
-  return depth
-}
-
-export interface ImportFileDialogResult {
-  canceled: boolean
-  filePath?: string
-  fileName?: string
-  content?: string
-}
-
-interface ConnectionsBundle {
-  connections: Record<string, unknown>[]
-  folders: { id: string; name: string; parentId: string | null }[]
-  order: { connections: string[]; folders: string[] }
-}
-
-async function buildConnectionsBundle(
-  connectionIds: string[] | null | undefined
-): Promise<ConnectionsBundle> {
-  const allConnections = await api.listConnections()
-  const allSelected = !Array.isArray(connectionIds) || connectionIds.length === 0
-  const targetIds = new Set(
-    allSelected ? allConnections.map((c) => c.id!) : connectionIds.map(String)
-  )
-
-  const allFolders = await api.listFolders()
-  const folderById = new Map<string, FolderModel>(allFolders.map((f) => [f.id, f]))
-  const folderIds = new Set<string>()
-  const folderOrder: string[] = []
-
-  if (allSelected) {
-    for (const folder of allFolders) folderIds.add(folder.id)
-  } else {
-    for (const conn of allConnections) {
-      if (!targetIds.has(conn.id!) || !conn.folderId) continue
-      for (const id of exportFolderChain(conn.folderId, folderById)) {
-        folderIds.add(id)
-      }
-    }
-  }
-
-  for (const folder of allFolders) {
-    if (folderIds.has(folder.id)) folderOrder.push(folder.id)
-  }
-
-  const connections: Record<string, unknown>[] = []
-  const connectionOrder: string[] = []
-  for (const item of allConnections) {
-    if (!targetIds.has(item.id!)) continue
-    connectionOrder.push(item.id!)
-    connections.push({
-      name: item.name,
-      host: item.host,
-      port: item.port,
-      username: item.username,
-      database: item.databaseName || item.database || '',
-      environment: item.environment || '',
-      encrypt: item.encrypt !== false,
-      trustServerCertificate: item.trustServerCertificate !== false,
-      driverType: item.driverType ?? null,
-      password: item.password || null,
-      folderId: item.folderId ?? null,
-    })
-  }
-
-  const folders = folderOrder.map((id) => {
-    const folder = folderById.get(id)!
-    return {
-      id: folder.id,
-      name: folder.name,
-      parentId: folder.parentId ?? null,
-    }
-  })
-
-  return { connections, folders, order: { connections: connectionOrder, folders: folderOrder } }
-}
-
-function getYYYYMMDD(): string {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  const hour = String(now.getHours()).padStart(2, '0')
-  const minute = String(now.getMinutes()).padStart(2, '0')
-  const second = String(now.getSeconds()).padStart(2, '0')
-  return `${year}${month}${day}${hour}${minute}${second}`
-}
-
-async function saveFileWithDialog(input: {
-  defaultPath: string
-  filters: { name: string; extensions: string[] }[]
-  content: string
-}): Promise<{ saved: boolean; filePath?: string }> {
-  if (typeof window === 'undefined' || !window.__TAURI_INTERNALS__) {
-    // Fallback to browser download if not Tauri
-    const blob = new Blob([input.content], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = input.defaultPath
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    return { saved: true }
-  }
-  const res = await callCommand<any>('save_file', { input })
-  return res || { saved: false }
-}
-
-async function applyImportedConnections(payload: {
-  connections?: any[]
-  folders?: any[]
-}): Promise<{
-  importedCount: number
-  importedFolderCount: number
-  connections: ConnectionModel[]
-  folders: FolderModel[]
-}> {
-  const items = payload.connections || []
-  const sourceFolders = Array.isArray(payload.folders) ? payload.folders : []
-
-  const existingConnections = await api.listConnections()
-  const existingNames = new Set(existingConnections.map((c) => (c.name || '').toLowerCase()))
-  const existingFolders = await api.listFolders()
-  const reusableFolders = new Map<string, string>()
-  for (const folder of existingFolders) {
-    const key = importFolderKey(folder.parentId ?? null, folder.name)
-    if (!reusableFolders.has(key)) reusableFolders.set(key, folder.id)
-  }
-
-  const folderIdMap = new Map<string, string>()
-  const importedFolderIds: string[] = []
-  const sourceFolderById = new Map<string, FolderModel>(
-    sourceFolders.filter((f: any) => f && f.id).map((f: any) => [String(f.id), f])
-  )
-  const orderedSourceFolders = [...sourceFolderById.values()].sort(
-    (left, right) =>
-      importFolderDepth(left, sourceFolderById) - importFolderDepth(right, sourceFolderById)
-  )
-
-  for (const folder of orderedSourceFolders) {
-    const name = cleanText(folder.name)
-    if (!name) continue
-    const sourceParentId = folder.parentId ? String(folder.parentId) : null
-    const parentId = sourceParentId ? folderIdMap.get(sourceParentId) ?? null : null
-    const key = importFolderKey(parentId, name)
-    const reusableId = reusableFolders.get(key)
-    let targetId = reusableId
-
-    if (reusableId) {
-      reusableFolders.delete(key)
-    } else {
-      const created = await api.saveFolder({ name, parentId })
-      targetId = created.id
-      importedFolderIds.push(targetId)
-    }
-
-    if (targetId) {
-      folderIdMap.set(String(folder.id), targetId)
-    }
-  }
-
-  const nameFolderCache = new Map<string, string>()
-  const resolveLegacyFolder = async (folderName: string): Promise<string | null> => {
-    const name = cleanText(folderName)
-    if (!name) return null
-    const key = importFolderKey(null, name)
-    if (nameFolderCache.has(key)) return nameFolderCache.get(key) ?? null
-    const fine = reusableFolders.get(key) ?? null
-    if (fine) {
-      reusableFolders.delete(key)
-      nameFolderCache.set(key, fine)
-      return fine
-    }
-    const created = await api.saveFolder({ name })
-    importedFolderIds.push(created.id)
-    nameFolderCache.set(key, created.id)
-    return created.id
-  }
-
-  const imported: ConnectionModel[] = []
-  for (const item of items) {
-    if (!item || typeof item !== 'object') continue
-    let name = cleanText(item.name)
-    if (!name) continue
-
-    if (existingNames.has(name.toLowerCase())) {
-      name = `(new) ${name}`
-      while (existingNames.has(name.toLowerCase())) {
-        name = `(new) ${name}`
-      }
-    }
-    existingNames.add(name.toLowerCase())
-
-    let folderId: string | null = null
-    if (item.folderId && folderIdMap.has(String(item.folderId))) {
-      folderId = folderIdMap.get(String(item.folderId)) ?? null
-    } else if (item.folderName) {
-      folderId = await resolveLegacyFolder(item.folderName)
-    }
-
-    const saved = await api.saveConnection({
-      name,
-      host: item.host,
-      port: Number(item.port) || 1433,
-      username: item.username || '',
-      databaseName: item.database || item.databaseName || '',
-      environment: item.environment || '',
-      encrypt: item.encrypt !== false,
-      trustServerCertificate: item.trustServerCertificate !== false,
-      driverType: item.driverType,
-      folderId,
-      password: item.password || null,
-    })
-
-    imported.push(saved)
-  }
-
-  return {
-    importedCount: imported.length,
-    importedFolderCount: importedFolderIds.length,
-    connections: await api.listConnections(),
-    folders: await api.listFolders(),
-  }
-}
-
 export const api = {
   registerUser: async (username: string, password: string): Promise<AuthUser> => {
     const trimmed = username.trim()
@@ -545,38 +89,15 @@ export const api = {
     if (password.length < 6) {
       throw new Error('Password must be at least 6 characters long.')
     }
-    const { hash, salt } = await hashPassword(password)
-    if (!isTauri()) {
-      const storedUsersRaw = localStorage.getItem('nova_tables_mock_users')
-      const storedUsers: Record<string, { id: string; username: string; passwordHash: string; salt: string; createdAt: string }> =
-        storedUsersRaw ? JSON.parse(storedUsersRaw) : {}
-      if (storedUsers[trimmed.toLowerCase()]) {
-        throw new Error('Username already exists.')
-      }
-      const user: AuthUser = {
-        id: 'user_' + Date.now(),
-        username: trimmed,
-        createdAt: new Date().toISOString(),
-      }
-      storedUsers[trimmed.toLowerCase()] = {
-        ...user,
-        passwordHash: hash,
-        salt,
-      }
-      localStorage.setItem('nova_tables_mock_users', JSON.stringify(storedUsers))
-      localStorage.setItem('nova_tables_auth_session', JSON.stringify({ user, token: 'mock_token' }))
-      return user
-    }
-    const user = await callCommand<AuthUser>('auth_register', {
-      username: trimmed,
-      passwordHash: hash,
-      salt,
+
+    const res = await apiRequest<{ ok: boolean; token: string; user: AuthUser }>('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ username: trimmed, password }),
     })
-    if (!user) {
-      throw new Error('Failed to register user.')
-    }
-    await callCommand('auth_create_session', { userId: user.id })
-    return user
+
+    setAuthToken(res.token)
+    setStoredSession({ user: res.user, token: res.token })
+    return res.user
   },
 
   loginUser: async (username: string, password: string): Promise<AuthUser> => {
@@ -584,66 +105,47 @@ export const api = {
     if (!trimmed || !password) {
       throw new Error('Username and password are required.')
     }
-    if (!isTauri()) {
-      const storedUsersRaw = localStorage.getItem('nova_tables_mock_users')
-      const storedUsers: Record<string, { id: string; username: string; passwordHash: string; salt: string; createdAt: string }> =
-        storedUsersRaw ? JSON.parse(storedUsersRaw) : {}
-      const target = storedUsers[trimmed.toLowerCase()]
-      if (!target) {
-        throw new Error('Invalid username or password.')
-      }
-      const { hash } = await hashPassword(password, target.salt)
-      if (hash !== target.passwordHash) {
-        throw new Error('Invalid username or password.')
-      }
-      const user: AuthUser = {
-        id: target.id,
-        username: target.username,
-        createdAt: target.createdAt,
-      }
-      localStorage.setItem('nova_tables_auth_session', JSON.stringify({ user, token: 'mock_token' }))
-      return user
-    }
-    const creds = await callCommand<AuthUserWithCredentials | null>('auth_get_user_credentials', {
-      username: trimmed,
+
+    const res = await apiRequest<{ ok: boolean; token: string; user: AuthUser }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username: trimmed, password }),
     })
-    if (!creds) {
-      throw new Error('Invalid username or password.')
-    }
-    const { hash } = await hashPassword(password, creds.salt)
-    if (hash !== creds.passwordHash) {
-      throw new Error('Invalid username or password.')
-    }
-    const session = await callCommand<AuthSession>('auth_create_session', {
-      userId: creds.id,
-    })
-    if (!session?.user) {
-      throw new Error('Failed to create session.')
-    }
-    return session.user
+
+    setAuthToken(res.token)
+    setStoredSession({ user: res.user, token: res.token })
+    return res.user
   },
 
   getCurrentSession: async (): Promise<AuthSession | null> => {
-    if (!isTauri()) {
-      const stored = localStorage.getItem('nova_tables_auth_session')
-      if (stored) {
-        try {
-          return JSON.parse(stored) as AuthSession
-        } catch {
-          return null
-        }
-      }
+    const token = getAuthToken()
+    if (!token) {
       return null
     }
-    return callCommand<AuthSession | null>('auth_get_current_session')
+
+    try {
+      const res = await apiRequest<{ ok: boolean; user: AuthUser }>('/api/auth/me')
+      const session: AuthSession = { user: res.user, token }
+      setStoredSession(session)
+      return session
+    } catch {
+      const cached = getStoredSession()
+      if (cached && cached.token === token) {
+        return cached
+      }
+      setAuthToken(null)
+      setStoredSession(null)
+      return null
+    }
   },
 
   logout: async (): Promise<void> => {
-    if (!isTauri()) {
-      localStorage.removeItem('nova_tables_auth_session')
-      return
+    try {
+      await apiRequest('/api/auth/logout', { method: 'POST' })
+    } catch {
+    } finally {
+      setAuthToken(null)
+      setStoredSession(null)
     }
-    await callCommand('auth_logout')
   },
 
   appInfo: async (): Promise<SystemInfo> => {
@@ -656,20 +158,19 @@ export const api = {
 
   loadSettings: async (): Promise<Record<string, unknown> | null> => {
     try {
-      const res = await callCommand<{ settings?: Record<string, unknown> }>('get_settings')
-      if (res?.settings) {
-        return res.settings
+      const res = await apiRequest<{ ok: boolean; value: Record<string, unknown> | null }>('/api/meta/settings')
+      if (res && res.value !== undefined) {
+        return res.value
       }
     } catch {
-      // Ignore IPC errors and fall back to localStorage
     }
+
     try {
       const stored = localStorage.getItem('nova_tables_settings')
       if (stored) {
         return JSON.parse(stored)
       }
     } catch {
-      // Ignore localStorage errors
     }
     return null
   },
@@ -678,28 +179,34 @@ export const api = {
     try {
       localStorage.setItem('nova_tables_settings', JSON.stringify(settings))
     } catch {
-      // Ignore localStorage errors
     }
-    await callCommand('save_settings', { settings })
+
+    try {
+      await apiRequest('/api/meta/settings', {
+        method: 'POST',
+        body: JSON.stringify({ value: settings }),
+      })
+    } catch {
+    }
+
     return settings
   },
 
   loadWorkspaceState: async (): Promise<Record<string, unknown> | null> => {
     try {
-      const res = await callCommand<{ workspace?: Record<string, unknown> }>('get_workspace_state')
-      if (res?.workspace) {
-        return res.workspace
+      const res = await apiRequest<{ ok: boolean; value: Record<string, unknown> | null }>('/api/meta/workspace')
+      if (res && res.value !== undefined) {
+        return res.value
       }
     } catch {
-      // Ignore IPC errors and fall back to localStorage
     }
+
     try {
       const stored = localStorage.getItem('nova_tables_workspace')
       if (stored) {
         return JSON.parse(stored)
       }
     } catch {
-      // Ignore localStorage errors
     }
     return null
   },
@@ -708,24 +215,28 @@ export const api = {
     try {
       localStorage.setItem('nova_tables_workspace', JSON.stringify(workspace))
     } catch {
-      // Ignore localStorage errors
     }
-    await callCommand('save_workspace_state', { workspace })
+
+    try {
+      await apiRequest('/api/meta/workspace', {
+        method: 'POST',
+        body: JSON.stringify({ value: workspace }),
+      })
+    } catch {
+    }
+
     return workspace
   },
 
   copyText: async (text: string): Promise<boolean> => {
     const value = String(text ?? '')
-    // Try the modern Clipboard API first (works in most browsers and Tauri)
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       try {
         await navigator.clipboard.writeText(value)
         return true
       } catch {
-        // Clipboard API failed, fall back to execCommand
       }
     }
-    // Fallback: use document.execCommand('copy') with a hidden textarea
     return legacyCopyText(value)
   },
 
@@ -742,25 +253,25 @@ export const api = {
     }
   },
 
-  saveFile: async (input: unknown): Promise<{ saved?: boolean; filePath?: string;[key: string]: unknown }> => {
+  saveFile: async (input: unknown): Promise<{ saved?: boolean; filePath?: string; [key: string]: unknown }> => {
     const res = await callCommand<any>('save_file', { input })
     return res || { saved: false }
   },
 
   onOpenConnection: (_handler: unknown): (() => void) => {
-    return () => { }
+    return () => {}
   },
 
   onNewConnection: (_handler: unknown): (() => void) => {
-    return () => { }
+    return () => {}
   },
 
   onPreferences: (_handler: unknown): (() => void) => {
-    return () => { }
+    return () => {}
   },
 
   listConnections: async (): Promise<ConnectionModel[]> => {
-    const res = await callCommand<{ connections?: ConnectionModel[] }>('list_connections')
+    const res = await apiRequest<{ ok: boolean; connections: ConnectionModel[] }>('/api/connections')
     const list = res?.connections || []
     return list.map((conn) => {
       const explicitDb =
@@ -785,13 +296,10 @@ export const api = {
 
   getLastConnectedId: async (): Promise<string | null> => {
     try {
-      const res = await callCommand<{ workspace?: { activeConnectionId?: string | null } }>(
-        'get_workspace_state',
-      )
-      const activeId = res?.workspace?.activeConnectionId
+      const res = await api.loadWorkspaceState()
+      const activeId = (res as { activeConnectionId?: string | null })?.activeConnectionId
       if (typeof activeId === 'string' && activeId) return activeId
     } catch {
-      // Ignore IPC errors and fall back to localStorage
     }
     try {
       return localStorage.getItem('nova_tables_last_connected_id') || null
@@ -801,88 +309,41 @@ export const api = {
   },
 
   saveConnection: async (connection: Partial<ConnectionModel>): Promise<ConnectionModel> => {
-    const hasDbField =
-      (connection.databaseName !== undefined && connection.databaseName !== null) ||
-      (connection.database !== undefined && connection.database !== null)
-    const dbName = hasDbField
-      ? String(connection.databaseName ?? connection.database ?? '').trim()
-      : ''
-
-    const payload: ConnectionModel = {
-      ...connection,
-      id:
-        connection.id ||
-        (typeof crypto !== 'undefined' && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `conn-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`),
-      name: connection.name || 'New Connection',
-      host: connection.host || '127.0.0.1',
-      port: Number(connection.port) || 1433,
-      username: connection.username || '',
-      databaseName: hasDbField ? dbName : (connection.databaseName || ''),
-      lastDatabaseUsed: hasDbField
-        ? (dbName || null)
-        : (connection.lastDatabaseUsed || null),
-      folderId: connection.folderId || null,
-      environment: connection.environment || '',
-      encrypt: connection.encrypt !== false,
-      trustServerCertificate: connection.trustServerCertificate !== false,
-      driverType: connection.driverType,
-    }
-    // Remove `database` to avoid duplicate field error in Rust serde
-    // (field has both `rename = "databaseName"` and `alias = "database"`)
-    delete payload.database
-    if (typeof payload.password === 'string' && payload.password.trim() === '') {
-      delete payload.password
-    }
-    const res = await callCommand<{ connection?: ConnectionModel }>('save_connection', {
-      connection: payload,
+    const res = await apiRequest<{ ok: boolean; connection: ConnectionModel }>('/api/connections', {
+      method: 'POST',
+      body: JSON.stringify(connection),
     })
-    const saved = res?.connection || payload
-    const hasPassword = Boolean(
-      saved.hasPassword ||
-      (saved.password && saved.password.length > 0) ||
-      (saved.passwordCipher && saved.passwordCipher.length > 0) ||
-      connection.hasPassword,
-    )
-    const effectiveDb =
-      saved.databaseName !== undefined && saved.databaseName !== null
-        ? saved.databaseName
-        : saved.database !== undefined && saved.database !== null
-          ? saved.database
-          : dbName
+
+    const saved = res.connection
+    const explicitDb = saved.databaseName || saved.database || ''
     return {
       ...saved,
-      database: effectiveDb,
-      databaseName: effectiveDb,
-      lastDatabaseUsed: hasDbField ? (dbName || null) : (saved.lastDatabaseUsed || null),
-      hasPassword,
+      database: explicitDb,
+      databaseName: explicitDb,
+      hasPassword: Boolean(saved.hasPassword || (saved.passwordCipher && saved.passwordCipher.length > 0)),
     }
   },
 
   duplicateConnection: async (id: string, name?: string): Promise<ConnectionModel> => {
-    const res = await callCommand<ConnectionModel | { connection?: ConnectionModel }>('duplicate_connection', {
-      id,
-      name,
-    })
-    const conn = (res && 'connection' in res && res.connection ? res.connection : res) as ConnectionModel
-    const explicitDb =
-      conn.databaseName !== undefined && conn.databaseName !== null
-        ? conn.databaseName
-        : conn.database !== undefined && conn.database !== null
-          ? conn.database
-          : ''
-    return {
-      ...conn,
-      database: explicitDb,
-      databaseName: explicitDb,
-      hasPassword: true,
-      isDuplicate: true,
+    const list = await api.listConnections()
+    const target = list.find((c) => c.id === id)
+    if (!target) {
+      throw new Error(`Connection ${id} not found`)
     }
+
+    const duplicatePayload = {
+      ...target,
+      id: undefined,
+      name: name || `${target.name} (Copy)`,
+    }
+
+    return api.saveConnection(duplicatePayload)
   },
 
   deleteConnection: async (id: string): Promise<unknown> => {
-    return callCommand('delete_connection', { id })
+    return apiRequest(`/api/connections/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
   },
 
   moveConnection: async (id: string, folderId?: string | null): Promise<unknown> => {
@@ -891,318 +352,42 @@ export const api = {
     if (existing) {
       return api.saveConnection({ ...existing, folderId })
     }
-    return callCommand('save_connection', { connection: { id, folderId } })
+    return null
   },
 
-  exportConnections: async (
-    connectionIds: string[] | null | undefined,
-    password: string | null | undefined
-  ): Promise<{ saved: boolean; count: number }> => {
-    const secret = String(password ?? '')
-    if (!secret) {
-      throw new IpcError({
-        message: 'Password is required to encrypt export',
-        code: 'PASSWORD_REQUIRED',
-      })
-    }
-
-    const bundle = await buildConnectionsBundle(connectionIds)
-    if (bundle.connections.length === 0) {
-      throw new IpcError({ message: 'No connections found to export', code: 'NO_CONNECTIONS' })
-    }
-
-    const encrypted = await encryptExportPayload(
-      {
-        version: 2,
-        exportedAt: new Date().toISOString(),
-        ...bundle,
-      },
-      secret
-    )
-    const defaultName = `connections-${getYYYYMMDD()}.nova-tables`
-    const saveResult = await saveFileWithDialog({
-      defaultPath: defaultName,
-      filters: [
-        { name: 'Nova Tables Export', extensions: ['nova-tables'] },
-      ],
-      content: encrypted,
-    })
-
-    return saveResult.saved ? { saved: true, count: bundle.connections.length } : { saved: false, count: 0 }
-  },
-
-  exportAppConfig: async (
-    target: unknown,
-    password: string | null | undefined
-  ): Promise<{ saved: boolean; connectionCount: number; hasSettings?: boolean }> => {
-    const secret = String(password ?? '')
-    if (!secret) {
-      throw new IpcError({
-        message: 'Password is required to encrypt export',
-        code: 'PASSWORD_REQUIRED',
-      })
-    }
-
-    let settingsPayload: unknown = null
-    let connectionIds: string[] | null | undefined = null
-    let includeConnections = true
-
-    if (
-      target &&
-      typeof target === 'object' &&
-      ('includeSettings' in target || 'connectionIds' in target || 'includeConnections' in target)
-    ) {
-      const opts = target as {
-        settings?: unknown
-        connectionIds?: string[] | null
-        includeSettings?: boolean
-        includeConnections?: boolean
-      }
-      settingsPayload = opts.includeSettings !== false ? (opts.settings ?? null) : null
-      connectionIds = opts.connectionIds ?? null
-      includeConnections = opts.includeConnections !== false
-    } else {
-      settingsPayload = target ?? null
-    }
-
-    const bundle = includeConnections
-      ? await buildConnectionsBundle(connectionIds)
-      : { connections: [], folders: [], order: { connections: [], folders: [] } }
-
-    if (!settingsPayload && bundle.connections.length === 0) {
-      throw new IpcError({
-        message: 'No configuration or connections selected to export',
-        code: 'NO_DATA',
-      })
-    }
-
-    const encrypted = await encryptExportPayload(
-      {
-        version: 2,
-        kind: 'app-config',
-        exportedAt: new Date().toISOString(),
-        settings: settingsPayload,
-        ...bundle,
-      },
-      secret
-    )
-    const defaultName = `configs-${getYYYYMMDD()}.nova-tables`
-    const saveResult = await saveFileWithDialog({
-      defaultPath: defaultName,
-      filters: [
-        { name: 'Nova Tables Config', extensions: ['nova-tables'] },
-      ],
-      content: encrypted,
-    })
-
-    return saveResult.saved
-      ? { saved: true, connectionCount: bundle.connections.length, hasSettings: Boolean(settingsPayload) }
-      : { saved: false, connectionCount: 0, hasSettings: false }
-  },
-
-  selectImportFile: async (): Promise<{
-    canceled: boolean
-    filePath?: string
-    fileName?: string
-    content?: string
-  }> => {
-    if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
-      try {
-        const res = await callCommand<{
-          canceled: boolean
-          filePath?: string
-          fileName?: string
-          content?: string
-        }>('select_import_file', {
-          input: {
-            filters: [{ name: 'Nova Tables (*.nova-tables)', extensions: ['nova-tables'] }],
-          },
-        })
-        if (res) {
-          if (res.canceled) return { canceled: true }
-          if (!res.fileName?.endsWith('.nova-tables')) {
-            return { canceled: true }
-          }
-          return res
-        }
-      } catch {
-        // Fall through to DOM input on IPC failure
-      }
-    }
-
-    return new Promise((resolve) => {
-      const input = document.createElement('input')
-      input.type = 'file'
-      input.accept = '.nova-tables'
-      input.style.display = 'none'
-      document.body.appendChild(input)
-
-      let settled = false
-      const cleanup = () => {
-        if (input.parentNode) {
-          input.parentNode.removeChild(input)
-        }
-      }
-
-      input.addEventListener('change', async () => {
-        settled = true
-        const file = input.files?.[0]
-        cleanup()
-        if (!file || !file.name.endsWith('.nova-tables')) {
-          resolve({ canceled: true })
-          return
-        }
-        try {
-          const content = await file.text()
-          resolve({
-            canceled: false,
-            filePath: file.name,
-            fileName: file.name,
-            content,
-          })
-        } catch {
-          resolve({ canceled: true })
-        }
-      })
-
-      input.addEventListener('cancel', () => {
-        settled = true
-        cleanup()
-        resolve({ canceled: true })
-      })
-
-      window.addEventListener(
-        'focus',
-        () => {
-          setTimeout(() => {
-            if (!settled) {
-              cleanup()
-              resolve({ canceled: true })
-            }
-          }, 600)
-        },
-        { once: true },
-      )
-
-      input.click()
-    })
-  },
-
-  importConnections: async (
-    content: string | Record<string, unknown>,
-    password: string | null | undefined
-  ): Promise<{
-    importedCount: number
-    importedFolderCount: number
-    connections: ConnectionModel[]
-    folders: FolderModel[]
-  }> => {
-    const secret = String(password ?? '')
-    if (!secret) {
-      throw new IpcError({
-        message: 'Password is required to decrypt connections',
-        code: 'PASSWORD_REQUIRED',
-      })
-    }
-
-    let payload: { connections?: any[]; folders?: any[] }
-    try {
-      payload = await decryptImportPayload(content, secret)
-    } catch (err: any) {
-      throw new IpcError({
-        message: err?.message || 'Failed to decrypt import file',
-        code: err?.code || 'DECRYPT_ERROR',
-      })
-    }
-
-    return applyImportedConnections(payload)
-  },
-
-  importAppConfig: async (
-    content: string | Record<string, unknown>,
-    password: string | null | undefined,
-    options?: {
-      includeSettings?: boolean
-      includeConnections?: boolean
-    }
-  ): Promise<{
-    importedCount: number
-    importedFolderCount: number
-    connections: ConnectionModel[]
-    folders: FolderModel[]
-    settings: Record<string, unknown> | null
-  }> => {
-    const secret = String(password ?? '')
-    if (!secret) {
-      throw new IpcError({
-        message: 'Password is required to decrypt configuration',
-        code: 'PASSWORD_REQUIRED',
-      })
-    }
-
-    let payload: { connections?: any[]; folders?: any[]; settings?: unknown }
-    try {
-      payload = await decryptImportPayload(content, secret)
-    } catch (err: any) {
-      throw new IpcError({
-        message: err?.message || 'Failed to decrypt configuration file',
-        code: err?.code || 'DECRYPT_ERROR',
-      })
-    }
-
-    const includeConnections = options?.includeConnections !== false
-    const includeSettings = options?.includeSettings !== false
-
-    const imported = includeConnections
-      ? await applyImportedConnections(payload)
-      : {
-        importedCount: 0,
-        importedFolderCount: 0,
-        connections: await api.listConnections(),
-        folders: await api.listFolders(),
-      }
-
-    const settings =
-      includeSettings && payload.settings && typeof payload.settings === 'object'
-        ? (payload.settings as Record<string, unknown>)
-        : null
-
-    return { ...imported, settings }
-  },
+  exportConnections,
+  exportAppConfig,
+  selectImportFile,
+  importConnections,
+  importAppConfig,
 
   listFolders: async (): Promise<FolderModel[]> => {
-    const res = await callCommand<{ folders?: FolderModel[] }>('list_folders')
+    const res = await apiRequest<{ ok: boolean; folders: FolderModel[] }>('/api/folders')
     return res?.folders || []
   },
 
   saveFolder: async (folder: Partial<FolderModel>): Promise<FolderModel> => {
-    const payload: FolderModel = {
-      ...folder,
-      id:
-        folder.id ||
-        (typeof crypto !== 'undefined' && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `folder-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`),
-      name: folder.name || 'New Folder',
-      parentId: folder.parentId || null,
-    }
-    const res = await callCommand<{ folder?: FolderModel }>('save_folder', { folder: payload })
-    return res?.folder || payload
+    const res = await apiRequest<{ ok: boolean; folder: FolderModel }>('/api/folders', {
+      method: 'POST',
+      body: JSON.stringify(folder),
+    })
+    return res.folder
   },
 
   deleteFolder: async (id: string): Promise<unknown> => {
-    return callCommand('delete_folder', { id })
+    return apiRequest(`/api/folders/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
   },
 
-  reorderTree: async (input: unknown): Promise<{ connections: ConnectionModel[]; folders: FolderModel[];[key: string]: unknown }> => {
-    try {
-      localStorage.setItem('nova_tables_tree_order', JSON.stringify(input))
-    } catch { }
-    const res = await callCommand<any>('reorder_tree', { input })
+  reorderTree: async (input: unknown): Promise<{ connections: ConnectionModel[]; folders: FolderModel[]; [key: string]: unknown }> => {
+    await apiRequest('/api/connections/reorder', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
     return {
-      connections: res?.connections || (await api.listConnections()),
-      folders: res?.folders || (await api.listFolders()),
-      ...(res || {}),
+      connections: await api.listConnections(),
+      folders: await api.listFolders(),
     }
   },
 
@@ -1214,90 +399,71 @@ export const api = {
     connections: ConnectionModel[]
     folders: FolderModel[]
   }> => {
-    const payload = {
-      folderIds: input?.folderIds || [],
-      connectionIds: input?.connectionIds || [],
-    }
-    const res = await callCommand<{
-      ok?: boolean
-      folderIds?: string[]
-      connectionIds?: string[]
-      connections?: ConnectionModel[]
-      folders?: FolderModel[]
-    }>('delete_tree', { input: payload })
+    const folderIds = input?.folderIds || []
+    const connectionIds = input?.connectionIds || []
 
-    let result: {
-      folderIds: string[]
-      connectionIds: string[]
-      connections: ConnectionModel[]
-      folders: FolderModel[]
-    }
-
-    if (res && res.ok) {
-      result = {
-        folderIds: res.folderIds || payload.folderIds,
-        connectionIds: res.connectionIds || payload.connectionIds,
-        connections: res.connections || (await api.listConnections()),
-        folders: res.folders || (await api.listFolders()),
-      }
-    } else {
-      for (const id of payload.connectionIds) {
-        await callCommand('delete_connection', { id })
-      }
-      for (const id of payload.folderIds) {
-        await callCommand('delete_folder', { id })
-      }
-      result = {
-        folderIds: payload.folderIds,
-        connectionIds: payload.connectionIds,
-        connections: await api.listConnections(),
-        folders: await api.listFolders(),
+    for (const fId of folderIds) {
+      try {
+        await api.deleteFolder(fId)
+      } catch {
       }
     }
 
-    try {
-      const stored = localStorage.getItem('nova_tables_tree_order')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        const connSet = new Set(result.connectionIds)
-        const folderSet = new Set(result.folderIds)
-        const nextConnections = (parsed.connections || []).filter((id: string) => !connSet.has(id))
-        const nextFolders = (parsed.folders || []).filter((id: string) => !folderSet.has(id))
-        localStorage.setItem(
-          'nova_tables_tree_order',
-          JSON.stringify({ connections: nextConnections, folders: nextFolders }),
-        )
+    for (const cId of connectionIds) {
+      try {
+        await api.deleteConnection(cId)
+      } catch {
       }
-    } catch { }
+    }
 
-    return result
+    return {
+      folderIds,
+      connectionIds,
+      connections: await api.listConnections(),
+      folders: await api.listFolders(),
+    }
   },
 
-  testConnection: async (connection: Partial<ConnectionModel> | null | undefined): Promise<any> => {
-    let target: Partial<ConnectionModel> = connection ? { ...connection } : {}
-    if (connection?.id && (!connection?.host || !connection?.name)) {
-      const all = await api.listConnections()
-      const found = all.find((c) => c.id === connection.id)
+  testConnection: async (connection: Partial<ConnectionModel>): Promise<any> => {
+    let target = { ...connection }
+    if (connection?.id && !connection?.host) {
+      const list = await api.listConnections()
+      const found = list.find((c) => c.id === connection.id)
       if (found) {
         target = { ...found, ...connection }
       }
     }
-    if (connection) {
-      if (connection.databaseName !== undefined) {
-        target.databaseName = connection.databaseName
-        target.database = connection.databaseName
-      } else if (connection.database !== undefined) {
-        target.databaseName = connection.database
-        target.database = connection.database
-      }
-    }
-    const res = await callCommand('test_connection', { connection: target })
+
+    const isMysql = target?.driverType === 'mysql'
+    const cmd = isMysql ? 'test_mysql_connection' : 'test_connection'
+    const res = await callCommand<any>(cmd, { connection: target })
     return (
       res || {
         ok: true,
         serverName: target.host || '127.0.0.1',
-        productVersion: '2022',
-        edition: 'Developer Edition',
+        productVersion: isMysql ? '8.0' : '2022',
+        edition: isMysql ? 'Community Edition' : 'Developer Edition',
+        elapsedMs: 14,
+      }
+    )
+  },
+
+  testMysqlConnection: async (connection: Partial<ConnectionModel>): Promise<any> => {
+    let target = { ...connection, driverType: 'mysql' }
+    if (connection?.id && !connection?.host) {
+      const list = await api.listConnections()
+      const found = list.find((c) => c.id === connection.id)
+      if (found) {
+        target = { ...found, ...connection, driverType: 'mysql' }
+      }
+    }
+    const res = await callCommand<any>('test_mysql_connection', { connection: target })
+    return (
+      res || {
+        ok: true,
+        serverName: target.host || '127.0.0.1',
+        productVersion: '8.0',
+        edition: 'Community Edition',
         elapsedMs: 14,
       }
     )
@@ -1322,20 +488,25 @@ export const api = {
     const res =
       (await callCommand('connect', { input: target })) ||
       (await callCommand('test_connection', { connection: target }))
+
+    if (target?.id && res?.database) {
+      api.updateLastDatabase(target.id, res.database).catch(() => {})
+    }
+
     try {
       if (target?.id) {
         localStorage.setItem('nova_tables_last_connected_id', target.id)
       }
     } catch {
-      // Ignore localStorage errors
     }
+
     return {
       connectionId: target?.id || 'session-1',
-      name: target?.name || 'SQL Server',
+      name: target?.name || (isMysql ? 'MySQL' : 'SQL Server'),
       host: target?.host || '127.0.0.1',
-      port: target?.port || 1433,
+      port: target?.port || (isMysql ? 3306 : 1433),
       database: (res?.database !== undefined && res?.database !== null) ? res.database : target?.database || target?.lastDatabaseUsed || target?.databaseName || (isMysql ? '' : 'master'),
-      databases: isMysql
+      databases: res?.databases || (isMysql
         ? [
           { name: 'information_schema', isSystem: true, isOnline: true },
           { name: 'mysql', isSystem: true, isOnline: true },
@@ -1347,16 +518,19 @@ export const api = {
           { name: 'model', isSystem: true, isOnline: true },
           { name: 'msdb', isSystem: true, isOnline: true },
           { name: 'tempdb', isSystem: true, isOnline: true },
-        ],
-      serverVersion: 'Microsoft SQL Server',
-      serverName: target?.host || '127.0.0.1',
-      edition: 'Developer Edition',
+        ]),
+      serverVersion: res?.serverVersion || (isMysql ? 'MySQL 8.0' : 'Microsoft SQL Server'),
+      serverName: res?.serverName || target?.host || '127.0.0.1',
+      edition: res?.edition || (isMysql ? 'Community Edition' : 'Developer Edition'),
       ...(res || {}),
     }
   },
 
   updateLastDatabase: async (connectionId: string, database: string): Promise<unknown> => {
-    return callCommand('update_last_database', { connectionId, database })
+    return apiRequest(`/api/connections/${encodeURIComponent(connectionId)}/last-database`, {
+      method: 'PATCH',
+      body: JSON.stringify({ database }),
+    })
   },
 
   disconnect: async (connectionId: string): Promise<unknown> => {
@@ -1367,21 +541,14 @@ export const api = {
     const res = await callCommand<{ databases?: DatabaseInfo[] }>('list_databases', {
       connectionId,
     })
-    return (
-      res?.databases || [
-        { name: 'master', isSystem: true, isOnline: true },
-        { name: 'model', isSystem: true, isOnline: true },
-        { name: 'msdb', isSystem: true, isOnline: true },
-        { name: 'tempdb', isSystem: true, isOnline: true },
-      ]
-    )
+    return res?.databases || []
   },
 
-  createDatabase: async (input: { connectionId: string; database: string;[key: string]: unknown }): Promise<unknown> => {
+  createDatabase: async (input: { connectionId: string; database: string; [key: string]: unknown }): Promise<unknown> => {
     return callCommand('create_database', { input })
   },
 
-  dropDatabase: async (input: { connectionId: string; database: string; confirmName?: string; acknowledged?: boolean;[key: string]: unknown }): Promise<unknown> => {
+  dropDatabase: async (input: { connectionId: string; database: string; confirmName?: string; acknowledged?: boolean; [key: string]: unknown }): Promise<unknown> => {
     return callCommand('drop_database', { input })
   },
 
@@ -1449,34 +616,31 @@ export const api = {
     return res?.tables || []
   },
 
-  tableStructure: async (
+  describeTable: async (
     connectionId: string,
     database: string,
     schema: string,
     table: string
-  ): Promise<TableStructureResult> => {
-    const res = await callCommand<any>('table_structure', {
+  ): Promise<TableStructureResult | null> => {
+    const res = await callCommand<TableStructureResult>('table_structure', {
       connectionId,
       database,
       schema,
       table,
     })
-    const targetSchema = schema || 'dbo'
-    const targetTable = table || ''
-    return {
-      schema: res?.schema || targetSchema,
-      table: res?.table || targetTable,
-      objectName: res?.objectName || `[${targetSchema}].[${targetTable}]`,
-      statement: res?.statement || '',
-      columns: Array.isArray(res?.columns) ? res.columns : [],
-      primaryKey: Array.isArray(res?.primaryKey) ? res.primaryKey : [],
-      uniqueKeys: Array.isArray(res?.uniqueKeys) ? res.uniqueKeys : [],
-      foreignKeys: Array.isArray(res?.foreignKeys) ? res.foreignKeys : [],
-      indexes: Array.isArray(res?.indexes) ? res.indexes : [],
-    }
+    return res || null
   },
 
-  tableRelations: async (
+  tableStructure: async (
+    connectionId: string,
+    database: string,
+    schema: string,
+    table: string
+  ): Promise<TableStructureResult | null> => {
+    return api.describeTable(connectionId, database, schema, table)
+  },
+
+  describeRelations: async (
     connectionId: string,
     database: string,
     schema: string,
@@ -1491,12 +655,42 @@ export const api = {
     return res?.relations || []
   },
 
-  listModules: async (connectionId: string, database: string): Promise<DatabaseModule[]> => {
+  tableRelations: async (
+    connectionId: string,
+    database: string,
+    schema: string,
+    table: string
+  ): Promise<TableRelation[]> => {
+    return api.describeRelations(connectionId, database, schema, table)
+  },
+
+  listRoutines: async (connectionId: string, database: string): Promise<DatabaseModule[]> => {
     const res = await callCommand<{ modules?: DatabaseModule[] }>('list_modules', {
       connectionId,
       database,
     })
     return res?.modules || []
+  },
+
+  listModules: async (connectionId: string, database: string): Promise<DatabaseModule[]> => {
+    return api.listRoutines(connectionId, database)
+  },
+
+  getRoutineDefinition: async (
+    connectionId: string,
+    database: string,
+    schema: string,
+    name: string,
+    type?: string
+  ): Promise<{ definition?: string; [key: string]: unknown }> => {
+    const res = await callCommand<{ definition?: string }>('module_definition', {
+      connectionId,
+      database,
+      schema,
+      name,
+      moduleType: type,
+    })
+    return res || { definition: '' }
   },
 
   moduleDefinition: async (
@@ -1505,15 +699,8 @@ export const api = {
     schema: string,
     name: string,
     type?: string
-  ): Promise<{ definition?: string; statement?: string;[key: string]: unknown }> => {
-    const res = await callCommand<any>('module_definition', {
-      connectionId,
-      database,
-      schema,
-      name,
-      moduleType: type,
-    })
-    return res || { definition: '' }
+  ): Promise<{ definition?: string; [key: string]: unknown }> => {
+    return api.getRoutineDefinition(connectionId, database, schema, name, type)
   },
 
   describeResult: async (
@@ -1537,18 +724,32 @@ export const api = {
     recordHistory?: boolean
   }): Promise<QueryResult> => {
     const res = await callCommand<QueryResult>('execute_query', input)
-    return (
-      res || {
-        ok: true,
-        resultSets: [],
-        messages: [],
-        rowsAffected: [0],
-        elapsedMs: 0,
-        rowCount: 0,
-        truncated: false,
-        maxRows: 20000,
-      }
-    )
+    const result: QueryResult = res || {
+      ok: true,
+      resultSets: [],
+      messages: [],
+      rowsAffected: [0],
+      elapsedMs: 0,
+      rowCount: 0,
+      truncated: false,
+      maxRows: 20000,
+    }
+
+    if (input.recordHistory !== false && input.connectionId) {
+      apiRequest('/api/query-history', {
+        method: 'POST',
+        body: JSON.stringify({
+          connectionId: input.connectionId,
+          database: input.database,
+          sql: input.sql,
+          status: result.ok !== false ? 'success' : 'error',
+          durationMs: result.elapsedMs || 0,
+          rowCount: result.rowCount || 0,
+        }),
+      }).catch(() => {})
+    }
+
+    return result
   },
 
   getExecutionPlan: async (input: {
@@ -1565,27 +766,34 @@ export const api = {
     database: string,
     limit?: number
   ): Promise<QueryHistoryItem[]> => {
-    const res = await callCommand<{ history?: QueryHistoryItem[] }>('list_query_history', {
-      connectionId,
-      database,
-      limit,
-    })
+    const params = new URLSearchParams()
+    if (connectionId) params.append('connectionId', connectionId)
+    if (database) params.append('database', database)
+    if (limit) params.append('limit', String(limit))
+
+    const res = await apiRequest<{ ok: boolean; history: QueryHistoryItem[] }>(`/api/query-history?${params.toString()}`)
     return res?.history || []
   },
 
   clearQueryHistory: async (connectionId: string, database: string): Promise<unknown> => {
-    return callCommand('clear_query_history', { connectionId, database })
+    return apiRequest('/api/query-history/clear', {
+      method: 'DELETE',
+      body: JSON.stringify({ connectionId, database }),
+    })
   },
 
   deleteQueryHistory: async (id: string): Promise<unknown> => {
-    return callCommand('delete_query_history', { id })
+    return apiRequest(`/api/query-history/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
   },
 
   listSavedQueries: async (connectionId: string, database: string): Promise<SavedQueryItem[]> => {
-    const res = await callCommand<{ queries?: SavedQueryItem[] }>('list_saved_queries', {
-      connectionId,
-      database,
-    })
+    const params = new URLSearchParams()
+    if (connectionId) params.append('connectionId', connectionId)
+    if (database) params.append('database', database)
+
+    const res = await apiRequest<{ ok: boolean; queries: SavedQueryItem[] }>(`/api/saved-queries?${params.toString()}`)
     return res?.queries || []
   },
 
@@ -1595,7 +803,10 @@ export const api = {
     name: string
     sql: string
   }): Promise<SavedQueryItem | null> => {
-    const res = await callCommand<{ query?: SavedQueryItem }>('save_saved_query', { input })
+    const res = await apiRequest<{ ok: boolean; query: SavedQueryItem }>('/api/saved-queries', {
+      method: 'POST',
+      body: JSON.stringify({ input }),
+    })
     return res?.query || null
   },
 
@@ -1603,11 +814,16 @@ export const api = {
     id: string
     name: string
   }): Promise<SavedQueryItem | null> => {
-    const res = await callCommand<{ query?: SavedQueryItem }>('rename_saved_query', { input })
+    const res = await apiRequest<{ ok: boolean; query: SavedQueryItem }>('/api/saved-queries/rename', {
+      method: 'POST',
+      body: JSON.stringify({ input }),
+    })
     return res?.query || null
   },
 
   deleteSavedQuery: async (id: string): Promise<unknown> => {
-    return callCommand('delete_saved_query', { id })
+    return apiRequest(`/api/saved-queries/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
   },
 }

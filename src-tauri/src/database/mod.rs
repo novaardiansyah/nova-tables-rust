@@ -1,7 +1,6 @@
-pub mod auth;
-pub mod local_store;
+pub mod connection_registry;
 pub mod mssql;
 pub mod mysql;
 
-pub use local_store::*;
+pub use connection_registry::*;
 pub use mssql::*;

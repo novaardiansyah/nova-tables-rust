@@ -300,12 +300,29 @@ pub async fn list_columns(conn: &mut Conn, database: Option<&str>) -> Result<Val
     }))
 }
 
-/// Gets client for connection (placeholder - driver_type aware routing happens in commands).
+// Targeted for MySQL: connects using mysql_async client configuration retrieved from in-memory connection registry.
 pub async fn get_client_for_connection(
-    _connection_id: &str,
-    _database: Option<&str>,
+    connection_id: &str,
+    database: Option<&str>,
 ) -> Result<Conn, String> {
-    Err("MySQL connection setup needs driver_type awareness".to_string())
+    let item = crate::database::connection_registry::get_active_connection(connection_id)
+        .ok_or_else(|| format!("Active connection {} not found. Please connect first.", connection_id))?;
+
+    let password = item.password.or(item.password_cipher).unwrap_or_default();
+    let db_to_use = database
+        .filter(|s| !s.is_empty())
+        .or(item.database_name.as_deref().filter(|s| !s.is_empty()));
+
+    create_client(
+        &item.host,
+        item.port,
+        &item.username,
+        &password,
+        db_to_use,
+        item.encrypt,
+        item.trust_server_certificate,
+    )
+    .await
 }
 
 pub fn mysql_column_type_to_string(col_type: mysql_async::consts::ColumnType) -> &'static str {
