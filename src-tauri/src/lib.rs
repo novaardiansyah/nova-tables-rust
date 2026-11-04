@@ -13,6 +13,8 @@ pub fn run() {
     })
     .invoke_handler(tauri::generate_handler![
       commands::system::get_system_info,
+      commands::auth::start_oauth_listener,
+      commands::auth::check_oauth_result,
       commands::auth::auth_register,
       commands::auth::auth_get_user_credentials,
       commands::auth::auth_create_session,

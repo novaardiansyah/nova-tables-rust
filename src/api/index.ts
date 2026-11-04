@@ -116,6 +116,98 @@ export const api = {
     return res.user
   },
 
+  signInWithGoogle: async (): Promise<AuthUser> => {
+    let port = 0
+    let redirectUri: string | undefined
+    let listenerStarted = false
+
+    try {
+      const listener = await callCommand<{ port: number; redirectUri: string }>('start_oauth_listener', { state: '' })
+      if (listener?.port) {
+        port = listener.port
+        redirectUri = listener.redirectUri
+        listenerStarted = true
+      }
+    } catch {
+    }
+
+    const redirectRes = await apiRequest<{ ok: boolean; url: string; state: string }>(
+      `/api/auth/google/redirect${port > 0 ? `?port=${port}` : ''}`
+    )
+
+    if (!redirectRes?.url) {
+      throw new Error('Failed to obtain Google authorization URL.')
+    }
+
+    await api.openExternal(redirectRes.url)
+
+    const startTime = Date.now()
+    const timeoutMs = 180000
+
+    while (Date.now() - startTime < timeoutMs) {
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+
+      if (listenerStarted) {
+        try {
+          const localCheck = await callCommand<{ status: string; code?: string; error?: string }>('check_oauth_result', {
+            state: redirectRes.state,
+          })
+
+          if (localCheck?.status === 'completed' && localCheck.code) {
+            const exchangeRes = await apiRequest<{ ok: boolean; token: string; user: AuthUser }>(
+              '/api/auth/google/exchange',
+              {
+                method: 'POST',
+                body: JSON.stringify({
+                  code: localCheck.code,
+                  redirectUri,
+                }),
+              }
+            )
+
+            setAuthToken(exchangeRes.token)
+            setStoredSession({ user: exchangeRes.user, token: exchangeRes.token })
+            return exchangeRes.user
+          }
+
+          if (localCheck?.status === 'failed') {
+            throw new Error(localCheck.error || 'Authentication cancelled or failed.')
+          }
+        } catch (e: any) {
+          if (e.message && !e.message.includes('not found') && !e.message.includes('pending')) {
+            throw e
+          }
+        }
+      }
+
+      try {
+        const statusRes = await apiRequest<{ ok: boolean; status: string; token?: string; user?: AuthUser; message?: string }>(
+          `/api/auth/google/status/${encodeURIComponent(redirectRes.state)}`
+        )
+
+        if (statusRes.status === 'completed' && statusRes.token && statusRes.user) {
+          setAuthToken(statusRes.token)
+          setStoredSession({ user: statusRes.user, token: statusRes.token })
+          return statusRes.user
+        }
+
+        if (statusRes.status === 'failed') {
+          throw new Error(statusRes.message || 'Google authentication was cancelled or failed.')
+        }
+
+        if (statusRes.status === 'expired') {
+          throw new Error('Authentication session expired. Please try again.')
+        }
+      } catch (err: any) {
+        if (err.message && (err.message.includes('cancelled') || err.message.includes('failed') || err.message.includes('expired'))) {
+          throw err
+        }
+      }
+    }
+
+    throw new Error('Authentication timed out. Please try again.')
+  },
+
   getCurrentSession: async (): Promise<AuthSession | null> => {
     const token = getAuthToken()
     if (!token) {

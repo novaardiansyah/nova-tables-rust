@@ -114,6 +114,23 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
     }
   }
 
+  const handleGoogleSignIn = async () => {
+    setGeneralError(null)
+    setFieldErrors({})
+    setBusy(true)
+
+    try {
+      const user = await api.signInWithGoogle()
+      onLoginSuccess(user)
+    } catch (err: unknown) {
+      const errorObj = err as { message?: string }
+      const msg = errorObj?.message || 'Google sign-in failed. Please try again.'
+      setGeneralError(msg)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const switchMode = (nextMode: 'login' | 'register' | 'forgot') => {
     setMode(nextMode)
     setFieldErrors({})
@@ -290,7 +307,9 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
 
                   <button
                     type="button"
-                    className="btn-soft flex h-9 w-full items-center justify-center gap-2.5 rounded-lg border border-line-strong font-medium transition-colors hover:bg-tint/[0.05]"
+                    onClick={handleGoogleSignIn}
+                    disabled={busy}
+                    className="btn-soft flex h-9 w-full items-center justify-center gap-2.5 rounded-lg border border-line-strong font-medium transition-colors hover:bg-tint/[0.05] disabled:pointer-events-none disabled:opacity-60"
                   >
                     <GoogleIcon className="h-4 w-4 shrink-0" />
                     <span>Sign in with Google</span>
