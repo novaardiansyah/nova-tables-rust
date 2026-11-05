@@ -347,7 +347,7 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
           ) : mode === 'forgot' && otpVerified ? (
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               <div className="space-y-1 text-[length:var(--app-text-12)]">
-                <span className="font-medium text-text-strong">Enter your new password.</span>
+                <span className="font-medium text-text-strong">Enter your new password.</span>&nbsp;
                 <span className="text-text-muted">Your old password will be replaced.</span>
               </div>
 
