@@ -113,7 +113,7 @@ export const api = {
       throw new Error('Password must be at least 6 characters long.')
     }
 
-    const res = await apiRequest<{ ok: boolean; token: string; refreshToken?: string; user: AuthUser }>('/api/auth/register', {
+    const res = await apiRequest<{ ok: boolean; token: string; refreshToken?: string; user: AuthUser }>('/api/member/register', {
       method: 'POST',
       body: JSON.stringify({ email: trimmedEmail, password, name }),
     })
@@ -132,7 +132,7 @@ export const api = {
       throw new Error('Email and password are required.')
     }
 
-    const res = await apiRequest<{ ok: boolean; token: string; refreshToken?: string; user: AuthUser }>('/api/auth/login', {
+    const res = await apiRequest<{ ok: boolean; token: string; refreshToken?: string; user: AuthUser }>('/api/member/login', {
       method: 'POST',
       body: JSON.stringify({ email: trimmedEmail, password }),
     })
@@ -161,7 +161,7 @@ export const api = {
     }
 
     const redirectRes = await apiRequest<{ ok: boolean; url: string; state: string }>(
-      `/api/auth/google/redirect${port > 0 ? `?port=${port}` : ''}`
+      `/api/member/google/redirect${port > 0 ? `?port=${port}` : ''}`
     )
 
     if (!redirectRes?.url) {
@@ -184,7 +184,7 @@ export const api = {
 
           if (localCheck?.status === 'completed' && localCheck.code) {
             const exchangeRes = await apiRequest<{ ok: boolean; token: string; refreshToken?: string; user: AuthUser }>(
-              '/api/auth/google/exchange',
+              '/api/member/google/exchange',
               {
                 method: 'POST',
                 body: JSON.stringify({
@@ -214,7 +214,7 @@ export const api = {
 
       try {
         const statusRes = await apiRequest<{ ok: boolean; status: string; token?: string; refreshToken?: string; user?: AuthUser; message?: string }>(
-          `/api/auth/google/status/${encodeURIComponent(redirectRes.state)}`
+          `/api/member/google/status/${encodeURIComponent(redirectRes.state)}`
         )
 
         if (statusRes.status === 'completed' && statusRes.token && statusRes.user) {
@@ -250,7 +250,7 @@ export const api = {
     }
 
     try {
-      const res = await apiRequest<{ ok: boolean; user: AuthUser }>('/api/auth/me')
+      const res = await apiRequest<{ ok: boolean; user: AuthUser }>('/api/member/me')
       const refreshToken = getRefreshToken()
       const session: AuthSession = { user: res.user, token: getAuthToken() || token, refreshToken }
       setStoredSession(session)
@@ -266,7 +266,7 @@ export const api = {
   logout: async (): Promise<void> => {
     try {
       const refreshToken = getRefreshToken()
-      await apiRequest('/api/auth/logout', {
+      await apiRequest('/api/member/logout', {
         method: 'POST',
         body: JSON.stringify({ refreshToken }),
       })
@@ -288,7 +288,7 @@ export const api = {
 
   loadSettings: async (): Promise<Record<string, unknown> | null> => {
     try {
-      const res = await apiRequest<{ ok: boolean; value: Record<string, unknown> | null }>('/api/meta/settings')
+      const res = await apiRequest<{ ok: boolean; value: Record<string, unknown> | null }>('/api/member/meta/settings')
       if (res && res.value !== undefined) {
         return res.value
       }
@@ -312,7 +312,7 @@ export const api = {
     }
 
     try {
-      await apiRequest('/api/meta/settings', {
+      await apiRequest('/api/member/meta/settings', {
         method: 'POST',
         body: JSON.stringify({ value: settings }),
       })
@@ -324,7 +324,7 @@ export const api = {
 
   loadWorkspaceState: async (): Promise<Record<string, unknown> | null> => {
     try {
-      const res = await apiRequest<{ ok: boolean; value: Record<string, unknown> | null }>('/api/meta/workspace')
+      const res = await apiRequest<{ ok: boolean; value: Record<string, unknown> | null }>('/api/member/meta/workspace')
       if (res && res.value !== undefined) {
         return res.value
       }
@@ -348,7 +348,7 @@ export const api = {
     }
 
     try {
-      await apiRequest('/api/meta/workspace', {
+      await apiRequest('/api/member/meta/workspace', {
         method: 'POST',
         body: JSON.stringify({ value: workspace }),
       })
@@ -401,7 +401,7 @@ export const api = {
   },
 
   listConnections: async (): Promise<ConnectionModel[]> => {
-    const res = await apiRequest<{ ok: boolean; connections: ConnectionModel[] }>('/api/connections')
+    const res = await apiRequest<{ ok: boolean; connections: ConnectionModel[] }>('/api/member/connections')
     const list = res?.connections || []
     return list.map((conn) => {
       const explicitDb =
@@ -471,7 +471,7 @@ export const api = {
       payload.password = resolvedPassword
     }
 
-    const res = await apiRequest<{ ok: boolean; connection: ConnectionModel }>('/api/connections', {
+    const res = await apiRequest<{ ok: boolean; connection: ConnectionModel }>('/api/member/connections', {
       method: 'POST',
       body: JSON.stringify(payload),
     })
@@ -510,7 +510,7 @@ export const api = {
   },
 
   deleteConnection: async (id: string): Promise<unknown> => {
-    return apiRequest(`/api/connections/${encodeURIComponent(id)}`, {
+    return apiRequest(`/api/member/connections/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     })
   },
@@ -531,12 +531,12 @@ export const api = {
   importAppConfig,
 
   listFolders: async (): Promise<FolderModel[]> => {
-    const res = await apiRequest<{ ok: boolean; folders: FolderModel[] }>('/api/folders')
+    const res = await apiRequest<{ ok: boolean; folders: FolderModel[] }>('/api/member/folders')
     return res?.folders || []
   },
 
   saveFolder: async (folder: Partial<FolderModel>): Promise<FolderModel> => {
-    const res = await apiRequest<{ ok: boolean; folder: FolderModel }>('/api/folders', {
+    const res = await apiRequest<{ ok: boolean; folder: FolderModel }>('/api/member/folders', {
       method: 'POST',
       body: JSON.stringify(folder),
     })
@@ -544,13 +544,13 @@ export const api = {
   },
 
   deleteFolder: async (id: string): Promise<unknown> => {
-    return apiRequest(`/api/folders/${encodeURIComponent(id)}`, {
+    return apiRequest(`/api/member/folders/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     })
   },
 
   reorderTree: async (input: unknown): Promise<{ connections: ConnectionModel[]; folders: FolderModel[]; [key: string]: unknown }> => {
-    await apiRequest('/api/connections/reorder', {
+    await apiRequest('/api/member/connections/reorder', {
       method: 'POST',
       body: JSON.stringify(input),
     })
@@ -717,7 +717,7 @@ export const api = {
   },
 
   updateLastDatabase: async (connectionId: string, database: string): Promise<unknown> => {
-    return apiRequest(`/api/connections/${encodeURIComponent(connectionId)}/last-database`, {
+    return apiRequest(`/api/member/connections/${encodeURIComponent(connectionId)}/last-database`, {
       method: 'PATCH',
       body: JSON.stringify({ database }),
     })
@@ -926,7 +926,7 @@ export const api = {
     }
 
     if (input.recordHistory !== false && input.connectionId) {
-      apiRequest('/api/query-history', {
+      apiRequest('/api/member/query-history', {
         method: 'POST',
         body: JSON.stringify({
           connectionId: input.connectionId,
@@ -961,19 +961,19 @@ export const api = {
     if (database) params.append('database', database)
     if (limit) params.append('limit', String(limit))
 
-    const res = await apiRequest<{ ok: boolean; history: QueryHistoryItem[] }>(`/api/query-history?${params.toString()}`)
+    const res = await apiRequest<{ ok: boolean; history: QueryHistoryItem[] }>(`/api/member/query-history?${params.toString()}`)
     return res?.history || []
   },
 
   clearQueryHistory: async (connectionId: string, database: string): Promise<unknown> => {
-    return apiRequest('/api/query-history/clear', {
+    return apiRequest('/api/member/query-history/clear', {
       method: 'DELETE',
       body: JSON.stringify({ connectionId, database }),
     })
   },
 
   deleteQueryHistory: async (id: string): Promise<unknown> => {
-    return apiRequest(`/api/query-history/${encodeURIComponent(id)}`, {
+    return apiRequest(`/api/member/query-history/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     })
   },
@@ -983,7 +983,7 @@ export const api = {
     if (connectionId) params.append('connectionId', connectionId)
     if (database) params.append('database', database)
 
-    const res = await apiRequest<{ ok: boolean; queries: SavedQueryItem[] }>(`/api/saved-queries?${params.toString()}`)
+    const res = await apiRequest<{ ok: boolean; queries: SavedQueryItem[] }>(`/api/member/saved-queries?${params.toString()}`)
     return res?.queries || []
   },
 
@@ -993,7 +993,7 @@ export const api = {
     name: string
     sql: string
   }): Promise<SavedQueryItem | null> => {
-    const res = await apiRequest<{ ok: boolean; query: SavedQueryItem }>('/api/saved-queries', {
+    const res = await apiRequest<{ ok: boolean; query: SavedQueryItem }>('/api/member/saved-queries', {
       method: 'POST',
       body: JSON.stringify({
         input,
@@ -1010,7 +1010,7 @@ export const api = {
     id: string
     name: string
   }): Promise<SavedQueryItem | null> => {
-    const res = await apiRequest<{ ok: boolean; query: SavedQueryItem }>('/api/saved-queries/rename', {
+    const res = await apiRequest<{ ok: boolean; query: SavedQueryItem }>('/api/member/saved-queries/rename', {
       method: 'POST',
       body: JSON.stringify({ input }),
     })
@@ -1018,7 +1018,7 @@ export const api = {
   },
 
   deleteSavedQuery: async (id: string): Promise<unknown> => {
-    return apiRequest(`/api/saved-queries/${encodeURIComponent(id)}`, {
+    return apiRequest(`/api/member/saved-queries/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     })
   },

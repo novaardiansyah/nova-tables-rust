@@ -102,7 +102,7 @@ export async function refreshAccessTokenSingleFlight(): Promise<string | null> {
   refreshPromise = (async () => {
     try {
       const baseUrl = getApiBaseUrl()
-      const res = await fetch(`${baseUrl}/api/auth/refresh`, {
+      const res = await fetch(`${baseUrl}/api/member/refresh`, {
         method: 'POST',
         headers: {
           Accept: 'application/json',
@@ -166,6 +166,10 @@ export async function apiRequest<T = any>(
   const url = `${baseUrl}${normalizedEndpoint}`
 
   const isAuthRoute =
+    normalizedEndpoint === '/api/member/login' ||
+    normalizedEndpoint === '/api/member/register' ||
+    normalizedEndpoint === '/api/member/refresh' ||
+    normalizedEndpoint.startsWith('/api/member/google') ||
     normalizedEndpoint === '/api/auth/login' ||
     normalizedEndpoint === '/api/auth/register' ||
     normalizedEndpoint === '/api/auth/refresh' ||
