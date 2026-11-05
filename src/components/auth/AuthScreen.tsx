@@ -17,11 +17,23 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
   const [busy, setBusy] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({})
   const [generalError, setGeneralError] = useState<string | null>(null)
-  const [forgotSuccess, setForgotSuccess] = useState(false)
+  const [otpSent, setOtpSent] = useState(false)
+  const [otpVerified, setOtpVerified] = useState(false)
+  const [resetToken, setResetToken] = useState<string | null>(null)
+  const [otp, setOtp] = useState('')
 
   const clearFieldError = (field: string) => {
     setFieldErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev))
     setGeneralError(null)
+  }
+
+  const setForgot = () => {
+    setFieldErrors({})
+    setGeneralError(null)
+    setOtpSent(false)
+    setOtpVerified(false)
+    setResetToken(null)
+    setOtp('')
   }
 
   const handleSubmit = async (event: FormEvent) => {
@@ -29,16 +41,65 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
     setGeneralError(null)
 
     if (mode === 'forgot') {
-      const nextErrors: Record<string, string | undefined> = {}
-      if (!email.trim()) {
-        nextErrors.email = 'Please enter your email.'
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-        nextErrors.email = 'Please enter a valid email address.'
+      if (!otpSent) {
+        const nextErrors: Record<string, string | undefined> = {}
+        if (!email.trim()) {
+          nextErrors.email = 'Please enter your email.'
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+          nextErrors.email = 'Please enter a valid email address.'
+        }
+
+        if (Object.keys(nextErrors).length > 0) {
+          setFieldErrors(nextErrors)
+          return
+        }
+
+        setFieldErrors({})
+        setOtpSent(true)
+        setOtpVerified(false)
+        setResetToken(null)
+        setOtp('')
+
+        try {
+          await api.forgotPassword(email)
+        } catch (err: unknown) {
+          const errorObj = err as { message?: string }
+          setGeneralError(errorObj?.message || 'Failed to send reset code.')
+        }
+
+        return
       }
+
+      if (!otpVerified) {
+        if (!otp || !/^[0-9]{6}$/.test(otp)) {
+          setFieldErrors({ otp: 'Please enter the 6-digit code.' })
+          return
+        }
+
+        setFieldErrors({})
+        setOtp('')
+
+        try {
+          const res = await api.verifyResetOtp(email, otp)
+          if (!res.ok) {
+            setGeneralError(res.message || 'Invalid or expired code.')
+            return
+          }
+          setResetToken(res.resetToken)
+          setOtpVerified(true)
+        } catch (err: unknown) {
+          const errorObj = err as { message?: string }
+          setGeneralError(errorObj?.message || 'Failed to verify code.')
+        }
+
+        return
+      }
+
+      const nextErrors: Record<string, string | undefined> = {}
       if (!password) {
         nextErrors.password = 'Please enter a new password.'
-      } else if (password.length < 6) {
-        nextErrors.password = 'Password must be at least 6 characters.'
+      } else if (password.length < 8) {
+        nextErrors.password = 'Password must be at least 8 characters.'
       }
       if (!confirmPassword) {
         nextErrors.confirmPassword = 'Please confirm your new password.'
@@ -52,7 +113,31 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
       }
 
       setFieldErrors({})
-      setForgotSuccess(true)
+
+      const trimmedEmail = email.trim().toLowerCase()
+      if (!resetToken) {
+        setGeneralError('Reset token is missing. Please request a new code.')
+        return
+      }
+
+      setBusy(true)
+
+      try {
+        const res = await api.resetPassword(trimmedEmail, password, confirmPassword, resetToken)
+        if (!res.ok) {
+          setGeneralError(res.message || 'Failed to reset password.')
+          return
+        }
+
+        const user = await api.loginUser(trimmedEmail, password)
+        onLoginSuccess(user)
+      } catch (err: unknown) {
+        const errorObj = err as { message?: string }
+        setGeneralError(errorObj?.message || 'Password reset failed.')
+      } finally {
+        setBusy(false)
+      }
+
       return
     }
 
@@ -93,7 +178,10 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
         onLoginSuccess(user)
       } else {
         const user = await api.registerUser(trimmedEmail, password, name.trim() || undefined)
-        onLoginSuccess(user)
+        setOtpSent(true)
+        setOtpVerified(false)
+        setResetToken(null)
+        setOtp('')
       }
     } catch (err: unknown) {
       const errorObj = err as { message?: string }
@@ -111,6 +199,50 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
       }
     } finally {
       setBusy(false)
+    }
+  }
+
+  const handleOtpSubmit = async (event: FormEvent) => {
+    event.preventDefault()
+    setGeneralError(null)
+
+    if (!otp || !/^[0-9]{6}$/.test(otp)) {
+      setFieldErrors({ otp: 'Please enter the 6-digit code.' })
+      return
+    }
+
+    setFieldErrors({})
+    setOtp('')
+
+    if (mode === 'register') {
+      try {
+        const res = await api.verifyRegistrationOtp(email, otp)
+        if (!res.ok) {
+          setGeneralError(res.message || 'Invalid or expired code.')
+          return
+        }
+        onLoginSuccess(res.user)
+        switchMode('login')
+      } catch (err: unknown) {
+        const errorObj = err as { message?: string }
+        setGeneralError(errorObj?.message || 'Failed to verify code.')
+      }
+      return
+    }
+
+    if (mode === 'forgot') {
+      try {
+        const res = await api.verifyResetOtp(email, otp)
+        if (!res.ok) {
+          setGeneralError(res.message || 'Invalid or expired code.')
+          return
+        }
+        setResetToken(res.resetToken)
+        setOtpVerified(true)
+      } catch (err: unknown) {
+        const errorObj = err as { message?: string }
+        setGeneralError(errorObj?.message || 'Failed to verify code.')
+      }
     }
   }
 
@@ -135,9 +267,10 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
     setMode(nextMode)
     setFieldErrors({})
     setGeneralError(null)
-    setForgotSuccess(false)
-    setPassword('')
-    setConfirmPassword('')
+    setOtpSent(false)
+    setOtpVerified(false)
+    setResetToken(null)
+    setOtp('')
   }
 
   return (
@@ -158,25 +291,28 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
             </p>
           </div>
 
-          {mode === 'forgot' && forgotSuccess ? (
-            <div className="mt-6 space-y-4">
-              <div className="flex items-start gap-2.5 rounded-lg border border-success/30 bg-success/10 p-3.5 text-[length:var(--app-text-12)] text-success">
-                <Icon name="check-circle" size={16} className="mt-0.5 shrink-0" />
-                <div className="flex-1 leading-snug">
-                  Password reset request received. You may now return to sign in.
-                </div>
+          {mode === 'forgot' && otpSent && !otpVerified ? (
+            <form onSubmit={handleOtpSubmit} className="mt-6 space-y-4">
+              <div className="space-y-1 text-[length:var(--app-text-12)]">
+                <span className="font-medium text-text-strong">Enter the 6-digit code sent to your email.</span>
+                &nbsp;<span className="text-text-muted">New code? Select Resend.</span>
               </div>
 
-              <button
-                type="button"
-                onClick={() => switchMode('login')}
-                className="btn-primary flex h-9 w-full items-center justify-center rounded-lg font-medium"
-              >
-                Back to Sign In
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => {
+                  setOtp(e.target.value.replace(/[^0-9]/g, ''))
+                  clearFieldError('otp')
+                }}
+                disabled={busy}
+                autoFocus
+                className="field mt-1"
+              />
+              <FieldError message={fieldErrors.otp} />
+
               {generalError ? (
                 <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 p-3 text-[length:var(--app-text-12)] text-danger">
                   <Icon name="alert-triangle" size={14} className="mt-0.5 shrink-0" />
@@ -184,6 +320,148 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
                 </div>
               ) : null}
 
+              <button
+                type="submit"
+                disabled={busy}
+                className="btn-primary mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-lg font-medium"
+              >
+                {busy ? <Spinner size={14} /> : null}
+                <span>Verify</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOtpSent(false)
+                  setOtpVerified(false)
+                  setResetToken(null)
+                  setOtp('')
+                  setGeneralError(null)
+                  setFieldErrors({})
+                }}
+                className="btn-soft mt-1 flex h-9 w-full items-center justify-center gap-2 rounded-lg font-medium text-text-muted hover:text-text"
+              >
+                Resend code
+              </button>
+            </form>
+          ) : mode === 'forgot' && otpVerified ? (
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              <div className="space-y-1 text-[length:var(--app-text-12)]">
+                <span className="font-medium text-text-strong">Enter your new password.</span>
+                <span className="text-text-muted">Your old password will be replaced.</span>
+              </div>
+
+              <div className="md:grid md:grid-cols-2 md:gap-4">
+                <div>
+                  <label className="block text-[length:var(--app-text-11)] font-medium text-text-muted">
+                    New Password
+                  </label>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value)
+                      clearFieldError('password')
+                    }}
+                    disabled={busy}
+                    autoComplete="new-password"
+                    placeholder="Enter new password"
+                    className={`field mt-1 ${fieldErrors.password ? 'border-danger focus:border-danger focus:ring-danger/20' : ''}`}
+                  />
+                  <FieldError message={fieldErrors.password} />
+                </div>
+
+                <div>
+                  <label className="block text-[length:var(--app-text-11)] font-medium text-text-muted">
+                    Confirm New Password
+                  </label>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value)
+                      clearFieldError('confirmPassword')
+                    }}
+                    disabled={busy}
+                    autoComplete="new-password"
+                    placeholder="Confirm new password"
+                    className={`field mt-1 ${fieldErrors.confirmPassword ? 'border-danger focus:border-danger focus:ring-danger/20' : ''}`}
+                  />
+                  <FieldError message={fieldErrors.confirmPassword} />
+                </div>
+              </div>
+
+              {generalError ? (
+                <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 p-3 text-[length:var(--app-text-12)] text-danger">
+                  <Icon name="alert-triangle" size={14} className="mt-0.5 shrink-0" />
+                  <span className="flex-1 leading-snug">{generalError}</span>
+                </div>
+              ) : null}
+
+              <button
+                type="submit"
+                disabled={busy}
+                className="btn-primary mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-lg font-medium"
+              >
+                {busy ? <Spinner size={14} /> : null}
+                <span>Reset Password</span>
+              </button>
+            </form>
+          ) : mode === 'register' && otpSent && !otpVerified ? (
+            <form onSubmit={handleOtpSubmit} className="mt-6 space-y-4">
+              <div className="space-y-1 text-[length:var(--app-text-12)]">
+                <span className="font-medium text-text-strong">Check your email for the 6-digit verification code.</span>
+                <span className="text-text-muted">We just sent it to {email}.</span>
+              </div>
+
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => {
+                  setOtp(e.target.value.replace(/[^0-9]/g, ''))
+                  clearFieldError('otp')
+                }}
+                disabled={busy}
+                autoFocus
+                className="field mt-1"
+              />
+              <FieldError message={fieldErrors.otp} />
+
+              {generalError ? (
+                <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 p-3 text-[length:var(--app-text-12)] text-danger">
+                  <Icon name="alert-triangle" size={14} className="mt-0.5 shrink-0" />
+                  <span className="flex-1 leading-snug">{generalError}</span>
+                </div>
+              ) : null}
+
+              <button
+                type="submit"
+                disabled={busy}
+                className="btn-primary mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-lg font-medium"
+              >
+                {busy ? <Spinner size={14} /> : null}
+                <span>Verify Code</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOtpSent(false)
+                  setOtpVerified(false)
+                  setResetToken(null)
+                  setOtp('')
+                  setGeneralError(null)
+                  setFieldErrors({})
+                }}
+                className="btn-soft mt-1 flex h-9 w-full items-center justify-center gap-2 rounded-lg font-medium text-text-muted hover:text-text"
+              >
+                Resend code
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               {mode === 'register' ? (
                 <div>
                   <label className="block text-[length:var(--app-text-11)] font-medium text-text-muted">
@@ -220,50 +498,52 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
                 <FieldError message={fieldErrors.email} />
               </div>
 
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className="block text-[length:var(--app-text-11)] font-medium text-text-muted">
-                    {mode === 'forgot' ? 'New Password' : 'Password'}
-                  </label>
-                  {mode === 'login' ? (
+              {mode !== 'forgot' ? (
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[length:var(--app-text-11)] font-medium text-text-muted">
+                      Password
+                    </label>
+                    {mode === 'login' ? (
+                      <button
+                        type="button"
+                        onClick={() => switchMode('forgot')}
+                        className="text-[length:var(--app-text-11)] font-medium text-accent hover:underline"
+                      >
+                        Forgot password?
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="relative mt-1">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value)
+                        clearFieldError('password')
+                      }}
+                      disabled={busy}
+                      autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                      placeholder="Enter password"
+                      className={`field pr-9 ${fieldErrors.password ? 'border-danger focus:border-danger focus:ring-danger/20' : ''}`}
+                    />
                     <button
                       type="button"
-                      onClick={() => switchMode('forgot')}
-                      className="text-[length:var(--app-text-11)] font-medium text-accent hover:underline"
+                      tabIndex={-1}
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-faint hover:text-text"
                     >
-                      Forgot password?
+                      <Icon name={showPassword ? 'eye-off' : 'eye'} size={14} />
                     </button>
-                  ) : null}
+                  </div>
+                  <FieldError message={fieldErrors.password} />
                 </div>
-                <div className="relative mt-1">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value)
-                      clearFieldError('password')
-                    }}
-                    disabled={busy}
-                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                    placeholder={mode === 'forgot' ? 'Enter new password' : 'Enter password'}
-                    className={`field pr-9 ${fieldErrors.password ? 'border-danger focus:border-danger focus:ring-danger/20' : ''}`}
-                  />
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-faint hover:text-text"
-                  >
-                    <Icon name={showPassword ? 'eye-off' : 'eye'} size={14} />
-                  </button>
-                </div>
-                <FieldError message={fieldErrors.password} />
-              </div>
+              ) : null}
 
-              {mode === 'register' || mode === 'forgot' ? (
+              {mode === 'register' ? (
                 <div>
                   <label className="block text-[length:var(--app-text-11)] font-medium text-text-muted">
-                    {mode === 'forgot' ? 'Confirm New Password' : 'Confirm Password'}
+                    Confirm Password
                   </label>
                   <input
                     type={showPassword ? 'text' : 'password'}
@@ -274,7 +554,7 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
                     }}
                     disabled={busy}
                     autoComplete="new-password"
-                    placeholder={mode === 'forgot' ? 'Confirm new password' : 'Confirm password'}
+                    placeholder="Confirm password"
                     className={`field mt-1 ${fieldErrors.confirmPassword ? 'border-danger focus:border-danger focus:ring-danger/20' : ''}`}
                   />
                   <FieldError message={fieldErrors.confirmPassword} />
@@ -292,7 +572,7 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
                     ? 'Sign In'
                     : mode === 'register'
                       ? 'Create Account'
-                      : 'Reset Password'}
+                      : 'Send Reset Code'}
                 </span>
               </button>
 
@@ -347,7 +627,10 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
                 Remember your password?{' '}
                 <button
                   type="button"
-                  onClick={() => switchMode('login')}
+                  onClick={() => {
+                    setForgot()
+                    switchMode('login')
+                  }}
                   className="font-medium text-accent hover:underline"
                 >
                   Back to sign in
@@ -413,4 +696,3 @@ function GoogleIcon({ className = 'h-4 w-4' }: { className?: string }) {
     </svg>
   )
 }
-

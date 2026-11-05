@@ -113,16 +113,11 @@ export const api = {
       throw new Error('Password must be at least 6 characters long.')
     }
 
-    const res = await apiRequest<{ ok: boolean; token: string; refreshToken?: string; user: AuthUser }>('/api/member/register', {
+    const res = await apiRequest<{ ok: boolean; email: string; user: AuthUser }>('/api/member/register', {
       method: 'POST',
       body: JSON.stringify({ email: trimmedEmail, password, name }),
     })
 
-    setAuthToken(res.token)
-    if (res.refreshToken) {
-      setRefreshToken(res.refreshToken)
-    }
-    setStoredSession({ user: res.user, token: res.token, refreshToken: res.refreshToken })
     return res.user
   },
 
@@ -241,6 +236,48 @@ export const api = {
     }
 
     throw new Error('Authentication timed out. Please try again.')
+  },
+
+  verifyRegistrationOtp: async (email: string, otp: string): Promise<{ ok: boolean; user: AuthUser; message?: string }> => {
+    const res = await apiRequest<{ ok: boolean; user: AuthUser; message?: string }>('/api/member/register/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email: email.trim().toLowerCase(), otp }),
+    })
+    return res
+  },
+
+  verifyResetOtp: async (email: string, otp: string): Promise<{ ok: boolean; resetToken: string; message?: string }> => {
+    const res = await apiRequest<{ ok: boolean; resetToken: string; message?: string }>('/api/member/verify-reset-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email: email.trim().toLowerCase(), otp }),
+    })
+    return res
+  },
+
+  resetPassword: async (
+    email: string,
+    password: string,
+    confirmPassword: string,
+    resetToken: string
+  ): Promise<{ ok: boolean; message: string }> => {
+    const res = await apiRequest<{ ok: boolean; message: string }>('/api/member/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        password,
+        password_confirmation: confirmPassword,
+        resetToken,
+      }),
+    })
+    return res
+  },
+
+  forgotPassword: async (email: string): Promise<{ ok: boolean; message: string }> => {
+    const res = await apiRequest<{ ok: boolean; message: string }>('/api/member/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email: email.trim().toLowerCase() }),
+    })
+    return res
   },
 
   getCurrentSession: async (): Promise<AuthSession | null> => {
