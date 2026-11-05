@@ -351,7 +351,7 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
                 <span className="text-text-muted">Your old password will be replaced.</span>
               </div>
 
-              <div className="md:grid md:grid-cols-2 md:gap-4">
+              <div className="space-y-4">
                 <div>
                   <label className="block text-[length:var(--app-text-11)] font-medium text-text-muted">
                     New Password
@@ -366,7 +366,7 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
                     disabled={busy}
                     autoComplete="new-password"
                     placeholder="Enter new password"
-                    className={`field mt-1 ${fieldErrors.password ? 'border-danger focus:border-danger focus:ring-danger/20' : ''}`}
+                    className={`field mt-1 w-full ${fieldErrors.password ? 'border-danger focus:border-danger focus:ring-danger/20' : ''}`}
                   />
                   <FieldError message={fieldErrors.password} />
                 </div>
@@ -385,7 +385,7 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
                     disabled={busy}
                     autoComplete="new-password"
                     placeholder="Confirm new password"
-                    className={`field mt-1 ${fieldErrors.confirmPassword ? 'border-danger focus:border-danger focus:ring-danger/20' : ''}`}
+                    className={`field mt-1 w-full ${fieldErrors.confirmPassword ? 'border-danger focus:border-danger focus:ring-danger/20' : ''}`}
                   />
                   <FieldError message={fieldErrors.confirmPassword} />
                 </div>
