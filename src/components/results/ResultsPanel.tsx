@@ -698,7 +698,8 @@ export default function ResultsPanel({
           <div className="flex h-full items-center justify-center">
             <div className="flex items-center gap-2 text-[length:var(--app-text-12)] text-text-muted">
               <Spinner size={14} />
-              Executing against SQL Server…
+              {/* Targeted for SQL Server & MySQL: show the active database driver during query execution. */}
+              {`Executing against ${driverType === 'mysql' ? 'MySQL' : 'SQL Server'}…`}
             </div>
           </div>
         ) : null}

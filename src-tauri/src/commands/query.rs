@@ -542,8 +542,8 @@ pub fn list_query_history(
 }
 
 #[tauri::command]
-pub fn get_unsynced_query_history() -> Result<Value, String> {
-  let items = crate::database::query_history_store::list_unsynced()?;
+pub fn get_unsynced_query_history(limit: Option<usize>) -> Result<Value, String> {
+  let items = crate::database::query_history_store::list_unsynced(limit)?;
   Ok(json!({ "ok": true, "items": items }))
 }
 

@@ -214,11 +214,13 @@ export function nextQueryTitle(tabs: SessionTab[]): string {
 }
 
 export function createSession(result: any, connection: any, database: string, tab: SessionTab): SessionData {
+  // Targeted for SQL Server & MySQL: fallback to driver-specific defaults when creating a session.
+  const isMysql = (connection?.driverType || result?.driverType) === 'mysql'
   return {
     ...result,
-    name: result?.name || connection?.name || 'SQL Server',
+    name: result?.name || connection?.name || (isMysql ? 'MySQL' : 'SQL Server'),
     host: result?.host || connection?.host || '127.0.0.1',
-    port: Number(result?.port || connection?.port || 1433),
+    port: Number(result?.port || connection?.port || (isMysql ? 3306 : 1433)),
     connection,
     activeDatabase: database,
     tables: EMPTY_TABLES,

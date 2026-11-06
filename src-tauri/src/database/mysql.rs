@@ -359,6 +359,7 @@ pub fn mysql_column_type_to_string(col_type: mysql_async::consts::ColumnType) ->
 
 /// Executes a SQL statement and returns result as JSON.
 pub async fn execute_sql(conn: &mut Conn, sql: &str) -> Result<Value, String> {
+    let started = std::time::Instant::now();
     let rows: Vec<Row> = conn.query(sql).await.map_err(|e| e.to_string())?;
 
     let mut result_sets = Vec::new();
@@ -371,7 +372,63 @@ pub async fn execute_sql(conn: &mut Conn, sql: &str) -> Result<Value, String> {
         // Each row becomes a set of column values
         let mut cells = Vec::new();
         for i in 0..row.columns().len() {
-            let val: String = row.get::<String, _>(i).unwrap_or_default();
+            let val = row
+                .as_ref(i)
+                .map(|v| match v {
+                    mysql_async::Value::NULL => Value::Null,
+                    mysql_async::Value::Bytes(b) => {
+                        if let Ok(s) = std::str::from_utf8(b) {
+                            Value::String(s.to_string())
+                        } else {
+                            Value::Array(b.iter().map(|&byte| Value::Number(byte.into())).collect())
+                        }
+                    }
+                    mysql_async::Value::Int(i) => Value::from(*i),
+                    mysql_async::Value::UInt(u) => Value::from(*u),
+                    mysql_async::Value::Float(f) => Value::from(*f),
+                    mysql_async::Value::Double(d) => Value::from(*d),
+                    mysql_async::Value::Date(year, month, day, hour, min, sec, micro) => {
+                        if *hour == 0 && *min == 0 && *sec == 0 && *micro == 0 {
+                            Value::String(format!("{:04}-{:02}-{:02}", year, month, day))
+                        } else if *micro == 0 {
+                            Value::String(format!(
+                                "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+                                year, month, day, hour, min, sec
+                            ))
+                        } else {
+                            Value::String(format!(
+                                "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:06}",
+                                year, month, day, hour, min, sec, micro
+                            ))
+                        }
+                    }
+                    mysql_async::Value::Time(is_neg, days, hours, mins, secs, micro) => {
+                        let sign = if *is_neg { "-" } else { "" };
+                        if *days == 0 {
+                            if *micro == 0 {
+                                Value::String(format!("{}{:02}:{:02}:{:02}", sign, hours, mins, secs))
+                            } else {
+                                Value::String(format!(
+                                    "{}{:02}:{:02}:{:02}.{:06}",
+                                    sign, hours, mins, secs, micro
+                                ))
+                            }
+                        } else {
+                            if *micro == 0 {
+                                Value::String(format!(
+                                    "{}{}d {:02}:{:02}:{:02}",
+                                    sign, days, hours, mins, secs
+                                ))
+                            } else {
+                                Value::String(format!(
+                                    "{}{}d {:02}:{:02}:{:02}.{:06}",
+                                    sign, days, hours, mins, secs, micro
+                                ))
+                            }
+                        }
+                    }
+                })
+                .unwrap_or(Value::Null);
             cells.push(json!(val));
         }
 
@@ -390,20 +447,27 @@ pub async fn execute_sql(conn: &mut Conn, sql: &str) -> Result<Value, String> {
         current_set.push(cells);
     }
 
-    // Build result sets if we have any
+    // Build result sets per batch while preserving MySQL NULL and type safety.
+    // Targeted for MySQL: MySQL rows are serialized from mysql_async Value variants without
+    // panicking on NULL; `rowCount` and `elapsedMs` are tracked per result set and in the root.
     if let Some(columns) = current_columns {
+        let row_count = current_set.len();
         result_sets.push(json!({
           "columns": columns,
-          "rows": current_set
+          "rows": current_set,
+          "rowCount": row_count,
         }));
     } else if !current_set.is_empty() {
+        let row_count = current_set.len();
         result_sets.push(json!({
           "columns": [],
-          "rows": current_set
+          "rows": current_set,
+          "rowCount": row_count,
         }));
     }
 
-    let total_rows: u64 = current_set.iter().map(|s| s.len() as u64).sum();
+    let total_rows: u64 = current_set.len() as u64;
+    let elapsed_ms = started.elapsed().as_millis() as u64;
 
     Ok(json!({
       "ok": true,
@@ -411,7 +475,7 @@ pub async fn execute_sql(conn: &mut Conn, sql: &str) -> Result<Value, String> {
       "rowCount": total_rows,
       "rowsAffected": [total_rows],
       "messages": [],
-      "elapsedMs": 0,
+      "elapsedMs": elapsed_ms,
       "truncated": false,
       "maxRows": 20000
     }))
