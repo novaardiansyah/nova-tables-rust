@@ -321,7 +321,7 @@ export const api = {
     const res = await callCommand<{ version?: string }>('get_system_info')
     return {
       name: 'Nova Tables',
-      version: res?.version || '2.2.5',
+      version: res?.version || '2.2.6',
     }
   },
 
@@ -422,21 +422,21 @@ export const api = {
     }
   },
 
-  saveFile: async (input: unknown): Promise<{ saved?: boolean; filePath?: string; [key: string]: unknown }> => {
+  saveFile: async (input: unknown): Promise<{ saved?: boolean; filePath?: string;[key: string]: unknown }> => {
     const res = await callCommand<any>('save_file', { input })
     return res || { saved: false }
   },
 
   onOpenConnection: (_handler: unknown): (() => void) => {
-    return () => {}
+    return () => { }
   },
 
   onNewConnection: (_handler: unknown): (() => void) => {
-    return () => {}
+    return () => { }
   },
 
   onPreferences: (_handler: unknown): (() => void) => {
-    return () => {}
+    return () => { }
   },
 
   listConnections: async (): Promise<ConnectionModel[]> => {
@@ -588,7 +588,7 @@ export const api = {
     })
   },
 
-  reorderTree: async (input: unknown): Promise<{ connections: ConnectionModel[]; folders: FolderModel[]; [key: string]: unknown }> => {
+  reorderTree: async (input: unknown): Promise<{ connections: ConnectionModel[]; folders: FolderModel[];[key: string]: unknown }> => {
     await apiRequest('/api/member/connections/reorder', {
       method: 'POST',
       body: JSON.stringify(input),
@@ -719,7 +719,7 @@ export const api = {
       (await callCommand('test_connection', { connection: target }))
 
     if (target?.id && res?.database) {
-      api.updateLastDatabase(target.id, res.database).catch(() => {})
+      api.updateLastDatabase(target.id, res.database).catch(() => { })
     }
 
     try {
@@ -773,11 +773,11 @@ export const api = {
     return res?.databases || []
   },
 
-  createDatabase: async (input: { connectionId: string; database: string; [key: string]: unknown }): Promise<unknown> => {
+  createDatabase: async (input: { connectionId: string; database: string;[key: string]: unknown }): Promise<unknown> => {
     return callCommand('create_database', { input })
   },
 
-  dropDatabase: async (input: { connectionId: string; database: string; confirmName?: string; acknowledged?: boolean; [key: string]: unknown }): Promise<unknown> => {
+  dropDatabase: async (input: { connectionId: string; database: string; confirmName?: string; acknowledged?: boolean;[key: string]: unknown }): Promise<unknown> => {
     return callCommand('drop_database', { input })
   },
 
@@ -911,7 +911,7 @@ export const api = {
     schema: string,
     name: string,
     type?: string
-  ): Promise<{ definition?: string; [key: string]: unknown }> => {
+  ): Promise<{ definition?: string;[key: string]: unknown }> => {
     const res = await callCommand<{ definition?: string }>('module_definition', {
       connectionId,
       database,
@@ -928,7 +928,7 @@ export const api = {
     schema: string,
     name: string,
     type?: string
-  ): Promise<{ definition?: string; [key: string]: unknown }> => {
+  ): Promise<{ definition?: string;[key: string]: unknown }> => {
     return api.getRoutineDefinition(connectionId, database, schema, name, type)
   },
 
