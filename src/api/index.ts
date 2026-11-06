@@ -103,6 +103,8 @@ function legacyCopyText(text: string): boolean {
   }
 }
 
+let isSyncingQueryHistory = false
+
 export const api = {
   registerUser: async (email: string, password: string, name?: string): Promise<AuthUser> => {
     const trimmedEmail = email.trim().toLowerCase()
@@ -962,20 +964,6 @@ export const api = {
       maxRows: 20000,
     }
 
-    if (input.recordHistory !== false && input.connectionId) {
-      apiRequest('/api/member/query-history', {
-        method: 'POST',
-        body: JSON.stringify({
-          connectionId: input.connectionId,
-          database: input.database,
-          sql: input.sql,
-          status: result.ok !== false ? 'success' : 'error',
-          durationMs: result.elapsedMs || 0,
-          rowCount: result.rowCount || 0,
-        }),
-      }).catch(() => {})
-    }
-
     return result
   },
 
@@ -993,26 +981,105 @@ export const api = {
     database: string,
     limit?: number
   ): Promise<QueryHistoryItem[]> => {
-    const params = new URLSearchParams()
-    if (connectionId) params.append('connectionId', connectionId)
-    if (database) params.append('database', database)
-    if (limit) params.append('limit', String(limit))
+    const localPromise = callCommand<{ ok: boolean; history: QueryHistoryItem[] }>('list_query_history', {
+      connectionId,
+      database,
+      limit,
+    }).then((res) => res?.history || []).catch(() => [])
+    const apiPromise = apiRequest<{ ok: boolean; history: QueryHistoryItem[] }>(
+      `/api/member/query-history?${new URLSearchParams({ connectionId, database, ...(limit ? { limit: String(limit) } : {}) }).toString()}`
+    ).then((res) => res?.history || []).catch(() => [])
 
-    const res = await apiRequest<{ ok: boolean; history: QueryHistoryItem[] }>(`/api/member/query-history?${params.toString()}`)
-    return res?.history || []
+    const [local, remote] = await Promise.all([localPromise, apiPromise])
+
+    const seen = new Set<string>()
+    const merged: QueryHistoryItem[] = []
+    for (const item of [...local, ...remote]) {
+      const key = String(item.id || (item as any).uid || '')
+      if (key && seen.has(key)) continue
+      if (key) seen.add(key)
+      merged.push(item)
+    }
+    merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    if (limit && merged.length > limit) {
+      return merged.slice(0, limit)
+    }
+    return merged
   },
 
   clearQueryHistory: async (connectionId: string, database: string): Promise<unknown> => {
+    await callCommand('clear_query_history', { connectionId, database }).catch(() => null)
     return apiRequest('/api/member/query-history/clear', {
       method: 'DELETE',
       body: JSON.stringify({ connectionId, database }),
-    })
+    }).catch(() => null)
   },
 
   deleteQueryHistory: async (id: string): Promise<unknown> => {
+    await callCommand('delete_query_history', { id }).catch(() => null)
     return apiRequest(`/api/member/query-history/${encodeURIComponent(id)}`, {
       method: 'DELETE',
-    })
+    }).catch(() => null)
+  },
+
+  getUnsyncedQueryHistory: async (limit?: number): Promise<QueryHistoryItem[]> => {
+    const res = await callCommand<{ ok: boolean; items: QueryHistoryItem[] }>('get_unsynced_query_history', { limit }).catch(() => null)
+    return res?.items || []
+  },
+
+  deleteSyncedQueryHistory: async (uids: string[]): Promise<number> => {
+    if (!uids || !uids.length) return 0
+    const res = await callCommand<{ ok: boolean; deleted: number }>('delete_synced_query_history', { uids }).catch(() => null)
+    return res?.deleted || 0
+  },
+
+  syncQueryHistoryBatch: async (): Promise<{ synced: number }> => {
+    if (isSyncingQueryHistory) {
+      return { synced: 0 }
+    }
+    const token = getAuthToken()
+    if (!token) {
+      return { synced: 0 }
+    }
+
+    isSyncingQueryHistory = true
+    try {
+      const unsyncedRes = await callCommand<{ ok: boolean; items: QueryHistoryItem[] }>('get_unsynced_query_history').catch(() => null)
+      const items = unsyncedRes?.items || []
+      if (!items.length) {
+        return { synced: 0 }
+      }
+
+      const payload = items.map((item) => ({
+        uid: item.uid || item.id,
+        connectionId: item.connectionId || (item as any).connection_id,
+        databaseName: item.databaseName || (item as any).database_name || (item as any).database,
+        sql: item.sql,
+        status: item.status || 'success',
+        durationMs: item.durationMs || (item as any).duration_ms || 0,
+        rowCount: item.rowCount || (item as any).row_count || 0,
+        errorMessage: item.errorMessage || (item as any).error_message || null,
+        createdAt: item.createdAt || (item as any).created_at,
+      }))
+
+      const res = await apiRequest<{ ok: boolean; syncedUids?: string[]; synced_uids?: string[] }>(
+        '/api/member/query-history/batch',
+        {
+          method: 'POST',
+          body: JSON.stringify({ items: payload }),
+        }
+      )
+
+      const confirmedUids = res?.syncedUids || res?.synced_uids || []
+      if (confirmedUids.length > 0) {
+        await callCommand('delete_synced_query_history', { uids: confirmedUids }).catch(() => null)
+      }
+      return { synced: confirmedUids.length }
+    } catch {
+      return { synced: 0 }
+    } finally {
+      isSyncingQueryHistory = false
+    }
   },
 
   listSavedQueries: async (connectionId: string, database: string): Promise<SavedQueryItem[]> => {

@@ -43,7 +43,7 @@ pub async fn execute_query(
   sql: Option<String>,
   connection_id: Option<String>,
   database: Option<String>,
-  _record_history: Option<bool>,
+  record_history: Option<bool>,
   input: Option<Value>,
 ) -> Result<Value, String> {
   let query = sql
@@ -72,12 +72,20 @@ pub async fn execute_query(
       .map(|s| s.to_string())
   });
 
+  let should_record = record_history.unwrap_or_else(|| {
+    input
+      .as_ref()
+      .and_then(|i| i.get("recordHistory").or_else(|| i.get("record_history")))
+      .and_then(|v| v.as_bool())
+      .unwrap_or(true)
+  });
+
   let mut driver_type = "sqlserver".to_string();
   if let Some(id) = conn_id.as_deref() {
     driver_type = connection_driver_type(id);
   }
 
-  if let Some(id) = conn_id.as_deref() {
+  let result = if let Some(id) = conn_id.as_deref() {
     if driver_type == "mysql" {
       // Targeted for MySQL: execute sql query using mysql_async client.
       match mysql_client_for_connection(id, db.as_deref()).await {
@@ -102,7 +110,44 @@ pub async fn execute_query(
       "truncated": false,
       "maxRows": 20000
     }))
+  };
+
+  if should_record && !query.trim().is_empty() {
+    let db_str = db.as_deref().unwrap_or("");
+    match &result {
+      Ok(val) => {
+        let elapsed = val.get("elapsedMs").and_then(|v| v.as_i64()).unwrap_or(0);
+        let rows = val.get("rowCount").and_then(|v| v.as_i64()).unwrap_or(0);
+        let status = if val.get("ok").and_then(|v| v.as_bool()).unwrap_or(true) {
+          "success"
+        } else {
+          "error"
+        };
+        let _ = crate::database::query_history_store::insert(
+          conn_id.as_deref(),
+          db_str,
+          &query,
+          status,
+          elapsed,
+          rows,
+          None,
+        );
+      }
+      Err(err) => {
+        let _ = crate::database::query_history_store::insert(
+          conn_id.as_deref(),
+          db_str,
+          &query,
+          "error",
+          0,
+          0,
+          Some(err),
+        );
+      }
+    }
   }
+
+  result
 }
 
 #[tauri::command]
@@ -460,25 +505,70 @@ pub async fn get_execution_plan(
 }
 
 #[tauri::command]
-pub fn list_query_history(
-  _connection_id: Option<String>,
-  _database: Option<String>,
-  _limit: Option<usize>,
+pub fn record_query_history(
+  connection_id: Option<String>,
+  database: Option<String>,
+  sql: String,
+  status: Option<String>,
+  duration_ms: Option<i64>,
+  row_count: Option<i64>,
+  error_message: Option<String>,
 ) -> Result<Value, String> {
-  Ok(json!({ "ok": true, "history": [] }))
+  let status_str = status.as_deref().unwrap_or("success");
+  let db_str = database.as_deref().unwrap_or("");
+  crate::database::query_history_store::insert(
+    connection_id.as_deref(),
+    db_str,
+    &sql,
+    status_str,
+    duration_ms.unwrap_or(0),
+    row_count.unwrap_or(0),
+    error_message.as_deref(),
+  )
+}
+
+#[tauri::command]
+pub fn list_query_history(
+  connection_id: Option<String>,
+  database: Option<String>,
+  limit: Option<usize>,
+) -> Result<Value, String> {
+  let history = crate::database::query_history_store::list(
+    connection_id.as_deref(),
+    database.as_deref(),
+    limit,
+  )?;
+  Ok(json!({ "ok": true, "history": history }))
+}
+
+#[tauri::command]
+pub fn get_unsynced_query_history() -> Result<Value, String> {
+  let items = crate::database::query_history_store::list_unsynced()?;
+  Ok(json!({ "ok": true, "items": items }))
+}
+
+#[tauri::command]
+pub fn delete_synced_query_history(uids: Vec<String>) -> Result<Value, String> {
+  let count = crate::database::query_history_store::delete_by_uids(&uids)?;
+  Ok(json!({ "ok": true, "deleted": count }))
 }
 
 #[tauri::command]
 pub fn clear_query_history(
-  _connection_id: Option<String>,
-  _database: Option<String>,
+  connection_id: Option<String>,
+  database: Option<String>,
 ) -> Result<Value, String> {
-  Ok(json!({ "ok": true, "cleared": true }))
+  let cleared = crate::database::query_history_store::clear(
+    connection_id.as_deref(),
+    database.as_deref(),
+  )?;
+  Ok(json!({ "ok": true, "cleared": cleared }))
 }
 
 #[tauri::command]
-pub fn delete_query_history(_id: String) -> Result<Value, String> {
-  Ok(json!({ "ok": true, "deleted": true }))
+pub fn delete_query_history(id: String) -> Result<Value, String> {
+  let deleted = crate::database::query_history_store::delete_by_id_or_uid(&id)?;
+  Ok(json!({ "ok": true, "deleted": deleted }))
 }
 
 #[tauri::command]

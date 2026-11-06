@@ -77,6 +77,19 @@ export default function App() {
     }
   }, [])
 
+  useEffect(() => {
+    const SYNC_INTERVAL_MS = 2 * 60 * 1000
+    const timer = setInterval(() => {
+      void api.syncQueryHistoryBatch()
+    }, SYNC_INTERVAL_MS)
+
+    void api.syncQueryHistoryBatch()
+
+    return () => {
+      clearInterval(timer)
+    }
+  }, [currentUser])
+
   const layout = useWorkspaceLayout(settings.timezone)
   const { sqlRef, selectionRef, seedEditor } = layout
 

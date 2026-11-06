@@ -9,6 +9,7 @@ pub fn run() {
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_dialog::init())
     .setup(|_app| {
+      let _ = database::query_history_store::init();
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -52,7 +53,10 @@ pub fn run() {
       commands::query::module_definition,
       commands::query::describe_result,
       commands::query::get_execution_plan,
+      commands::query::record_query_history,
       commands::query::list_query_history,
+      commands::query::get_unsynced_query_history,
+      commands::query::delete_synced_query_history,
       commands::query::clear_query_history,
       commands::query::delete_query_history,
       commands::query::list_saved_queries,
