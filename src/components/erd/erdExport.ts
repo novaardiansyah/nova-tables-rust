@@ -1,5 +1,5 @@
 import { api } from '@/api'
-import { ErdTable, ErdRelation } from './erdTypes'
+import { ErdTable, ErdRelation, computeRelationPath } from './erdTypes'
 
 function getCssColor(varName: string, alpha = 1): string {
   if (typeof window === 'undefined') return '#000000'
@@ -186,25 +186,48 @@ export async function exportDiagramToPng(
   for (const rel of relations) {
     const sKey = `${rel.sourceSchema}.${rel.sourceTable}`
     const tKey = `${rel.targetSchema}.${rel.targetTable}`
-    const sPos = positions[sKey] || { x: 0, y: 0 }
-    const tPos = positions[tKey] || { x: 0, y: 0 }
+    const sPos = positions[sKey]
+    const tPos = positions[tKey]
+    if (!sPos || !tPos) continue
+
+    const sTable = tables.find((t) => `${t.schema}.${t.name}` === sKey)
+    const tTable = tables.find((t) => `${t.schema}.${t.name}` === tKey)
+    const sColIndex = sTable?.columns.findIndex((c) => c.name.toLowerCase() === rel.sourceColumn.toLowerCase()) ?? 0
+    const tColIndex = tTable?.columns.findIndex((c) => c.name.toLowerCase() === rel.targetColumn.toLowerCase()) ?? 0
+
     const sWidth = resolvedDimensions[sKey]?.width ?? 260
     const tWidth = resolvedDimensions[tKey]?.width ?? 260
-    const headerHeight = 35
-
-    const sourceIsLeft = sPos.x + sWidth / 2 < tPos.x + tWidth / 2
-    const startX = sourceIsLeft ? sPos.x + sWidth : sPos.x
-    const startY = sPos.y + headerHeight + 25
-    const endX = sourceIsLeft ? tPos.x : tPos.x + tWidth
-    const endY = tPos.y + headerHeight + 25
-
-    const defaultMidX = (startX + endX) / 2
-    const defaultMidY = (startY + endY) / 2
-
     const relKey = `${rel.name || 'rel'}-${rel.sourceTable}-${rel.targetTable}-${rel.sourceColumn}`
     const offset = relationOffsets[relKey]
-    const bendX = defaultMidX + (offset?.x ?? 0)
-    const bendY = defaultMidY + (offset?.y ?? 0)
+
+    const isSelf =
+      rel.sourceSchema.toLowerCase() === rel.targetSchema.toLowerCase() &&
+      rel.sourceTable.toLowerCase() === rel.targetTable.toLowerCase()
+
+    const {
+      startX,
+      startY,
+      endX,
+      endY,
+      bendX,
+      bendY,
+      hasOffset,
+      badgeX,
+      badgeY,
+      cp1x,
+      cp1y,
+      cp2x,
+      cp2y,
+    } = computeRelationPath(
+      sPos,
+      tPos,
+      sWidth,
+      tWidth,
+      offset,
+      sColIndex >= 0 ? sColIndex : 0,
+      tColIndex >= 0 ? tColIndex : 0,
+      isSelf,
+    )
 
     ctx.strokeStyle = colorLineStrong
     ctx.lineWidth = 1.5
@@ -216,13 +239,10 @@ export async function exportDiagramToPng(
 
     ctx.beginPath()
     ctx.moveTo(startX, startY)
-    if (offset && (offset.x !== 0 || offset.y !== 0)) {
+    if (hasOffset) {
       ctx.quadraticCurveTo(bendX, bendY, endX, endY)
     } else {
-      const dx = Math.abs(endX - startX) * 0.5
-      const cp1x = sourceIsLeft ? startX + Math.max(40, dx) : startX - Math.max(40, dx)
-      const cp2x = sourceIsLeft ? endX - Math.max(40, dx) : endX + Math.max(40, dx)
-      ctx.bezierCurveTo(cp1x, startY, cp2x, endY, endX, endY)
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, endX, endY)
     }
     ctx.stroke()
     ctx.setLineDash([])
@@ -234,13 +254,6 @@ export async function exportDiagramToPng(
     ctx.beginPath()
     ctx.arc(endX, endY, 3, 0, Math.PI * 2)
     ctx.fill()
-
-    const badgeX = offset && (offset.x !== 0 || offset.y !== 0)
-      ? (startX + 2 * bendX + endX) / 4
-      : defaultMidX
-    const badgeY = offset && (offset.x !== 0 || offset.y !== 0)
-      ? (startY + 2 * bendY + endY) / 4
-      : defaultMidY
 
     const cardinalityLabel =
       rel.cardinality === 'one-to-one'

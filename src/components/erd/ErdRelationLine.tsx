@@ -1,5 +1,5 @@
 import React from 'react'
-import { ErdRelation, erdRelationKey } from './erdTypes'
+import { ErdRelation, erdRelationKey, computeRelationPath } from './erdTypes'
 
 export interface ErdRelationLineProps {
   relation: ErdRelation
@@ -7,6 +7,8 @@ export interface ErdRelationLineProps {
   targetPos: { x: number; y: number }
   sourceWidth?: number
   targetWidth?: number
+  sourceColIndex?: number
+  targetColIndex?: number
   offset?: { x: number; y: number }
   isHighlighted?: boolean
   isDimmed?: boolean
@@ -22,6 +24,8 @@ export default function ErdRelationLine({
   targetPos,
   sourceWidth = 260,
   targetWidth = 260,
+  sourceColIndex = 0,
+  targetColIndex = 0,
   offset,
   isHighlighted = false,
   isDimmed = false,
@@ -31,41 +35,32 @@ export default function ErdRelationLine({
   viewOnly = false,
 }: ErdRelationLineProps) {
   const relKey = erdRelationKey(relation)
-  const headerHeight = 35
 
-  const sourceIsLeft = sourcePos.x + sourceWidth / 2 < targetPos.x + targetWidth / 2
+  const isSelf =
+    relation.sourceSchema.toLowerCase() === relation.targetSchema.toLowerCase() &&
+    relation.sourceTable.toLowerCase() === relation.targetTable.toLowerCase()
 
-  const startX = sourceIsLeft ? sourcePos.x + sourceWidth : sourcePos.x
-  const startY = sourcePos.y + headerHeight + 25
-
-  const endX = sourceIsLeft ? targetPos.x : targetPos.x + targetWidth
-  const endY = targetPos.y + headerHeight + 25
-
-  const defaultMidX = (startX + endX) / 2
-  const defaultMidY = (startY + endY) / 2
-
-  const bendX = defaultMidX + (offset?.x ?? 0)
-  const bendY = defaultMidY + (offset?.y ?? 0)
-
-  const hasOffset = Boolean(offset && (offset.x !== 0 || offset.y !== 0))
-
-  const pathData = hasOffset
-    ? `M ${startX} ${startY} Q ${bendX} ${bendY}, ${endX} ${endY}`
-    : (() => {
-        const dx = Math.abs(endX - startX) * 0.5
-        const cp1x = sourceIsLeft ? startX + Math.max(40, dx) : startX - Math.max(40, dx)
-        const cp1y = startY
-        const cp2x = sourceIsLeft ? endX - Math.max(40, dx) : endX + Math.max(40, dx)
-        const cp2y = endY
-        return `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`
-      })()
-
-  const badgeX = hasOffset
-    ? (startX + 2 * bendX + endX) / 4
-    : defaultMidX
-  const badgeY = hasOffset
-    ? (startY + 2 * bendY + endY) / 4
-    : defaultMidY
+  const {
+    startX,
+    startY,
+    endX,
+    endY,
+    bendX,
+    bendY,
+    hasOffset,
+    pathData,
+    badgeX,
+    badgeY,
+  } = computeRelationPath(
+    sourcePos,
+    targetPos,
+    sourceWidth,
+    targetWidth,
+    offset,
+    sourceColIndex,
+    targetColIndex,
+    isSelf,
+  )
 
   const cardinalityLabel =
     relation.cardinality === 'one-to-one'

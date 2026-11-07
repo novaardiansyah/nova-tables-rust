@@ -468,8 +468,15 @@ export default function ErdViewer({
                 {relations.map((rel) => {
                   const sKey = `${rel.sourceSchema}.${rel.sourceTable}`
                   const tKey = `${rel.targetSchema}.${rel.targetTable}`
-                  const sPos = positions[sKey] || { x: 0, y: 0 }
-                  const tPos = positions[tKey] || { x: 0, y: 0 }
+                  const sPos = positions[sKey]
+                  const tPos = positions[tKey]
+                  if (!sPos || !tPos) return null
+
+                  const sTable = tables.find((t) => `${t.schema}.${t.name}` === sKey)
+                  const tTable = tables.find((t) => `${t.schema}.${t.name}` === tKey)
+                  const sColIndex = sTable?.columns.findIndex((c) => c.name.toLowerCase() === rel.sourceColumn.toLowerCase()) ?? 0
+                  const tColIndex = tTable?.columns.findIndex((c) => c.name.toLowerCase() === rel.targetColumn.toLowerCase()) ?? 0
+
                   const sWidth = cardDimensions[sKey]?.width ?? 260
                   const tWidth = cardDimensions[tKey]?.width ?? 260
                   const relKey = erdRelationKey(rel)
@@ -488,6 +495,8 @@ export default function ErdViewer({
                       targetPos={tPos}
                       sourceWidth={sWidth}
                       targetWidth={tWidth}
+                      sourceColIndex={sColIndex >= 0 ? sColIndex : 0}
+                      targetColIndex={tColIndex >= 0 ? tColIndex : 0}
                       offset={offset}
                       isHighlighted={isHighlighted}
                       isDimmed={isDimmed}
