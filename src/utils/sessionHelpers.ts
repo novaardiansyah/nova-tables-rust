@@ -55,7 +55,7 @@ export const BROWSE_ROWS = 300
 
 export interface SessionTab {
   id: string
-  kind: 'query' | 'design'
+  kind: 'query' | 'design' | 'erd'
   title: string
   sql: string
   savedQueryId?: string | null
@@ -113,6 +113,31 @@ export function createTab(id: string, title: string, sql: string, editSource: Ed
     edits: {},
     deletingRows: [],
     lastExecutedSql: null,
+  }
+}
+
+export interface ErdTarget {
+  tables: string[]
+  depth?: number
+  includeRelated?: boolean
+  sourceSql?: string
+}
+
+export function createErdTab(id: string, title: string, target: ErdTarget): SessionTab {
+  return {
+    id,
+    kind: 'erd',
+    title,
+    target,
+    loading: true,
+    error: null,
+    busy: false,
+    sql: '',
+    state: IDLE_QUERY,
+    activeSet: 0,
+    edits: {},
+    deletingRows: [],
+    relations: [],
   }
 }
 

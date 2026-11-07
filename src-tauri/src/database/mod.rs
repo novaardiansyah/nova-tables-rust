@@ -1,10 +1,12 @@
 pub mod connection_registry;
+pub mod erd;
 pub mod local_store;
 pub mod mssql;
 pub mod mysql;
 pub mod query_history_store;
 
 pub use connection_registry::*;
+pub use erd::*;
 pub use local_store::*;
 pub use mssql::*;
 pub use query_history_store::{

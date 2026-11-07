@@ -295,6 +295,19 @@ const ICONS: Record<string, React.ReactNode> = {
     </>
   ),
   filter: <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />,
+  'er-diagram': (
+    <>
+      <path d="M4 7h16" />
+      <path d="M4 12h16" />
+      <path d="M4 17h16" />
+      <circle cx="8" cy="7" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="12" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="8" cy="17" r="1.6" fill="currentColor" stroke="none" />
+      <path d="M8 8.6V7.4A1.6 1.6 0 019.6 5.8h4.8a1.6 1.6 0 011.6 1.6v1.2" />
+      <path d="M15 11.5v5a1.5 1.5 0 003 0v-5" />
+      <path d="M8 17.5v1.6a1.6 1.6 0 003.2 0V17.5" />
+    </>
+  ),
 }
 
 export type IconName = keyof typeof ICONS | string

@@ -50,6 +50,7 @@ pub fn run() {
       commands::query::list_columns,
       commands::query::table_structure,
       commands::query::table_relations,
+      commands::erd::get_erd_data,
       commands::query::list_modules,
       commands::query::module_definition,
       commands::query::describe_result,

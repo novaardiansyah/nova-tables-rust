@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { api } from '@/api'
-import { SessionData, SessionTab, createDesignTab, browseSql, relatedSql, sessionTableFor, NEW_FUNCTION_SQL, newFunctionSql } from '@/utils/sessionHelpers'
+import { SessionData, SessionTab, createDesignTab, createErdTab, browseSql, relatedSql, sessionTableFor, NEW_FUNCTION_SQL, newFunctionSql } from '@/utils/sessionHelpers'
+import { extractTablesFromSql } from '@/utils/sqlTableExtractor'
 import { SidebarTable, SidebarModule } from '@/components/Sidebar'
 import { buildEditSource } from '@/edits'
 import { TableDesign } from '@/designSql'
@@ -296,6 +297,69 @@ export function useTableBrowser({
     [setSessions, sqlRef, tabIdRef],
   )
 
+  const openErdTab = useCallback(
+    (connectionId: string, title: string, target: any) => {
+      tabIdRef.current += 1
+      const id = `tab-${tabIdRef.current}`
+      const liveSql = sqlRef.current
+      setSessions((prev) => {
+        const current = prev[connectionId]
+        if (!current) return prev
+        return {
+          ...prev,
+          [connectionId]: {
+            ...current,
+            tabs: [
+              ...current.tabs.map((tab) => (tab.id === current.activeTabId ? { ...tab, sql: liveSql } : tab)),
+              createErdTab(id, title, target),
+            ],
+            activeTabId: id,
+          },
+        }
+      })
+      return id
+    },
+    [setSessions, sqlRef, tabIdRef],
+  )
+
+  const handleGenerateErd = useCallback(
+    (table?: SidebarTable | null) => {
+      const current = activeSession()
+      if (!current) {
+        showBanner('warn', 'Open a connection first.')
+        return
+      }
+      if (!current.activeDatabase) {
+        showBanner('warn', 'Select a database first.')
+        return
+      }
+
+      if (table) {
+        const targetTable = table.schema ? `${table.schema}.${table.name}` : table.name
+        openErdTab(current.connectionId, `ERD: ${table.name}`, {
+          tables: [targetTable],
+          depth: 1,
+          includeRelated: true,
+        })
+      } else {
+        const sql = sqlRef.current || ''
+        const extracted = extractTablesFromSql(sql)
+        const tables = extracted.map((t) => (t.schema ? `${t.schema}.${t.name}` : t.name))
+        if (tables.length === 0) {
+          showBanner('warn', 'No tables found in the active query to generate ERD.')
+          return
+        }
+        openErdTab(current.connectionId, 'ERD: Query', {
+          tables,
+          depth: 1,
+          includeRelated: true,
+          sourceSql: sql,
+        })
+      }
+    },
+    [activeSession, openErdTab, showBanner, sqlRef],
+  )
+
   const reloadDesign = useCallback(
     async (tabId: string, schema: string, table: string) => {
       const current = activeSession()
@@ -508,6 +572,7 @@ export function useTableBrowser({
     openDesignTab,
     reloadDesign,
     handleOpenStructure,
+    handleGenerateErd,
     handleNewTable,
     handleDesignGenerate,
     handleDesignApply,

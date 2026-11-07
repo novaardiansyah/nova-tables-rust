@@ -10,6 +10,7 @@ export interface TabItem {
   id: string
   title: string
   state: TabItemState
+  kind?: string
   savedQueryId?: string | null
   [key: string]: unknown
 }
@@ -129,7 +130,9 @@ export default function TabBar({
                   isActive ? 'text-text-strong' : 'text-text-muted hover:text-text'
                 }`}
               >
-                {status === 'running' ? (
+                {tab.kind === 'erd' ? (
+                  <Icon name="er-diagram" size={12} className="shrink-0 text-accent" />
+                ) : status === 'running' ? (
                   <Spinner size={11} className="shrink-0 text-accent" />
                 ) : (
                   <span

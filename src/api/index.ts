@@ -18,6 +18,9 @@ import {
   SystemInfo,
   TableColumnsSummary,
   TableRelation,
+  ErdData,
+  ErdTable,
+  ErdRelation,
   TableStructureResult,
   TableSummary,
 } from './types'
@@ -929,6 +932,17 @@ export const api = {
       database,
     })
     return res?.tables || []
+  },
+
+  getErdData: async (connectionId: string, database: string, tables: string[], includeRelated: boolean): Promise<ErdData | null> => {
+    const res = await callCommand<ErdData>('get_erd_data', {
+      connectionId,
+      database,
+      tables,
+      includeRelated,
+      depth: 1,
+    })
+    return res || null
   },
 
   listColumns: async (connectionId: string, database: string): Promise<TableColumnsSummary[]> => {

@@ -3,6 +3,7 @@ import Sidebar, { SidebarSessionItem } from '@/components/Sidebar'
 import WorkspaceHeader from '@/components/WorkspaceHeader'
 import TabBar from '@/components/TabBar'
 import TableDesigner from '@/components/designer/TableDesigner'
+import ErdViewer from '@/components/erd/ErdViewer'
 import QueryEditor from '@/components/QueryEditor'
 import ResultsPanel from '@/components/results/ResultsPanel'
 import StatusBar from '@/components/common/StatusBar'
@@ -106,6 +107,7 @@ export default function WorkspaceView({
     handleCopyQuery,
     handleExportResult,
     handleOpenStructure,
+    handleGenerateErd,
     handleNewTable,
     handleDesignGenerate,
     handleDesignApply,
@@ -178,6 +180,7 @@ export default function WorkspaceView({
         onBrowseTable={handleBrowseTable}
         onCopyObjectName={handleCopyObjectName}
         onScriptTable={handleScriptTable}
+        onGenerateErd={handleGenerateErd}
         onOpenStructure={handleOpenStructure}
         onOpenModule={handleOpenModule}
         onCopyModuleDefinition={handleCopyModuleDefinition}
@@ -266,6 +269,30 @@ export default function WorkspaceView({
               }
             />
           </div>
+        ) : activeTab?.kind === 'erd' ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <ErdViewer
+              connectionId={session.connectionId}
+              database={session.activeDatabase ?? ''}
+              initialTables={activeTab.target?.tables ?? []}
+              depth={activeTab.target?.depth ?? 1}
+              includeRelated={activeTab.target?.includeRelated ?? true}
+              sourceSql={activeTab.target?.sourceSql ?? null}
+              driverType={session?.connection?.driverType ?? null}
+              onOpenTable={(schema, name) => {
+                const table = (session?.tables?.tables ?? []).find(
+                  (t: any) => t.schema === schema && t.name === name,
+                )
+                if (table) handleBrowseTable(table)
+              }}
+              onOpenStructure={(table) => {
+                const sidebarTable = (session?.tables?.tables ?? []).find(
+                  (t: any) => t.schema === table.schema && t.name === table.name,
+                )
+                if (sidebarTable) handleOpenStructure(sidebarTable)
+              }}
+            />
+          </div>
         ) : (
           <div ref={splitRef} className="flex min-h-0 flex-1 flex-col">
             <div style={{ height: editorHeight }} className="min-h-[140px] shrink-0 overflow-hidden">
@@ -323,6 +350,7 @@ export default function WorkspaceView({
               onCopyPlan={(raw) => handleCopyText(raw, 'Copied execution plan XML.')}
               onCancel={queryExecution.handleCancel}
               onOpenStructure={handleOpenStructure}
+              onGenerateErd={handleGenerateErd ? () => handleGenerateErd(null) : undefined}
             />
           </div>
         )}

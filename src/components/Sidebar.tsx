@@ -54,6 +54,7 @@ export interface SidebarProps {
   onBrowseTable: (table: SidebarTable) => void
   onCopyObjectName: (object: { schema: string; name: string }) => void
   onScriptTable: (table: SidebarTable) => void
+  onGenerateErd?: (table: SidebarTable) => void
   onRefreshDatabases: (connectionId: string) => void
   onOpenStructure: (table: SidebarTable) => void
   onOpenModule: (module: SidebarModule) => void
@@ -103,6 +104,7 @@ export default function Sidebar({
   onRefreshDatabases,
   onOpenStructure,
   onOpenModule,
+  onGenerateErd,
   onCopyModuleDefinition,
   onNewFunction,
   onNewTable,
@@ -650,6 +652,11 @@ export default function Sidebar({
                 id: 'open-structure',
                 label: 'Open Structure',
                 onSelect: () => onOpenStructure(menu.table),
+              },
+              {
+                id: 'generate-erd',
+                label: 'Generate ERD',
+                onSelect: () => onGenerateErd?.(menu.table),
               },
               {
                 id: 'new-table',

@@ -138,6 +138,40 @@ export interface TableRelation {
   columns: { column: string; referencedColumn: string }[]
 }
 
+export interface ErdColumn {
+  name: string
+  dataType: string
+  isPrimaryKey: boolean
+  isForeignKey: boolean
+  isUnique: boolean
+  isNullable: boolean
+}
+
+export interface ErdTable {
+  schema: string
+  name: string
+  columns: ErdColumn[]
+  isJunction?: boolean
+}
+
+export interface ErdRelation {
+  name: string
+  sourceSchema: string
+  sourceTable: string
+  sourceColumn: string
+  targetSchema: string
+  targetTable: string
+  targetColumn: string
+  cardinality: string
+  isNullable: boolean
+}
+
+export interface ErdData {
+  ok: boolean
+  tables: ErdTable[]
+  relations: ErdRelation[]
+}
+
 export interface DatabaseModule {
   schema: string
   name: string

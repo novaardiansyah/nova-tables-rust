@@ -101,6 +101,7 @@ export interface ResultsPanelProps {
   executionPlan?: ParsedPlan | null
   onCopyPlan?: ((raw: string) => void) | null
   onOpenStructure?: (table: { schema: string; name: string }) => void
+  onGenerateErd?: () => void
 }
 
 export default function ResultsPanel({
@@ -130,6 +131,7 @@ export default function ResultsPanel({
   executionPlan = null,
   onCopyPlan = null,
   onOpenStructure,
+  onGenerateErd,
 }: ResultsPanelProps) {
   const { status, result, error } = state
   const resultSets = result?.resultSets ?? []
@@ -579,6 +581,18 @@ export default function ResultsPanel({
           >
             <Icon name="plan" size={12} className="text-accent" />
             Execution Plan
+          </button>
+        ) : null}
+
+        {onGenerateErd ? (
+          <button
+            type="button"
+            onClick={onGenerateErd}
+            title="Generate Entity Relationship Diagram for query tables"
+            className="flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[length:var(--app-text-11)] text-text-muted transition-colors hover:bg-tint/[0.03] hover:text-text"
+          >
+            <Icon name="er-diagram" size={12} className="text-accent" />
+            Generate ERD
           </button>
         ) : null}
 
