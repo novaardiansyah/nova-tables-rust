@@ -58,6 +58,35 @@ fn requested_file_name(default_path: &str) -> String {
         .unwrap_or_else(|| default_path.to_string())
 }
 
+/// Decode a base64 string to a Vec<u8>.
+/// Supports the `data:image/png;base64,` prefix.
+fn decode_base64(s: &str) -> Option<Vec<u8>> {
+    let s = s.trim();
+    // Remove data URL prefix if present
+    let s = s.strip_prefix("data:image/png;base64,").unwrap_or(s);
+    let mut output = Vec::with_capacity(s.len() * 3 / 4);
+    let mut val: u32 = 0;
+    let mut bits: u32 = 0;
+    for &byte in s.as_bytes() {
+        let value = match byte {
+            b'A'..=b'Z' => (byte - b'A') as u32,
+            b'a'..=b'z' => (byte - b'a' + 26) as u32,
+            b'0'..=b'9' => (byte - b'0' + 52) as u32,
+            b'+' => 62,
+            b'/' => 63,
+            b'=' | b'\r' | b'\n' | b' ' => continue,
+            _ => return None,
+        };
+        val = (val << 6) | value;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            output.push(((val >> bits) & 0xFF) as u8);
+        }
+    }
+    Some(output)
+}
+
 #[tauri::command]
 pub async fn save_file(app: tauri::AppHandle, input: Value) -> Result<Value, String> {
     use tauri_plugin_dialog::DialogExt;
@@ -124,7 +153,12 @@ pub async fn save_file(app: tauri::AppHandle, input: Value) -> Result<Value, Str
 
     match target {
         Some(path) => {
-            std::fs::write(&path, content).map_err(|e| e.to_string())?;
+            if let Some(b64) = input.get("base64").or_else(|| input.get("dataUrl")).and_then(|v| v.as_str()) {
+                let data = decode_base64(b64).ok_or("Failed to decode base64 file data")?;
+                std::fs::write(&path, &data).map_err(|e| e.to_string())?;
+            } else {
+                std::fs::write(&path, content).map_err(|e| e.to_string())?;
+            }
             Ok(json!({
               "ok": true,
               "saved": true,

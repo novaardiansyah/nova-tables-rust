@@ -1,14 +1,16 @@
-import React from 'react'
+import React, { useRef } from 'react'
 import Icon from '@/components/common/Icon'
 import { ErdTable } from './erdTypes'
 
 export interface ErdTableNodeProps {
   table: ErdTable
   position: { x: number; y: number }
+  dimension?: { width: number; height: number }
   isHighlighted?: boolean
   isDimmed?: boolean
   searchQuery?: string
   onDragStart: (e: React.MouseEvent, tableKey: string) => void
+  onResizeStart?: (e: React.MouseEvent, tableKey: string, currentWidth: number, currentHeight: number) => void
   onBrowse?: (schema: string, name: string) => void
   onOpenStructure?: (table: { schema: string; name: string }) => void
 }
@@ -16,22 +18,27 @@ export interface ErdTableNodeProps {
 export default function ErdTableNode({
   table,
   position,
+  dimension = { width: 260, height: 240 },
   isHighlighted = false,
   isDimmed = false,
   searchQuery = '',
   onDragStart,
+  onResizeStart,
   onBrowse,
   onOpenStructure,
 }: ErdTableNodeProps) {
   const tableKey = `${table.schema}.${table.name}`
+  const cardRef = useRef<HTMLDivElement | null>(null)
   const query = searchQuery.trim().toLowerCase()
   const tableMatches = query ? table.name.toLowerCase().includes(query) : false
 
   return (
     <div
+      ref={cardRef}
       style={{
         transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
-        width: 260,
+        width: dimension.width,
+        height: dimension.height ? `${dimension.height}px` : undefined,
       }}
       className={`absolute select-none rounded-lg border bg-panel transition-shadow erd-node ${
         isHighlighted
@@ -85,10 +92,11 @@ export default function ErdTableNode({
       </div>
 
       <div
-  className="max-h-[260px] overflow-y-auto overflow-x-hidden overscroll-contain divide-y divide-line/40 py-0.5"
-  onWheel={(e) => e.stopPropagation()}
-  onMouseDown={(e) => e.stopPropagation()}
->
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain divide-y divide-line/40 py-0.5"
+        style={{ maxHeight: dimension.height ? `${dimension.height - 32}px` : undefined }}
+        onWheel={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         {table.columns.map((col) => {
           const colMatches = query ? col.name.toLowerCase().includes(query) : false
           return (
@@ -140,6 +148,22 @@ export default function ErdTableNode({
             </div>
           )
         })}
+      </div>
+
+      <div
+        onMouseDown={(e) => {
+          e.stopPropagation()
+          const currentW = dimension.width
+          const currentH = dimension.height ?? (cardRef.current?.clientHeight || 240)
+          onResizeStart?.(e, tableKey, currentW, currentH)
+        }}
+        className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize flex items-end justify-end p-0.5 text-text-faint/50 hover:text-accent transition-colors"
+        title="Resize table card"
+      >
+        <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2">
+          <line x1="7" y1="1" x2="1" y2="7" />
+          <line x1="7" y1="4" x2="4" y2="7" />
+        </svg>
       </div>
     </div>
   )

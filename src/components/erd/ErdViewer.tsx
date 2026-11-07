@@ -2,9 +2,10 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/api'
 import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu'
 import Icon, { Spinner } from '@/components/common/Icon'
-import { ErdTable, ErdRelation, computeInitialPositions } from './erdTypes'
+import { ErdTable, ErdRelation, computeInitialPositions, erdRelationKey } from './erdTypes'
 import ErdTableNode from './ErdTableNode'
 import ErdRelationLine from './ErdRelationLine'
+import { exportDiagramToPng } from './erdExport'
 
 export interface ErdViewerProps {
   connectionId: string
@@ -42,6 +43,9 @@ export default function ErdViewer({
   const [hoveredTableKey, setHoveredTableKey] = useState<string | null>(null)
   const [actionsMenu, setActionsMenu] = useState<{ x: number; y: number } | null>(null)
 
+  const [cardDimensions, setCardDimensions] = useState<Record<string, { width: number; height: number }>>({})
+  const [relationOffsets, setRelationOffsets] = useState<Record<string, { x: number; y: number }>>({})
+
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const isDraggingCanvasRef = useRef(false)
   const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
@@ -50,6 +54,8 @@ export default function ErdViewer({
   const draggingTableRef = useRef<string | null>(null)
   const tableDragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const initialTablePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  const resizingTableRef = useRef<{ tableKey: string; startX: number; startY: number; startWidth: number; startHeight: number } | null>(null)
+  const draggingRelationRef = useRef<{ relKey: string; startX: number; startY: number; initialOffset: { x: number; y: number } } | null>(null)
 
   const loadData = useCallback(async (currentDepth: number = depth) => {
     if (!connectionId || !database) return
@@ -99,7 +105,61 @@ export default function ErdViewer({
     initialTablePosRef.current = positions[tableKey] || { x: 0, y: 0 }
   }
 
+  const handleTableResizeStart = (
+    e: React.MouseEvent,
+    tableKey: string,
+    currentWidth: number,
+    currentHeight: number,
+  ) => {
+    e.stopPropagation()
+    resizingTableRef.current = {
+      tableKey,
+      startX: e.clientX,
+      startY: e.clientY,
+      startWidth: currentWidth,
+      startHeight: currentHeight,
+    }
+  }
+
+  const handleRelationDragStart = (e: React.MouseEvent, relKey: string) => {
+    e.stopPropagation()
+    const currentOffset = relationOffsets[relKey] || { x: 0, y: 0 }
+    draggingRelationRef.current = {
+      relKey,
+      startX: e.clientX,
+      startY: e.clientY,
+      initialOffset: currentOffset,
+    }
+  }
+
   const handlePointerMove = (e: React.MouseEvent) => {
+    if (resizingTableRef.current) {
+      const { tableKey, startX, startY, startWidth, startHeight } = resizingTableRef.current
+      const dx = (e.clientX - startX) / zoom
+      const dy = (e.clientY - startY) / zoom
+      const newWidth = Math.min(500, Math.max(220, Math.round(startWidth + dx)))
+      const newHeight = Math.min(600, Math.max(100, Math.round(startHeight + dy)))
+      setCardDimensions((prev) => ({
+        ...prev,
+        [tableKey]: { width: newWidth, height: newHeight },
+      }))
+      return
+    }
+
+    if (draggingRelationRef.current) {
+      const { relKey, startX, startY, initialOffset } = draggingRelationRef.current
+      const dx = (e.clientX - startX) / zoom
+      const dy = (e.clientY - startY) / zoom
+      setRelationOffsets((prev) => ({
+        ...prev,
+        [relKey]: {
+          x: Math.round(initialOffset.x + dx),
+          y: Math.round(initialOffset.y + dy),
+        },
+      }))
+      return
+    }
+
     if (draggingTableRef.current) {
       const dx = (e.clientX - tableDragStartRef.current.x) / zoom
       const dy = (e.clientY - tableDragStartRef.current.y) / zoom
@@ -127,6 +187,8 @@ export default function ErdViewer({
   const handlePointerUp = () => {
     isDraggingCanvasRef.current = false
     draggingTableRef.current = null
+    resizingTableRef.current = null
+    draggingRelationRef.current = null
   }
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -150,6 +212,7 @@ export default function ErdViewer({
   const handleAutoArrange = () => {
     const fresh = computeInitialPositions(tables, relations)
     setPositions(fresh)
+    setRelationOffsets({})
     handleResetView()
   }
 
@@ -163,10 +226,11 @@ export default function ErdViewer({
     for (const table of tables) {
       const key = `${table.schema}.${table.name}`
       const pos = positions[key] || { x: 0, y: 0 }
+      const dim = cardDimensions[key] || { width: 260, height: 240 }
       minX = Math.min(minX, pos.x)
       minY = Math.min(minY, pos.y)
-      maxX = Math.max(maxX, pos.x + 260)
-      maxY = Math.max(maxY, pos.y + 240)
+      maxX = Math.max(maxX, pos.x + dim.width)
+      maxY = Math.max(maxY, pos.y + dim.height)
     }
 
     const canvasWidth = canvasRef.current?.clientWidth || 1000
@@ -183,23 +247,20 @@ export default function ErdViewer({
     })
   }
 
-  const handleExportSvg = () => {
-    if (!canvasRef.current) return
-    const svgElem = canvasRef.current.querySelector('svg.erd-canvas-svg')
-    if (!svgElem) return
-    const svgContent = new XMLSerializer().serializeToString(svgElem)
-    const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `erd-${database}-${Date.now()}.svg`
-    a.click()
-    URL.revokeObjectURL(url)
+  const handleSavePng = () => {
+    void exportDiagramToPng(
+      database,
+      tables,
+      relations,
+      positions,
+      cardDimensions,
+      relationOffsets,
+    )
   }
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-base">
-      <div className="flex h-10 shrink-0 items-center justify-end border-b border-line bg-panel px-3">
+      <div className="flex h-10 shrink-0 items-center justify-between border-b border-line bg-panel px-3">
         <div className="flex items-center gap-2">
           <div className="relative flex items-center">
             <Icon name="search" size={12} className="pointer-events-none absolute left-2 text-text-faint" />
@@ -208,7 +269,7 @@ export default function ErdViewer({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search table or column…"
-              className="h-7 w-44 rounded-md border border-line bg-surface pl-7 pr-2 text-[length:var(--app-text-11)] text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
+              className="h-7 w-64 rounded-md border border-line bg-surface pl-7 pr-2 text-[length:var(--app-text-11)] text-text placeholder:text-text-faint focus:border-accent focus:outline-none"
             />
             {search ? (
               <button
@@ -220,9 +281,9 @@ export default function ErdViewer({
               </button>
             ) : null}
           </div>
+        </div>
 
-          <div className="h-4 w-px bg-line" />
-
+        <div className="flex items-center gap-2">
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -279,6 +340,7 @@ export default function ErdViewer({
               y={actionsMenu.y}
               items={
                 [
+                  { id: 'auto-arrange', label: 'Auto-Arrange Tables', onSelect: handleAutoArrange },
                   {
                     id: 'depth',
                     label: `Relation Depth: Level ${depth}`,
@@ -309,9 +371,8 @@ export default function ErdViewer({
                       },
                     ],
                   },
-                  { id: 'auto-arrange', label: 'Auto-arrange Tables', onSelect: handleAutoArrange },
                   { id: 'reset-view', label: 'Reset View (100%)', onSelect: handleResetView },
-                  { id: 'export-svg', label: 'Export as SVG', onSelect: handleExportSvg },
+                  { id: 'export-png', label: 'Save as PNG', onSelect: handleSavePng },
                 ] as ContextMenuItem[]
               }
               onClose={() => setActionsMenu(null)}
@@ -373,6 +434,10 @@ export default function ErdViewer({
                   const tKey = `${rel.targetSchema}.${rel.targetTable}`
                   const sPos = positions[sKey] || { x: 0, y: 0 }
                   const tPos = positions[tKey] || { x: 0, y: 0 }
+                  const sWidth = cardDimensions[sKey]?.width ?? 260
+                  const tWidth = cardDimensions[tKey]?.width ?? 260
+                  const relKey = erdRelationKey(rel)
+                  const offset = relationOffsets[relKey]
 
                   const isRelHovered = hoveredRelation?.name === rel.name
                   const isTableHovered = hoveredTableKey === sKey || hoveredTableKey === tKey
@@ -381,14 +446,18 @@ export default function ErdViewer({
 
                   return (
                     <ErdRelationLine
-                      key={`${rel.name}-${rel.sourceTable}-${rel.targetTable}-${rel.sourceColumn}`}
+                      key={relKey}
                       relation={rel}
                       sourcePos={sPos}
                       targetPos={tPos}
+                      sourceWidth={sWidth}
+                      targetWidth={tWidth}
+                      offset={offset}
                       isHighlighted={isHighlighted}
                       isDimmed={isDimmed}
                       onMouseEnter={() => setHoveredRelation(rel)}
                       onMouseLeave={() => setHoveredRelation(null)}
+                      onDragStart={handleRelationDragStart}
                     />
                   )
                 })}
@@ -399,6 +468,7 @@ export default function ErdViewer({
               {tables.map((table) => {
                 const key = `${table.schema}.${table.name}`
                 const pos = positions[key] || { x: 0, y: 0 }
+                const dim = cardDimensions[key]
 
                 const isConnectedToHoveredRel =
                   hoveredRelation &&
@@ -421,10 +491,12 @@ export default function ErdViewer({
                     <ErdTableNode
                       table={table}
                       position={pos}
+                      dimension={dim}
                       isHighlighted={isHighlighted}
                       isDimmed={isDimmed}
                       searchQuery={search}
                       onDragStart={handleTableDragStart}
+                      onResizeStart={handleTableResizeStart}
                       onBrowse={onOpenTable}
                       onOpenStructure={onOpenStructure}
                     />

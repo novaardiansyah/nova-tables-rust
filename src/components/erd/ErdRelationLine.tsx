@@ -1,46 +1,69 @@
 import React from 'react'
-import { ErdRelation } from './erdTypes'
+import { ErdRelation, erdRelationKey } from './erdTypes'
 
 export interface ErdRelationLineProps {
   relation: ErdRelation
   sourcePos: { x: number; y: number }
   targetPos: { x: number; y: number }
+  sourceWidth?: number
+  targetWidth?: number
+  offset?: { x: number; y: number }
   isHighlighted?: boolean
   isDimmed?: boolean
   onMouseEnter?: () => void
   onMouseLeave?: () => void
+  onDragStart?: (e: React.MouseEvent, relKey: string) => void
 }
 
 export default function ErdRelationLine({
   relation,
   sourcePos,
   targetPos,
+  sourceWidth = 260,
+  targetWidth = 260,
+  offset,
   isHighlighted = false,
   isDimmed = false,
   onMouseEnter,
   onMouseLeave,
+  onDragStart,
 }: ErdRelationLineProps) {
-  const cardWidth = 260
+  const relKey = erdRelationKey(relation)
   const headerHeight = 35
 
-  const sourceIsLeft = sourcePos.x + cardWidth / 2 < targetPos.x + cardWidth / 2
+  const sourceIsLeft = sourcePos.x + sourceWidth / 2 < targetPos.x + targetWidth / 2
 
-  const startX = sourceIsLeft ? sourcePos.x + cardWidth : sourcePos.x
+  const startX = sourceIsLeft ? sourcePos.x + sourceWidth : sourcePos.x
   const startY = sourcePos.y + headerHeight + 25
 
-  const endX = sourceIsLeft ? targetPos.x : targetPos.x + cardWidth
+  const endX = sourceIsLeft ? targetPos.x : targetPos.x + targetWidth
   const endY = targetPos.y + headerHeight + 25
 
-  const dx = Math.abs(endX - startX) * 0.5
-  const cp1x = sourceIsLeft ? startX + Math.max(40, dx) : startX - Math.max(40, dx)
-  const cp1y = startY
-  const cp2x = sourceIsLeft ? endX - Math.max(40, dx) : endX + Math.max(40, dx)
-  const cp2y = endY
+  const defaultMidX = (startX + endX) / 2
+  const defaultMidY = (startY + endY) / 2
 
-  const pathData = `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`
+  const bendX = defaultMidX + (offset?.x ?? 0)
+  const bendY = defaultMidY + (offset?.y ?? 0)
 
-  const midX = (startX + endX) / 2
-  const midY = (startY + endY) / 2
+  const hasOffset = Boolean(offset && (offset.x !== 0 || offset.y !== 0))
+
+  const pathData = hasOffset
+    ? `M ${startX} ${startY} Q ${bendX} ${bendY}, ${endX} ${endY}`
+    : (() => {
+        const dx = Math.abs(endX - startX) * 0.5
+        const cp1x = sourceIsLeft ? startX + Math.max(40, dx) : startX - Math.max(40, dx)
+        const cp1y = startY
+        const cp2x = sourceIsLeft ? endX - Math.max(40, dx) : endX + Math.max(40, dx)
+        const cp2y = endY
+        return `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`
+      })()
+
+  const badgeX = hasOffset
+    ? (startX + 2 * bendX + endX) / 4
+    : defaultMidX
+  const badgeY = hasOffset
+    ? (startY + 2 * bendY + endY) / 4
+    : defaultMidY
 
   const cardinalityLabel =
     relation.cardinality === 'one-to-one'
@@ -59,7 +82,7 @@ export default function ErdRelationLine({
 
   return (
     <g
-      className={`cursor-pointer transition-opacity ${isDimmed ? 'opacity-20' : 'opacity-100'}`}
+      className={`transition-opacity ${isDimmed ? 'opacity-20' : 'opacity-100'}`}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
@@ -69,7 +92,12 @@ export default function ErdRelationLine({
         d={pathData}
         fill="none"
         stroke="transparent"
-        strokeWidth={16}
+        strokeWidth={18}
+        className="cursor-grab active:cursor-grabbing"
+        onMouseDown={(e) => {
+          e.stopPropagation()
+          onDragStart?.(e, relKey)
+        }}
       />
 
       <path
@@ -94,7 +122,31 @@ export default function ErdRelationLine({
         fill={isHighlighted ? accentColor : lineStrongColor}
       />
 
-      <g transform={`translate(${midX}, ${midY})`}>
+      {isHighlighted || hasOffset ? (
+        <circle
+          cx={bendX}
+          cy={bendY}
+          r={5}
+          fill={accentColor}
+          stroke="white"
+          strokeWidth={1.5}
+          className="cursor-grab active:cursor-grabbing"
+          onMouseDown={(e) => {
+            e.stopPropagation()
+            onDragStart?.(e, relKey)
+          }}
+          title="Drag to adjust relation line bend"
+        />
+      ) : null}
+
+      <g
+        transform={`translate(${badgeX}, ${badgeY})`}
+        className="cursor-grab active:cursor-grabbing"
+        onMouseDown={(e) => {
+          e.stopPropagation()
+          onDragStart?.(e, relKey)
+        }}
+      >
         <rect
           x={-18}
           y={-9}

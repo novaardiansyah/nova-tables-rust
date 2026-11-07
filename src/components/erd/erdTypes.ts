@@ -9,6 +9,10 @@ export interface TablePosition {
   height: number
 }
 
+export function erdRelationKey(rel: ErdRelation): string {
+  return `${rel.name || 'rel'}-${rel.sourceTable}-${rel.targetTable}-${rel.sourceColumn}`
+}
+
 export function computeInitialPositions(
   tables: ErdTable[],
   relations: ErdRelation[]
