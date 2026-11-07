@@ -13,6 +13,7 @@ export interface ErdRelationLineProps {
   onMouseEnter?: () => void
   onMouseLeave?: () => void
   onDragStart?: (e: React.MouseEvent, relKey: string) => void
+  viewOnly?: boolean
 }
 
 export default function ErdRelationLine({
@@ -27,6 +28,7 @@ export default function ErdRelationLine({
   onMouseEnter,
   onMouseLeave,
   onDragStart,
+  viewOnly = false,
 }: ErdRelationLineProps) {
   const relKey = erdRelationKey(relation)
   const headerHeight = 35
@@ -93,10 +95,12 @@ export default function ErdRelationLine({
         fill="none"
         stroke="transparent"
         strokeWidth={18}
-        className="cursor-grab active:cursor-grabbing"
+        className={viewOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}
         onMouseDown={(e) => {
-          e.stopPropagation()
-          onDragStart?.(e, relKey)
+          if (!viewOnly) {
+            e.stopPropagation()
+            onDragStart?.(e, relKey)
+          }
         }}
       />
 
@@ -122,7 +126,7 @@ export default function ErdRelationLine({
         fill={isHighlighted ? accentColor : lineStrongColor}
       />
 
-      {isHighlighted || hasOffset ? (
+      {!viewOnly && (isHighlighted || hasOffset) ? (
         <circle
           cx={bendX}
           cy={bendY}
@@ -135,16 +139,19 @@ export default function ErdRelationLine({
             e.stopPropagation()
             onDragStart?.(e, relKey)
           }}
-          title="Drag to adjust relation line bend"
-        />
+        >
+          <title>Drag to adjust relation line bend</title>
+        </circle>
       ) : null}
 
       <g
         transform={`translate(${badgeX}, ${badgeY})`}
-        className="cursor-grab active:cursor-grabbing"
+        className={viewOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}
         onMouseDown={(e) => {
-          e.stopPropagation()
-          onDragStart?.(e, relKey)
+          if (!viewOnly) {
+            e.stopPropagation()
+            onDragStart?.(e, relKey)
+          }
         }}
       >
         <rect

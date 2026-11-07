@@ -1,15 +1,108 @@
 import { api } from '@/api'
 import { ErdTable, ErdRelation } from './erdTypes'
 
+function getCssColor(varName: string, alpha = 1): string {
+  if (typeof window === 'undefined') return '#000000'
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(varName).trim()
+  if (!raw) return '#000000'
+  if (raw.startsWith('#')) {
+    if (alpha < 1) {
+      let hex = raw.slice(1)
+      if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('')
+      const num = parseInt(hex, 16)
+      return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`
+    }
+    return raw
+  }
+  if (raw.startsWith('rgb')) {
+    if (alpha < 1 && raw.startsWith('rgb(')) {
+      return raw.replace('rgb(', 'rgba(').replace(')', `, ${alpha})`)
+    }
+    return raw
+  }
+  const parts = raw.split(/\s+/)
+  if (parts.length === 3) {
+    return alpha < 1
+      ? `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, ${alpha})`
+      : `rgb(${parts[0]}, ${parts[1]}, ${parts[2]})`
+  }
+  return raw
+}
+
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  const radius = Math.min(r, w / 2, h / 2)
+  ctx.beginPath()
+  ctx.moveTo(x + radius, y)
+  ctx.lineTo(x + w - radius, y)
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius)
+  ctx.lineTo(x + w, y + h - radius)
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h)
+  ctx.lineTo(x + radius, y + h)
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius)
+  ctx.lineTo(x, y + radius)
+  ctx.quadraticCurveTo(x, y, x + radius, y)
+  ctx.closePath()
+}
+
+function drawKeyIcon(ctx: CanvasRenderingContext2D, x: number, y: number, color: string) {
+  ctx.save()
+  ctx.strokeStyle = color
+  ctx.fillStyle = color
+  ctx.lineWidth = 1.2
+  ctx.beginPath()
+  ctx.arc(x + 3.5, y + 3.5, 2.5, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(x + 5.5, y + 5.5)
+  ctx.lineTo(x + 10, y + 10)
+  ctx.moveTo(x + 8, y + 8)
+  ctx.lineTo(x + 9.5, y + 6.5)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function drawTableIcon(ctx: CanvasRenderingContext2D, x: number, y: number, color: string) {
+  ctx.save()
+  ctx.strokeStyle = color
+  ctx.lineWidth = 1.3
+  ctx.beginPath()
+  drawRoundedRect(ctx, x, y, 13, 11, 2)
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(x, y + 4.5)
+  ctx.lineTo(x + 13, y + 4.5)
+  ctx.moveTo(x + 4.5, y + 4.5)
+  ctx.lineTo(x + 4.5, y + 11)
+  ctx.stroke()
+  ctx.restore()
+}
+
 export async function exportDiagramToPng(
   database: string,
   tables: ErdTable[],
   relations: ErdRelation[],
   positions: Record<string, { x: number; y: number }>,
-  cardDimensions: Record<string, { width: number; height: number }>,
+  cardDimensions: Record<string, { width: number; height?: number }>,
   relationOffsets: Record<string, { x: number; y: number }>,
 ): Promise<void> {
   if (tables.length === 0) return
+
+  const resolvedDimensions: Record<string, { width: number; height: number }> = {}
+  for (const table of tables) {
+    const key = `${table.schema}.${table.name}`
+    const custom = cardDimensions[key]
+    const el = typeof document !== 'undefined' ? (document.querySelector(`[data-table-key="${key}"]`) as HTMLElement | null) : null
+    const w = custom?.width ?? (el ? el.offsetWidth : 260)
+    const h = custom?.height ?? (el ? el.offsetHeight : (36 + table.columns.length * 27 + 8))
+    resolvedDimensions[key] = { width: w, height: h }
+  }
 
   let minX = Infinity
   let minY = Infinity
@@ -19,10 +112,7 @@ export async function exportDiagramToPng(
   for (const table of tables) {
     const key = `${table.schema}.${table.name}`
     const pos = positions[key] || { x: 0, y: 0 }
-    const dim = cardDimensions[key] || {
-      width: 260,
-      height: 35 + Math.min(table.columns.length, 10) * 24 + 10,
-    }
+    const dim = resolvedDimensions[key]
     minX = Math.min(minX, pos.x)
     minY = Math.min(minY, pos.y)
     maxX = Math.max(maxX, pos.x + dim.width)
@@ -37,14 +127,14 @@ export async function exportDiagramToPng(
       const tKey = `${rel.targetSchema}.${rel.targetTable}`
       const sPos = positions[sKey] || { x: 0, y: 0 }
       const tPos = positions[tKey] || { x: 0, y: 0 }
-      const sWidth = cardDimensions[sKey]?.width ?? 260
-      const tWidth = cardDimensions[tKey]?.width ?? 260
+      const sWidth = resolvedDimensions[sKey]?.width ?? 260
+      const tWidth = resolvedDimensions[tKey]?.width ?? 260
       const midX = (sPos.x + sWidth / 2 + tPos.x + tWidth / 2) / 2 + offset.x
       const midY = (sPos.y + tPos.y) / 2 + offset.y
-      minX = Math.min(minX, midX - 30)
-      minY = Math.min(minY, midY - 30)
-      maxX = Math.max(maxX, midX + 30)
-      maxY = Math.max(maxY, midY + 30)
+      minX = Math.min(minX, midX - 40)
+      minY = Math.min(minY, midY - 40)
+      maxX = Math.max(maxX, midX + 40)
+      maxY = Math.max(maxY, midY + 40)
     }
   }
 
@@ -62,10 +152,25 @@ export async function exportDiagramToPng(
   ctx.scale(scale, scale)
   ctx.translate(-minX + padding, -minY + padding)
 
-  ctx.fillStyle = '#0b0e14'
+  const fontFamily = getComputedStyle(document.documentElement).getPropertyValue('--app-font-family').trim() || "ui-sans-serif, system-ui, -apple-system, sans-serif"
+  const monoFont = getComputedStyle(document.documentElement).getPropertyValue('--query-font-family').trim() || "ui-monospace, SFMono-Regular, Menlo, Monaco, monospace"
+
+  const colorBase = getCssColor('--color-base')
+  const colorPanel = getCssColor('--color-panel')
+  const colorSurface = getCssColor('--color-surface')
+  const colorLine = getCssColor('--color-line')
+  const colorLineStrong = getCssColor('--color-line-strong')
+  const colorAccent = getCssColor('--color-accent')
+  const colorText = getCssColor('--color-text')
+  const colorTextStrong = getCssColor('--color-text-strong')
+  const colorTextMuted = getCssColor('--color-text-muted')
+  const colorTextFaint = getCssColor('--color-text-faint')
+  const colorWarning = getCssColor('--color-warning')
+
+  ctx.fillStyle = colorBase
   ctx.fillRect(minX - padding, minY - padding, width, height)
 
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.06)'
+  ctx.fillStyle = getCssColor('--color-line', 0.5)
   const startGx = Math.floor((minX - padding) / 20) * 20
   const endGx = Math.ceil((maxX + padding) / 20) * 20
   const startGy = Math.floor((minY - padding) / 20) * 20
@@ -83,8 +188,8 @@ export async function exportDiagramToPng(
     const tKey = `${rel.targetSchema}.${rel.targetTable}`
     const sPos = positions[sKey] || { x: 0, y: 0 }
     const tPos = positions[tKey] || { x: 0, y: 0 }
-    const sWidth = cardDimensions[sKey]?.width ?? 260
-    const tWidth = cardDimensions[tKey]?.width ?? 260
+    const sWidth = resolvedDimensions[sKey]?.width ?? 260
+    const tWidth = resolvedDimensions[tKey]?.width ?? 260
     const headerHeight = 35
 
     const sourceIsLeft = sPos.x + sWidth / 2 < tPos.x + tWidth / 2
@@ -101,10 +206,10 @@ export async function exportDiagramToPng(
     const bendX = defaultMidX + (offset?.x ?? 0)
     const bendY = defaultMidY + (offset?.y ?? 0)
 
-    ctx.strokeStyle = '#64748b'
+    ctx.strokeStyle = colorLineStrong
     ctx.lineWidth = 1.5
     if (rel.isNullable) {
-      ctx.setLineDash([4, 4])
+      ctx.setLineDash([4, 2])
     } else {
       ctx.setLineDash([])
     }
@@ -122,7 +227,7 @@ export async function exportDiagramToPng(
     ctx.stroke()
     ctx.setLineDash([])
 
-    ctx.fillStyle = '#64748b'
+    ctx.fillStyle = colorLineStrong
     ctx.beginPath()
     ctx.arc(startX, startY, 3, 0, Math.PI * 2)
     ctx.fill()
@@ -144,8 +249,8 @@ export async function exportDiagramToPng(
           ? 'N : M'
           : '1 : N'
 
-    ctx.fillStyle = '#161f2e'
-    ctx.strokeStyle = '#334155'
+    ctx.fillStyle = colorPanel
+    ctx.strokeStyle = colorLine
     ctx.lineWidth = 1
     const bw = 36
     const bh = 18
@@ -155,8 +260,8 @@ export async function exportDiagramToPng(
     ctx.fill()
     ctx.stroke()
 
-    ctx.fillStyle = '#94a3b8'
-    ctx.font = 'bold 10px monospace'
+    ctx.fillStyle = colorTextMuted
+    ctx.font = `bold 10px ${monoFont}`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText(cardinalityLabel, badgeX, badgeY)
@@ -165,74 +270,120 @@ export async function exportDiagramToPng(
   for (const table of tables) {
     const key = `${table.schema}.${table.name}`
     const pos = positions[key] || { x: 0, y: 0 }
-    const dim = cardDimensions[key] || {
-      width: 260,
-      height: 35 + Math.min(table.columns.length, 10) * 24 + 10,
-    }
+    const dim = resolvedDimensions[key]
     const x = pos.x
     const y = pos.y
     const w = dim.width
     const h = dim.height
 
-    ctx.fillStyle = '#111722'
-    ctx.strokeStyle = '#253347'
+    ctx.save()
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.15)'
+    ctx.shadowBlur = 6
+    ctx.shadowOffsetY = 4
+    ctx.fillStyle = colorPanel
+    ctx.strokeStyle = colorLine
     ctx.lineWidth = 1
     drawRoundedRect(ctx, x, y, w, h, 8)
     ctx.fill()
     ctx.stroke()
+    ctx.restore()
 
-    const headerH = 32
+    const headerH = 34
     ctx.save()
     ctx.beginPath()
     drawRoundedRect(ctx, x, y, w, headerH, 8)
     ctx.clip()
-    ctx.fillStyle = '#182232'
+    ctx.fillStyle = getCssColor('--color-surface', 0.8)
     ctx.fillRect(x, y, w, headerH)
     ctx.restore()
 
-    ctx.strokeStyle = '#253347'
+    ctx.strokeStyle = colorLine
     ctx.beginPath()
     ctx.moveTo(x, y + headerH)
     ctx.lineTo(x + w, y + headerH)
     ctx.stroke()
 
+    drawTableIcon(ctx, x + 10, y + 11.5, colorAccent)
+
     ctx.textAlign = 'left'
     ctx.textBaseline = 'middle'
-    ctx.font = 'bold 11px system-ui, sans-serif'
-    ctx.fillStyle = '#f8fafc'
-    const titleText = (table.schema && table.schema !== 'dbo' ? `${table.schema}.` : '') + table.name
-    ctx.fillText(titleText, x + 10, y + headerH / 2)
+    let titleOffset = x + 28
+    if (table.schema && table.schema !== 'dbo') {
+      ctx.font = `11px ${fontFamily}`
+      ctx.fillStyle = colorTextFaint
+      const schemaPrefix = `${table.schema}.`
+      ctx.fillText(schemaPrefix, titleOffset, y + headerH / 2)
+      titleOffset += ctx.measureText(schemaPrefix).width
+    }
 
-    const rowH = 24
-    let rowY = y + headerH + 2
+    ctx.font = `600 11px ${fontFamily}`
+    ctx.fillStyle = colorTextStrong
+    ctx.fillText(table.name, titleOffset, y + headerH / 2)
+
+    if (table.isJunction) {
+      const jText = 'Junction'
+      ctx.font = `9px ${fontFamily}`
+      const jWidth = ctx.measureText(jText).width + 8
+      const jX = x + w - jWidth - 10
+      const jY = y + (headerH - 16) / 2
+      ctx.fillStyle = getCssColor('--color-accent', 0.15)
+      drawRoundedRect(ctx, jX, jY, jWidth, 16, 4)
+      ctx.fill()
+      ctx.fillStyle = colorAccent
+      ctx.textAlign = 'center'
+      ctx.fillText(jText, jX + jWidth / 2, jY + 8)
+    }
+
+    ctx.save()
+    ctx.beginPath()
+    drawRoundedRect(ctx, x, y, w, h, 8)
+    ctx.clip()
+
+    const rowH = 26
+    let rowY = y + headerH + 1
     for (const col of table.columns) {
       if (rowY + rowH > y + h - 2) break
 
       if (col.isPrimaryKey) {
-        ctx.fillStyle = '#eab308'
-        ctx.font = 'bold 9px system-ui, sans-serif'
-        ctx.fillText('PK', x + 10, rowY + rowH / 2)
+        drawKeyIcon(ctx, x + 10, rowY + (rowH - 11) / 2, colorWarning)
       } else if (col.isForeignKey) {
-        ctx.fillStyle = '#38bdf8'
-        ctx.font = 'bold 9px system-ui, sans-serif'
-        ctx.fillText('FK', x + 10, rowY + rowH / 2)
+        drawKeyIcon(ctx, x + 10, rowY + (rowH - 11) / 2, colorAccent)
       }
 
-      ctx.fillStyle = col.isPrimaryKey ? '#f8fafc' : col.isForeignKey ? '#38bdf8' : '#cbd5e1'
-      ctx.font = '11px system-ui, sans-serif'
-      ctx.fillText(col.name, x + 30, rowY + rowH / 2)
+      ctx.fillStyle = col.isPrimaryKey
+        ? colorTextStrong
+        : col.isForeignKey
+          ? colorAccent
+          : colorText
+      ctx.font = col.isPrimaryKey || col.isForeignKey
+        ? `500 11px ${fontFamily}`
+        : `11px ${fontFamily}`
+      ctx.textAlign = 'left'
+      ctx.fillText(col.name, x + 26, rowY + rowH / 2)
+
+      if (col.isUnique && !col.isPrimaryKey) {
+        const nameWidth = ctx.measureText(col.name).width
+        const uqX = x + 28 + nameWidth
+        ctx.fillStyle = getCssColor('--color-line', 0.6)
+        drawRoundedRect(ctx, uqX, rowY + (rowH - 14) / 2, 18, 14, 3)
+        ctx.fill()
+        ctx.font = `9px ${fontFamily}`
+        ctx.fillStyle = colorTextFaint
+        ctx.textAlign = 'center'
+        ctx.fillText('UQ', uqX + 9, rowY + rowH / 2)
+      }
 
       ctx.textAlign = 'right'
-      ctx.fillStyle = '#475569'
-      ctx.font = '9px system-ui, sans-serif'
-      ctx.fillText(col.isNullable ? 'NULL' : 'NN', x + w - 8, rowY + rowH / 2)
+      ctx.fillStyle = colorTextFaint
+      ctx.font = `9px ${monoFont}`
+      ctx.fillText(col.isNullable ? 'NULL' : 'NN', x + w - 10, rowY + rowH / 2)
 
-      ctx.fillStyle = '#64748b'
-      ctx.font = '10px monospace'
-      ctx.fillText(col.dataType, x + w - 36, rowY + rowH / 2)
-      ctx.textAlign = 'left'
+      ctx.fillStyle = colorTextMuted
+      ctx.font = `10px ${monoFont}`
+      ctx.fillText(col.dataType, x + w - 42, rowY + rowH / 2)
 
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)'
+      ctx.strokeStyle = getCssColor('--color-line', 0.4)
+      ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(x + 6, rowY + rowH)
       ctx.lineTo(x + w - 6, rowY + rowH)
@@ -240,6 +391,8 @@ export async function exportDiagramToPng(
 
       rowY += rowH
     }
+
+    ctx.restore()
   }
 
   const dataUrl = canvas.toDataURL('image/png')
@@ -257,32 +410,10 @@ export async function exportDiagramToPng(
     return
   }
 
-  // Fallback for standard browser environments
   const a = document.createElement('a')
   a.href = dataUrl
   a.download = `erd-${database}-${Date.now()}.png`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
-}
-
-function drawRoundedRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-) {
-  ctx.beginPath()
-  ctx.moveTo(x + r, y)
-  ctx.lineTo(x + w - r, y)
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r)
-  ctx.lineTo(x + w, y + h - r)
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h)
-  ctx.lineTo(x + r, y + h)
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r)
-  ctx.lineTo(x, y + r)
-  ctx.quadraticCurveTo(x, y, x + r, y)
-  ctx.closePath()
 }

@@ -45,6 +45,7 @@ export default function ErdViewer({
 
   const [cardDimensions, setCardDimensions] = useState<Record<string, { width: number; height: number }>>({})
   const [relationOffsets, setRelationOffsets] = useState<Record<string, { x: number; y: number }>>({})
+  const [viewOnly, setViewOnly] = useState(false)
 
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const isDraggingCanvasRef = useRef(false)
@@ -99,6 +100,7 @@ export default function ErdViewer({
   }
 
   const handleTableDragStart = (e: React.MouseEvent, tableKey: string) => {
+    if (viewOnly) return
     e.stopPropagation()
     draggingTableRef.current = tableKey
     tableDragStartRef.current = { x: e.clientX, y: e.clientY }
@@ -111,6 +113,7 @@ export default function ErdViewer({
     currentWidth: number,
     currentHeight: number,
   ) => {
+    if (viewOnly) return
     e.stopPropagation()
     resizingTableRef.current = {
       tableKey,
@@ -122,6 +125,7 @@ export default function ErdViewer({
   }
 
   const handleRelationDragStart = (e: React.MouseEvent, relKey: string) => {
+    if (viewOnly) return
     e.stopPropagation()
     const currentOffset = relationOffsets[relKey] || { x: 0, y: 0 }
     draggingRelationRef.current = {
@@ -210,6 +214,7 @@ export default function ErdViewer({
   }
 
   const handleAutoArrange = () => {
+    if (viewOnly) return
     const fresh = computeInitialPositions(tables, relations)
     setPositions(fresh)
     setRelationOffsets({})
@@ -256,6 +261,10 @@ export default function ErdViewer({
       cardDimensions,
       relationOffsets,
     )
+  }
+
+  const handleViewOnlyToggle = () => {
+    setViewOnly((prev) => !prev)
   }
 
   return (
@@ -334,13 +343,35 @@ export default function ErdViewer({
             <span>Actions</span>
           </button>
 
+          {viewOnly ? (
+            <button
+              type="button"
+              onClick={handleViewOnlyToggle}
+              className="flex items-center gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2 py-0.5 text-[length:var(--app-text-11)] font-medium text-warning hover:bg-warning/20 transition-colors"
+              title="Toggle view-only mode"
+            >
+              <Icon name="eye" size={12} />
+              <span>View-Only</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleViewOnlyToggle}
+              className="flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-0.5 text-[length:var(--app-text-11)] text-text-muted hover:border-line-strong hover:text-text transition-colors"
+              title="Toggle view-only mode"
+            >
+              <Icon name="eye" size={12} />
+              <span>View-Only</span>
+            </button>
+          )}
+
           {actionsMenu ? (
             <ContextMenu
               x={actionsMenu.x}
               y={actionsMenu.y}
               items={
                 [
-                  { id: 'auto-arrange', label: 'Auto-Arrange Tables', onSelect: handleAutoArrange },
+                  { id: 'auto-arrange', label: 'Auto-Arrange Tables', onSelect: handleAutoArrange, disabled: viewOnly },
                   {
                     id: 'depth',
                     label: `Relation Depth: Level ${depth}`,
@@ -373,6 +404,11 @@ export default function ErdViewer({
                   },
                   { id: 'reset-view', label: 'Reset View (100%)', onSelect: handleResetView },
                   { id: 'export-png', label: 'Save as PNG', onSelect: handleSavePng },
+                  {
+                    id: 'toggle-view-only',
+                    label: viewOnly ? 'View-Only Mode (Enabled)' : 'View-Only Mode (Disabled)',
+                    onSelect: handleViewOnlyToggle,
+                  },
                 ] as ContextMenuItem[]
               }
               onClose={() => setActionsMenu(null)}
@@ -458,6 +494,7 @@ export default function ErdViewer({
                       onMouseEnter={() => setHoveredRelation(rel)}
                       onMouseLeave={() => setHoveredRelation(null)}
                       onDragStart={handleRelationDragStart}
+                      viewOnly={viewOnly}
                     />
                   )
                 })}
@@ -499,6 +536,7 @@ export default function ErdViewer({
                       onResizeStart={handleTableResizeStart}
                       onBrowse={onOpenTable}
                       onOpenStructure={onOpenStructure}
+                      viewOnly={viewOnly}
                     />
                   </div>
                 )

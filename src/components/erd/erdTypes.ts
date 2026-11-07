@@ -22,18 +22,25 @@ export function computeInitialPositions(
 
   const cardWidth = 260
   const horizontalGap = 120
-  const verticalGap = 60
+  const verticalGap = 70
 
-  const cols = Math.max(1, Math.ceil(Math.sqrt(tables.length * 1.5)))
+  const cols = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(tables.length * 1.4))))
+  const colY: number[] = Array(cols).fill(60)
+  const colX: number[] = Array(cols).fill(0).map((_, i) => 60 + i * (cardWidth + horizontalGap))
 
-  tables.forEach((table, index) => {
+  tables.forEach((table) => {
     const key = `${table.schema}.${table.name}`
-    const colIndex = index % cols
-    const rowIndex = Math.floor(index / cols)
+    let targetCol = 0
+    for (let c = 1; c < cols; c++) {
+      if (colY[c] < colY[targetCol]) {
+        targetCol = c
+      }
+    }
 
-    const x = 60 + colIndex * (cardWidth + horizontalGap)
-    const y = 60 + rowIndex * (240 + verticalGap)
-    positions[key] = { x, y }
+    const estimatedHeight = 36 + table.columns.length * 27 + 10
+
+    positions[key] = { x: colX[targetCol], y: colY[targetCol] }
+    colY[targetCol] += estimatedHeight + verticalGap
   })
 
   return positions

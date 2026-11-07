@@ -5,7 +5,7 @@ import { ErdTable } from './erdTypes'
 export interface ErdTableNodeProps {
   table: ErdTable
   position: { x: number; y: number }
-  dimension?: { width: number; height: number }
+  dimension?: { width: number; height?: number }
   isHighlighted?: boolean
   isDimmed?: boolean
   searchQuery?: string
@@ -13,12 +13,13 @@ export interface ErdTableNodeProps {
   onResizeStart?: (e: React.MouseEvent, tableKey: string, currentWidth: number, currentHeight: number) => void
   onBrowse?: (schema: string, name: string) => void
   onOpenStructure?: (table: { schema: string; name: string }) => void
+  viewOnly?: boolean
 }
 
 export default function ErdTableNode({
   table,
   position,
-  dimension = { width: 260, height: 240 },
+  dimension,
   isHighlighted = false,
   isDimmed = false,
   searchQuery = '',
@@ -26,19 +27,23 @@ export default function ErdTableNode({
   onResizeStart,
   onBrowse,
   onOpenStructure,
+  viewOnly = false,
 }: ErdTableNodeProps) {
   const tableKey = `${table.schema}.${table.name}`
   const cardRef = useRef<HTMLDivElement | null>(null)
   const query = searchQuery.trim().toLowerCase()
   const tableMatches = query ? table.name.toLowerCase().includes(query) : false
+  const cardWidth = dimension?.width ?? 260
+  const cardHeight = dimension?.height
 
   return (
     <div
       ref={cardRef}
+      data-table-key={tableKey}
       style={{
         transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
-        width: dimension.width,
-        height: dimension.height ? `${dimension.height}px` : undefined,
+        width: cardWidth,
+        height: cardHeight ? `${cardHeight}px` : undefined,
       }}
       className={`absolute select-none rounded-lg border bg-panel transition-shadow erd-node ${
         isHighlighted
@@ -49,8 +54,12 @@ export default function ErdTableNode({
       } ${isDimmed ? 'opacity-35' : 'opacity-100'}`}
     >
       <div
-        onMouseDown={(e) => onDragStart(e, tableKey)}
-        className="flex cursor-grab items-center justify-between border-b border-line bg-surface/60 px-2.5 py-1.5 active:cursor-grabbing"
+        onMouseDown={(e) => {
+          if (!viewOnly) onDragStart(e, tableKey)
+        }}
+        className={`flex items-center justify-between border-b border-line bg-surface/60 px-2.5 py-1.5 ${
+          viewOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+        }`}
       >
         <div className="flex min-w-0 items-center gap-1.5">
           <Icon name="table" size={13} className="shrink-0 text-accent" />
@@ -93,7 +102,7 @@ export default function ErdTableNode({
 
       <div
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain divide-y divide-line/40 py-0.5"
-        style={{ maxHeight: dimension.height ? `${dimension.height - 32}px` : undefined }}
+        style={{ maxHeight: cardHeight ? `${cardHeight - 32}px` : undefined }}
         onWheel={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
       >
@@ -150,21 +159,23 @@ export default function ErdTableNode({
         })}
       </div>
 
-      <div
-        onMouseDown={(e) => {
-          e.stopPropagation()
-          const currentW = dimension.width
-          const currentH = dimension.height ?? (cardRef.current?.clientHeight || 240)
-          onResizeStart?.(e, tableKey, currentW, currentH)
-        }}
-        className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize flex items-end justify-end p-0.5 text-text-faint/50 hover:text-accent transition-colors"
-        title="Resize table card"
-      >
-        <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2">
-          <line x1="7" y1="1" x2="1" y2="7" />
-          <line x1="7" y1="4" x2="4" y2="7" />
-        </svg>
-      </div>
+      {!viewOnly ? (
+        <div
+          onMouseDown={(e) => {
+            e.stopPropagation()
+            const currentW = cardWidth
+            const currentH = cardHeight ?? (cardRef.current?.clientHeight || 240)
+            onResizeStart?.(e, tableKey, currentW, currentH)
+          }}
+          className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize flex items-end justify-end p-0.5 text-text-faint/50 hover:text-accent transition-colors"
+          title="Resize table card"
+        >
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.2">
+            <line x1="7" y1="1" x2="1" y2="7" />
+            <line x1="7" y1="4" x2="4" y2="7" />
+          </svg>
+        </div>
+      ) : null}
     </div>
   )
 }
