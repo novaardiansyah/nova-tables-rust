@@ -1,12 +1,12 @@
-export const DEFAULT_SYNC_INTERVAL_MS = 2 * 60 * 1000
+export const DEFAULT_SYNC_INTERVAL_SEC = 120
 
-let activeSyncIntervalMs: number = DEFAULT_SYNC_INTERVAL_MS
+let activeSyncIntervalMs: number = DEFAULT_SYNC_INTERVAL_SEC * 1000
 
 export function getSyncIntervalMs(): number {
   if (typeof window !== 'undefined') {
-    const envVal = Number(import.meta.env?.VITE_SYNC_INTERVAL_MS)
+    const envVal = Number(import.meta.env?.VITE_SYNC_INTERVAL_SEC)
     if (!Number.isNaN(envVal) && envVal > 0) {
-      return envVal
+      return envVal * 1000
     }
   }
   return activeSyncIntervalMs
