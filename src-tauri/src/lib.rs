@@ -10,6 +10,7 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .setup(|_app| {
       let _ = database::query_history_store::init();
+      let _ = database::local_store::init();
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -68,7 +69,22 @@ pub fn run() {
       commands::query::list_database_users,
       commands::query::create_database_user,
       commands::query::update_database_user_roles,
-      commands::query::drop_database_user
+      commands::query::drop_database_user,
+      commands::local_sync::local_upsert_folder,
+      commands::local_sync::local_delete_folder,
+      commands::local_sync::local_list_folders,
+      commands::local_sync::local_upsert_connection,
+      commands::local_sync::local_delete_connection,
+      commands::local_sync::local_list_connections,
+      commands::local_sync::local_upsert_saved_query,
+      commands::local_sync::local_delete_saved_query,
+      commands::local_sync::local_list_saved_queries,
+      commands::local_sync::local_upsert_meta,
+      commands::local_sync::local_get_meta,
+      commands::local_sync::local_delete_meta,
+      commands::local_sync::local_unsynced_batch,
+      commands::local_sync::local_pending_delete_uids,
+      commands::local_sync::local_clean_synced_batch
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

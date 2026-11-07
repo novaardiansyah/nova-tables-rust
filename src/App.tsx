@@ -27,6 +27,7 @@ import WorkspaceView from '@/components/WorkspaceView'
 import AppDialogs from '@/components/dialogs/AppDialogs'
 import AuthScreen from '@/components/auth/AuthScreen'
 import { Spinner } from '@/components/common/Icon'
+import { getSyncIntervalMs } from '@/config/syncConfig'
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
@@ -78,12 +79,12 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const SYNC_INTERVAL_MS = 2 * 60 * 1000
+    const intervalMs = getSyncIntervalMs()
     const timer = setInterval(() => {
-      void api.syncQueryHistoryBatch()
-    }, SYNC_INTERVAL_MS)
+      void api.syncAllBatch()
+    }, intervalMs)
 
-    void api.syncQueryHistoryBatch()
+    void api.syncAllBatch()
 
     return () => {
       clearInterval(timer)

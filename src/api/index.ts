@@ -104,6 +104,7 @@ function legacyCopyText(text: string): boolean {
 }
 
 let isSyncingQueryHistory = false
+let isSyncingAllBatch = false
 
 export const api = {
   registerUser: async (email: string, password: string, name?: string): Promise<AuthUser> => {
@@ -326,12 +327,20 @@ export const api = {
   },
 
   loadSettings: async (): Promise<Record<string, unknown> | null> => {
+    const local = await callCommand<{ ok: boolean; value: Record<string, unknown> | null }>('local_get_meta', { key: 'settings' })
+      .then((r) => r?.value)
+      .catch(() => null)
+
     try {
       const res = await apiRequest<{ ok: boolean; value: Record<string, unknown> | null }>('/api/member/meta/settings')
       if (res && res.value !== undefined) {
-        return res.value
+        return { ...(res.value || {}), ...(local || {}) }
       }
     } catch {
+    }
+
+    if (local) {
+      return local
     }
 
     try {
@@ -350,24 +359,26 @@ export const api = {
     } catch {
     }
 
-    try {
-      await apiRequest('/api/member/meta/settings', {
-        method: 'POST',
-        body: JSON.stringify({ value: settings }),
-      })
-    } catch {
-    }
+    await callCommand('local_upsert_meta', { key: 'settings', value: settings }).catch(() => null)
 
     return settings
   },
 
   loadWorkspaceState: async (): Promise<Record<string, unknown> | null> => {
+    const local = await callCommand<{ ok: boolean; value: Record<string, unknown> | null }>('local_get_meta', { key: 'workspace' })
+      .then((r) => r?.value)
+      .catch(() => null)
+
     try {
       const res = await apiRequest<{ ok: boolean; value: Record<string, unknown> | null }>('/api/member/meta/workspace')
       if (res && res.value !== undefined) {
-        return res.value
+        return { ...(res.value || {}), ...(local || {}) }
       }
     } catch {
+    }
+
+    if (local) {
+      return local
     }
 
     try {
@@ -386,13 +397,7 @@ export const api = {
     } catch {
     }
 
-    try {
-      await apiRequest('/api/member/meta/workspace', {
-        method: 'POST',
-        body: JSON.stringify({ value: workspace }),
-      })
-    } catch {
-    }
+    await callCommand('local_upsert_meta', { key: 'workspace', value: workspace }).catch(() => null)
 
     return workspace
   },
@@ -440,9 +445,8 @@ export const api = {
   },
 
   listConnections: async (): Promise<ConnectionModel[]> => {
-    const res = await apiRequest<{ ok: boolean; connections: ConnectionModel[] }>('/api/member/connections')
-    const list = res?.connections || []
-    return list.map((conn) => {
+    const localRes = await callCommand<{ ok: boolean; connections: ConnectionModel[] }>('local_list_connections').catch(() => null)
+    const localList: ConnectionModel[] = (localRes?.connections || []).map((conn) => {
       const explicitDb =
         conn.databaseName !== undefined && conn.databaseName !== null
           ? conn.databaseName
@@ -450,9 +454,7 @@ export const api = {
             ? conn.database
             : conn.lastDatabaseUsed || ''
       const password = conn.password ?? null
-      const hasPassword = Boolean(
-        conn.hasPassword || (password && password.length > 0),
-      )
+      const hasPassword = Boolean(conn.hasPassword || (password && password.length > 0))
       return {
         ...conn,
         password,
@@ -461,6 +463,39 @@ export const api = {
         hasPassword,
       }
     })
+
+    let apiList: ConnectionModel[] = []
+    try {
+      const res = await apiRequest<{ ok: boolean; connections: ConnectionModel[] }>('/api/member/connections')
+      apiList = (res?.connections || []).map((conn) => {
+        const explicitDb =
+          conn.databaseName !== undefined && conn.databaseName !== null
+            ? conn.databaseName
+            : conn.database !== undefined && conn.database !== null
+              ? conn.database
+              : conn.lastDatabaseUsed || ''
+        const password = conn.password ?? null
+        const hasPassword = Boolean(conn.hasPassword || (password && password.length > 0))
+        return {
+          ...conn,
+          password,
+          database: explicitDb,
+          databaseName: explicitDb,
+          hasPassword,
+        }
+      })
+    } catch {
+    }
+
+    const seen = new Set(localList.map((c) => String(c.id || (c as any).uid)))
+    const merged: ConnectionModel[] = [...localList]
+    for (const c of apiList) {
+      const key = String(c.id || (c as any).uid)
+      if (key && seen.has(key)) continue
+      if (key) seen.add(key)
+      merged.push(c)
+    }
+    return merged
   },
 
   getLastConnectedId: async (): Promise<string | null> => {
@@ -510,20 +545,36 @@ export const api = {
       payload.password = resolvedPassword
     }
 
-    const res = await apiRequest<{ ok: boolean; connection: ConnectionModel }>('/api/member/connections', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    })
+    await callCommand('local_upsert_connection', { input: payload }).catch(() => null)
 
-    const saved = res.connection
-    const explicitDb = saved.databaseName || saved.database || ''
-    const password = saved.password ?? resolvedPassword
-    return {
-      ...saved,
-      password,
+    const explicitDb = (connection.databaseName || connection.database || '') as string
+    const fallbackSaved: ConnectionModel = {
+      ...(connection as ConnectionModel),
+      id,
+      password: resolvedPassword,
       database: explicitDb,
       databaseName: explicitDb,
-      hasPassword: Boolean(saved.hasPassword || (password && password.length > 0)),
+      hasPassword: Boolean(resolvedPassword && resolvedPassword.length > 0),
+    }
+
+    try {
+      const res = await apiRequest<{ ok: boolean; connection: ConnectionModel }>('/api/member/connections', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+
+      const saved = res.connection
+      const savedDb = saved.databaseName || saved.database || explicitDb
+      const password = saved.password ?? resolvedPassword
+      return {
+        ...saved,
+        password,
+        database: savedDb,
+        databaseName: savedDb,
+        hasPassword: Boolean(saved.hasPassword || (password && password.length > 0)),
+      }
+    } catch {
+      return fallbackSaved
     }
   },
 
@@ -549,9 +600,14 @@ export const api = {
   },
 
   deleteConnection: async (id: string): Promise<unknown> => {
-    return apiRequest(`/api/member/connections/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    })
+    await callCommand('local_delete_connection', { id }).catch(() => null)
+    try {
+      return await apiRequest(`/api/member/connections/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      })
+    } catch {
+      return { ok: true }
+    }
   },
 
   moveConnection: async (id: string, folderId?: string | null): Promise<unknown> => {
@@ -570,22 +626,60 @@ export const api = {
   importAppConfig,
 
   listFolders: async (): Promise<FolderModel[]> => {
-    const res = await apiRequest<{ ok: boolean; folders: FolderModel[] }>('/api/member/folders')
-    return res?.folders || []
+    const localRes = await callCommand<{ ok: boolean; folders: FolderModel[] }>('local_list_folders').catch(() => null)
+    const localList = localRes?.folders || []
+
+    let apiList: FolderModel[] = []
+    try {
+      const res = await apiRequest<{ ok: boolean; folders: FolderModel[] }>('/api/member/folders')
+      apiList = res?.folders || []
+    } catch {
+    }
+
+    const seen = new Set(localList.map((f) => String(f.id || (f as any).uid)))
+    const merged = [...localList]
+    for (const f of apiList) {
+      const key = String(f.id || (f as any).uid)
+      if (key && seen.has(key)) continue
+      if (key) seen.add(key)
+      merged.push(f)
+    }
+    return merged
   },
 
   saveFolder: async (folder: Partial<FolderModel>): Promise<FolderModel> => {
-    const res = await apiRequest<{ ok: boolean; folder: FolderModel }>('/api/member/folders', {
-      method: 'POST',
-      body: JSON.stringify(folder),
-    })
-    return res.folder
+    const id = folder.id || (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0
+      const v = c === 'x' ? r : (r & 0x3) | 0x8
+      return v.toString(16)
+    }))
+    const folderWithId: FolderModel = {
+      ...(folder as FolderModel),
+      id,
+    }
+
+    await callCommand('local_upsert_folder', { input: folderWithId }).catch(() => null)
+
+    try {
+      const res = await apiRequest<{ ok: boolean; folder: FolderModel }>('/api/member/folders', {
+        method: 'POST',
+        body: JSON.stringify(folderWithId),
+      })
+      return res.folder
+    } catch {
+      return folderWithId
+    }
   },
 
   deleteFolder: async (id: string): Promise<unknown> => {
-    return apiRequest(`/api/member/folders/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    })
+    await callCommand('local_delete_folder', { id }).catch(() => null)
+    try {
+      return await apiRequest(`/api/member/folders/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      })
+    } catch {
+      return { ok: true }
+    }
   },
 
   reorderTree: async (input: unknown): Promise<{ connections: ConnectionModel[]; folders: FolderModel[];[key: string]: unknown }> => {
@@ -1033,97 +1127,157 @@ export const api = {
     return res?.deleted || 0
   },
 
-  syncQueryHistoryBatch: async (): Promise<{ synced: number }> => {
-    if (isSyncingQueryHistory) {
-      return { synced: 0 }
+  syncAllBatch: async (): Promise<{ synced: number; cleaned: number }> => {
+    if (isSyncingAllBatch) {
+      return { synced: 0, cleaned: 0 }
     }
     const token = getAuthToken()
     if (!token) {
-      return { synced: 0 }
+      return { synced: 0, cleaned: 0 }
     }
 
-    isSyncingQueryHistory = true
+    isSyncingAllBatch = true
     try {
-      const unsyncedRes = await callCommand<{ ok: boolean; items: QueryHistoryItem[] }>('get_unsynced_query_history').catch(() => null)
-      const items = unsyncedRes?.items || []
-      if (!items.length) {
-        return { synced: 0 }
+      const unsyncedRes = await callCommand<{
+        ok: boolean
+        folders: any[]
+        connections: any[]
+        savedQueries: any[]
+        queryHistory: any[]
+        meta: any[]
+      }>('local_unsynced_batch').catch(() => null)
+
+      const folders = unsyncedRes?.folders || []
+      const connections = unsyncedRes?.connections || []
+      const savedQueries = unsyncedRes?.savedQueries || []
+      const queryHistory = unsyncedRes?.queryHistory || []
+      const meta = unsyncedRes?.meta || []
+
+      const total = folders.length + connections.length + savedQueries.length + queryHistory.length + meta.length
+      if (total === 0) {
+        return { synced: 0, cleaned: 0 }
       }
 
-      const payload = items.map((item) => ({
-        uid: item.uid || item.id,
-        connectionId: item.connectionId || (item as any).connection_id,
-        databaseName: item.databaseName || (item as any).database_name || (item as any).database,
-        sql: item.sql,
-        status: item.status || 'success',
-        durationMs: item.durationMs || (item as any).duration_ms || 0,
-        rowCount: item.rowCount || (item as any).row_count || 0,
-        errorMessage: item.errorMessage || (item as any).error_message || null,
-        createdAt: item.createdAt || (item as any).created_at,
-      }))
+      const payload = {
+        folders,
+        connections,
+        savedQueries,
+        queryHistory,
+        meta,
+      }
 
-      const res = await apiRequest<{ ok: boolean; syncedUids?: string[]; synced_uids?: string[] }>(
-        '/api/member/query-history/batch',
-        {
-          method: 'POST',
-          body: JSON.stringify({ items: payload }),
-        }
+      const res = await apiRequest<{ ok: boolean; synced?: any }>('/api/member/sync/batch', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+
+      const confirmed = res?.synced || {}
+      const cleanedRes = await callCommand<{ ok: boolean; cleanedFolders: number; cleanedConnections: number; cleanedSavedQueries: number; cleanedQueryHistory: number; cleanedMeta: number }>('local_clean_synced_batch', { confirmed }).catch(() => null)
+
+      const syncedCount = Object.values(confirmed).reduce(
+        (acc: number, v: any) => acc + (Array.isArray(v) ? v.length : 0),
+        0,
       )
+      const cleanedCount =
+        (cleanedRes?.cleanedFolders || 0) +
+        (cleanedRes?.cleanedConnections || 0) +
+        (cleanedRes?.cleanedSavedQueries || 0) +
+        (cleanedRes?.cleanedQueryHistory || 0) +
+        (cleanedRes?.cleanedMeta || 0)
 
-      const confirmedUids = res?.syncedUids || res?.synced_uids || []
-      if (confirmedUids.length > 0) {
-        await callCommand('delete_synced_query_history', { uids: confirmedUids }).catch(() => null)
-      }
-      return { synced: confirmedUids.length }
+      return { synced: syncedCount, cleaned: cleanedCount }
     } catch {
-      return { synced: 0 }
+      return { synced: 0, cleaned: 0 }
     } finally {
-      isSyncingQueryHistory = false
+      isSyncingAllBatch = false
     }
   },
 
   listSavedQueries: async (connectionId: string, database: string): Promise<SavedQueryItem[]> => {
-    const params = new URLSearchParams()
-    if (connectionId) params.append('connectionId', connectionId)
-    if (database) params.append('database', database)
+    const localQueries = await callCommand<{ ok: boolean; queries: SavedQueryItem[] }>('local_list_saved_queries', { connectionId, database })
+      .then((r) => r?.queries || [])
+      .catch(() => [])
 
-    const res = await apiRequest<{ ok: boolean; queries: SavedQueryItem[] }>(`/api/member/saved-queries?${params.toString()}`)
-    return res?.queries || []
+    let apiList: SavedQueryItem[] = []
+    try {
+      const params = new URLSearchParams()
+      if (connectionId) params.append('connectionId', connectionId)
+      if (database) params.append('database', database)
+      const res = await apiRequest<{ ok: boolean; queries: SavedQueryItem[] }>(`/api/member/saved-queries?${params.toString()}`)
+      apiList = res?.queries || []
+    } catch {
+    }
+
+    const seen = new Set(localQueries.map((q) => String(q.id || (q as any).uid)))
+    const merged = [...localQueries]
+    for (const q of apiList) {
+      const key = String(q.id || (q as any).uid)
+      if (key && seen.has(key)) continue
+      if (key) seen.add(key)
+      merged.push(q)
+    }
+    return merged
   },
 
   saveSavedQuery: async (input: {
+    id?: string | null
     connectionId?: string | null
     databaseName?: string | null
     name: string
     sql: string
   }): Promise<SavedQueryItem | null> => {
-    const res = await apiRequest<{ ok: boolean; query: SavedQueryItem }>('/api/member/saved-queries', {
-      method: 'POST',
-      body: JSON.stringify({
-        input,
-        connectionId: input.connectionId,
-        databaseName: input.databaseName,
-        name: input.name,
-        sql: input.sql,
-      }),
-    })
-    return res?.query || null
+    const id = input.id || (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0
+      const v = c === 'x' ? r : (r & 0x3) | 0x8
+      return v.toString(16)
+    }))
+
+    const payload: { id: string; connectionId?: string | null; databaseName?: string | null; name: string; sql: string } = {
+      id,
+      connectionId: input.connectionId,
+      databaseName: input.databaseName,
+      name: input.name,
+      sql: input.sql,
+    }
+
+    await callCommand('local_upsert_saved_query', { input: payload }).catch(() => null)
+
+    try {
+      const res = await apiRequest<{ ok: boolean; query: SavedQueryItem }>('/api/member/saved-queries', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+      return res?.query || payload
+    } catch {
+      return payload
+    }
   },
 
   renameSavedQuery: async (input: {
     id: string
     name: string
   }): Promise<SavedQueryItem | null> => {
-    const res = await apiRequest<{ ok: boolean; query: SavedQueryItem }>('/api/member/saved-queries/rename', {
-      method: 'POST',
-      body: JSON.stringify({ input }),
-    })
-    return res?.query || null
+    await callCommand('local_upsert_saved_query', { input: { ...input, id: input.id } }).catch(() => null)
+
+    try {
+      const res = await apiRequest<{ ok: boolean; query: SavedQueryItem }>('/api/member/saved-queries/rename', {
+        method: 'POST',
+        body: JSON.stringify({ input }),
+      })
+      return res?.query || { id: input.id, name: input.name, sql: '' }
+    } catch {
+      return { id: input.id, name: input.name, sql: '' }
+    }
   },
 
   deleteSavedQuery: async (id: string): Promise<unknown> => {
-    return apiRequest(`/api/member/saved-queries/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    })
+    await callCommand('local_delete_saved_query', { id }).catch(() => null)
+    try {
+      return await apiRequest(`/api/member/saved-queries/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      })
+    } catch {
+      return { ok: true }
+    }
   },
 }
