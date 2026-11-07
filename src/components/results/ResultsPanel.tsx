@@ -591,7 +591,7 @@ export default function ResultsPanel({
             title="Generate Entity Relationship Diagram for query tables"
             className="flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[length:var(--app-text-11)] text-text-muted transition-colors hover:bg-tint/[0.03] hover:text-text"
           >
-            <Icon name="er-diagram" size={12} className="text-accent" />
+            <Icon name="er-diagram" size={12} />
             Generate ERD
           </button>
         ) : null}

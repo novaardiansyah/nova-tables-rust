@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/api'
+import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu'
 import Icon, { Spinner } from '@/components/common/Icon'
 import { ErdTable, ErdRelation, computeInitialPositions } from './erdTypes'
 import ErdTableNode from './ErdTableNode'
@@ -39,6 +40,7 @@ export default function ErdViewer({
   const [search, setSearch] = useState('')
   const [hoveredRelation, setHoveredRelation] = useState<ErdRelation | null>(null)
   const [hoveredTableKey, setHoveredTableKey] = useState<string | null>(null)
+  const [actionsMenu, setActionsMenu] = useState<{ x: number; y: number } | null>(null)
 
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const isDraggingCanvasRef = useRef(false)
@@ -49,7 +51,7 @@ export default function ErdViewer({
   const tableDragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const initialTablePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (currentDepth: number = depth) => {
     if (!connectionId || !database) return
     setLoading(true)
     setError(null)
@@ -59,6 +61,7 @@ export default function ErdViewer({
         database,
         initialTables.length > 0 ? initialTables : [],
         includeRelated,
+        currentDepth,
       )
       if (res && res.ok) {
         setTables(res.tables || [])
@@ -73,7 +76,7 @@ export default function ErdViewer({
     } finally {
       setLoading(false)
     }
-  }, [connectionId, database, initialTables, includeRelated])
+  }, [connectionId, database, initialTables, includeRelated, depth])
 
   useEffect(() => {
     void loadData()
@@ -196,23 +199,7 @@ export default function ErdViewer({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-base">
-      <div className="flex h-10 shrink-0 items-center justify-between border-b border-line bg-panel px-3">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-[length:var(--app-text-12)] font-semibold text-text-strong">
-            <Icon name="er-diagram" size={15} className="text-accent" />
-            <span>Entity Relationship Diagram</span>
-            <span className="rounded bg-tint/[0.08] px-1.5 py-0.5 text-[length:var(--app-text-10)] font-normal text-text-muted">
-              {database}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1 text-[length:var(--app-text-11)] text-text-faint">
-            <span>{tables.length} tables</span>
-            <span>·</span>
-            <span>{relations.length} relationships</span>
-          </div>
-        </div>
-
+      <div className="flex h-10 shrink-0 items-center justify-end border-b border-line bg-panel px-3">
         <div className="flex items-center gap-2">
           <div className="relative flex items-center">
             <Icon name="search" size={12} className="pointer-events-none absolute left-2 text-text-faint" />
@@ -232,25 +219,6 @@ export default function ErdViewer({
                 <Icon name="x" size={10} />
               </button>
             ) : null}
-          </div>
-
-          <div className="h-4 w-px bg-line" />
-
-          <div className="flex items-center gap-0.5 rounded-md border border-line bg-surface p-0.5 text-[length:var(--app-text-11)]">
-            <span className="px-1.5 text-text-faint">Depth:</span>
-            {[1, 2, 3].map((d) => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => setDepth(d)}
-                className={`rounded px-1.5 py-0.5 font-medium transition-colors ${
-                  depth === d ? 'bg-accent text-on-accent' : 'text-text-muted hover:text-text'
-                }`}
-                title={`Level ${d} relations`}
-              >
-                {d}
-              </button>
-            ))}
           </div>
 
           <div className="h-4 w-px bg-line" />
@@ -288,27 +256,67 @@ export default function ErdViewer({
             >
               <Icon name="grid" size={12} />
             </button>
-            <button
-              type="button"
-              onClick={handleAutoArrange}
-              className="icon-btn h-7 w-7 text-text-muted hover:text-text"
-              title="Auto arrange tables"
-            >
-              <Icon name="refresh" size={12} />
-            </button>
           </div>
 
           <div className="h-4 w-px bg-line" />
 
           <button
             type="button"
-            onClick={handleExportSvg}
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect()
+              setActionsMenu({ x: rect.right - 188, y: rect.bottom + 4 })
+            }}
             className="flex h-7 items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-[length:var(--app-text-11)] text-text-muted hover:border-line-strong hover:text-text"
-            title="Export diagram as SVG"
+            title="More diagram actions"
           >
-            <Icon name="download" size={12} />
-            <span>Export</span>
+            <Icon name="more-horizontal" size={13} />
+            <span>Actions</span>
           </button>
+
+          {actionsMenu ? (
+            <ContextMenu
+              x={actionsMenu.x}
+              y={actionsMenu.y}
+              items={
+                [
+                  {
+                    id: 'depth',
+                    label: `Relation Depth: Level ${depth}`,
+                    children: [
+                      {
+                        id: 'depth-1',
+                        label: depth === 1 ? '✓ Level 1 (Direct)' : 'Level 1 (Direct)',
+                        onSelect: () => {
+                          setDepth(1)
+                          void loadData(1)
+                        },
+                      },
+                      {
+                        id: 'depth-2',
+                        label: depth === 2 ? '✓ Level 2 (2 Levels)' : 'Level 2 (2 Levels)',
+                        onSelect: () => {
+                          setDepth(2)
+                          void loadData(2)
+                        },
+                      },
+                      {
+                        id: 'depth-3',
+                        label: depth === 3 ? '✓ Level 3 (3 Levels)' : 'Level 3 (3 Levels)',
+                        onSelect: () => {
+                          setDepth(3)
+                          void loadData(3)
+                        },
+                      },
+                    ],
+                  },
+                  { id: 'auto-arrange', label: 'Auto-arrange Tables', onSelect: handleAutoArrange },
+                  { id: 'reset-view', label: 'Reset View (100%)', onSelect: handleResetView },
+                  { id: 'export-svg', label: 'Export as SVG', onSelect: handleExportSvg },
+                ] as ContextMenuItem[]
+              }
+              onClose={() => setActionsMenu(null)}
+            />
+          ) : null}
         </div>
       </div>
 

@@ -33,7 +33,7 @@ export default function ErdTableNode({
         transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
         width: 260,
       }}
-      className={`absolute select-none rounded-lg border bg-panel transition-shadow ${
+      className={`absolute select-none rounded-lg border bg-panel transition-shadow erd-node ${
         isHighlighted
           ? 'border-accent shadow-md shadow-accent/20 ring-1 ring-accent z-20'
           : tableMatches
@@ -84,7 +84,11 @@ export default function ErdTableNode({
         </div>
       </div>
 
-      <div className="max-h-[260px] overflow-y-auto divide-y divide-line/40 py-0.5">
+      <div
+  className="max-h-[260px] overflow-y-auto overflow-x-hidden overscroll-contain divide-y divide-line/40 py-0.5"
+  onWheel={(e) => e.stopPropagation()}
+  onMouseDown={(e) => e.stopPropagation()}
+>
         {table.columns.map((col) => {
           const colMatches = query ? col.name.toLowerCase().includes(query) : false
           return (

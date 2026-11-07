@@ -934,13 +934,19 @@ export const api = {
     return res?.tables || []
   },
 
-  getErdData: async (connectionId: string, database: string, tables: string[], includeRelated: boolean): Promise<ErdData | null> => {
+  getErdData: async (
+    connectionId: string,
+    database: string,
+    tables: string[],
+    includeRelated: boolean,
+    depth: number = 1
+  ): Promise<ErdData | null> => {
     const res = await callCommand<ErdData>('get_erd_data', {
       connectionId,
       database,
       tables,
       includeRelated,
-      depth: 1,
+      depth,
     })
     return res || null
   },
