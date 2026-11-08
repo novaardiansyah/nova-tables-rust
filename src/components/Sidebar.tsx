@@ -426,6 +426,22 @@ export default function Sidebar({
     const handleSessionDragStart = (event: React.DragEvent<HTMLDivElement>) => {
       event.dataTransfer.effectAllowed = 'move'
       event.dataTransfer.setData('text/plain', item.connectionId)
+      const icon = document.createElement('div')
+      icon.style.width = '24px'
+      icon.style.height = '24px'
+      icon.style.display = 'flex'
+      icon.style.alignItems = 'center'
+      icon.style.justifyContent = 'center'
+      icon.style.position = 'fixed'
+      icon.style.top = '-9999px'
+      icon.style.left = '-9999px'
+      icon.style.borderRadius = '4px'
+      icon.style.backgroundColor = 'rgba(22, 28, 38, 0.95)'
+      icon.style.color = '#94a3b8'
+      icon.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.4" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.4" fill="currentColor" stroke="none"/></svg>`
+      document.body.appendChild(icon)
+      event.dataTransfer.setDragImage(icon, 12, 12)
+      requestAnimationFrame(() => icon.remove())
       setDragSessionId(item.connectionId)
     }
 
@@ -468,10 +484,10 @@ export default function Sidebar({
           onDragEnd={handleSessionDragEnd}
           className={`group relative flex items-center gap-1.5 rounded-md pr-1 ${
             isActive ? 'bg-accent-soft' : 'hover:bg-tint/[0.03]'
-          } ${isDragging ? 'cursor-grabbing opacity-40' : 'cursor-grab active:cursor-grabbing'} ${
-            dropIndicator('before') ? 'border-t-[3px] border-t-accent' : ''
-          } ${dropIndicator('after') ? 'border-b-[3px] border-b-accent' : ''}`}
+          } ${isDragging ? 'cursor-grabbing opacity-40' : 'cursor-grab active:cursor-grabbing'}`}
         >
+          {dropIndicator('before') ? <span className="pointer-events-none absolute -top-0.5 left-0 right-0 h-[2px] rounded-full bg-accent" /> : null}
+          {dropIndicator('after') ? <span className="pointer-events-none absolute -bottom-0.5 left-0 right-0 h-[2px] rounded-full bg-accent" /> : null}
           <button
             type="button"
             onClick={() => (isActive ? setExpanded((value) => !value) : onActivateSession(item.connectionId))}

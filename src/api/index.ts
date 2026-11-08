@@ -507,6 +507,20 @@ export const api = {
       }
     } catch {
     }
+    if (order.length === 0) {
+      try {
+        const metaRes = await callCommand<{ ok: boolean; value: unknown }>('local_get_meta', { key: 'tree_order' }).catch(() => null)
+        if (metaRes?.value) {
+          const parsed = typeof metaRes.value === 'string' ? JSON.parse(metaRes.value) : metaRes.value
+          order = (parsed as { connections?: string[] })?.connections || []
+          try {
+            localStorage.setItem('nova_tables_tree_order', JSON.stringify(parsed))
+          } catch {
+          }
+        }
+      } catch {
+      }
+    }
     if (order.length > 0) {
       const orderMap = new Map(order.map((id, idx) => [id, idx]))
       merged.sort((a, b) => {
@@ -676,6 +690,20 @@ export const api = {
       }
     } catch {
     }
+    if (order.length === 0) {
+      try {
+        const metaRes = await callCommand<{ ok: boolean; value: unknown }>('local_get_meta', { key: 'tree_order' }).catch(() => null)
+        if (metaRes?.value) {
+          const parsed = typeof metaRes.value === 'string' ? JSON.parse(metaRes.value) : metaRes.value
+          order = (parsed as { folders?: string[] })?.folders || []
+          try {
+            localStorage.setItem('nova_tables_tree_order', JSON.stringify(parsed))
+          } catch {
+          }
+        }
+      } catch {
+      }
+    }
     if (order.length > 0) {
       const orderMap = new Map(order.map((id, idx) => [id, idx]))
       merged.sort((a, b) => {
@@ -733,6 +761,9 @@ export const api = {
       folderParents?: Record<string, string | null>
     }
 
+    // Client-first: persist tree order directly to local SQLite (synced=0).
+    // No inline API call here; centralized background sync (api.syncAllBatch)
+    // driven by VITE_SYNC_INTERVAL_SEC will pick up the unsynced meta.
     try {
       localStorage.setItem(
         'nova_tables_tree_order',
@@ -750,27 +781,6 @@ export const api = {
         connections: payload.connections || [],
         folders: payload.folders || [],
       },
-    }).catch(() => null)
-
-    if (payload.connectionFolders) {
-      for (const [connId, folderId] of Object.entries(payload.connectionFolders)) {
-        await api.moveConnection(connId, folderId).catch(() => null)
-      }
-    }
-
-    if (payload.folderParents) {
-      for (const [folderId, parentId] of Object.entries(payload.folderParents)) {
-        const folders = await api.listFolders().catch(() => [])
-        const existing = folders.find((f) => f.id === folderId)
-        if (existing) {
-          await api.saveFolder({ ...existing, parentId }).catch(() => null)
-        }
-      }
-    }
-
-    await apiRequest('/api/member/connections/reorder', {
-      method: 'POST',
-      body: JSON.stringify(input),
     }).catch(() => null)
 
     return {

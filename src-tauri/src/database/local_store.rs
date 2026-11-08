@@ -650,8 +650,15 @@ pub fn clean_synced_batch(confirmed: &Value) -> Result<Value, String> {
   if let Some(folder_uids) = confirmed.get("folders").and_then(|v| v.as_array()) {
     for u in folder_uids {
       if let Some(uid) = u.as_str() {
-        let count = conn.execute("DELETE FROM local_folders WHERE uid = ?1", params![uid]).unwrap_or(0);
-        cleaned_folders += count;
+        let count = conn.execute(
+          "UPDATE local_folders SET synced = 1 WHERE uid = ?1 AND action != 'delete'",
+          params![uid],
+        ).unwrap_or(0);
+        let del = conn.execute(
+          "DELETE FROM local_folders WHERE uid = ?1 AND action = 'delete'",
+          params![uid],
+        ).unwrap_or(0);
+        cleaned_folders += count + del;
       }
     }
   }
@@ -660,8 +667,15 @@ pub fn clean_synced_batch(confirmed: &Value) -> Result<Value, String> {
   if let Some(conn_uids) = confirmed.get("connections").and_then(|v| v.as_array()) {
     for u in conn_uids {
       if let Some(uid) = u.as_str() {
-        let count = conn.execute("DELETE FROM local_connections WHERE uid = ?1", params![uid]).unwrap_or(0);
-        cleaned_conns += count;
+        let count = conn.execute(
+          "UPDATE local_connections SET synced = 1 WHERE uid = ?1 AND action != 'delete'",
+          params![uid],
+        ).unwrap_or(0);
+        let del = conn.execute(
+          "DELETE FROM local_connections WHERE uid = ?1 AND action = 'delete'",
+          params![uid],
+        ).unwrap_or(0);
+        cleaned_conns += count + del;
       }
     }
   }
@@ -670,8 +684,15 @@ pub fn clean_synced_batch(confirmed: &Value) -> Result<Value, String> {
   if let Some(query_uids) = confirmed.get("savedQueries").and_then(|v| v.as_array()) {
     for u in query_uids {
       if let Some(uid) = u.as_str() {
-        let count = conn.execute("DELETE FROM local_saved_queries WHERE uid = ?1", params![uid]).unwrap_or(0);
-        cleaned_queries += count;
+        let count = conn.execute(
+          "UPDATE local_saved_queries SET synced = 1 WHERE uid = ?1 AND action != 'delete'",
+          params![uid],
+        ).unwrap_or(0);
+        let del = conn.execute(
+          "DELETE FROM local_saved_queries WHERE uid = ?1 AND action = 'delete'",
+          params![uid],
+        ).unwrap_or(0);
+        cleaned_queries += count + del;
       }
     }
   }
@@ -688,8 +709,15 @@ pub fn clean_synced_batch(confirmed: &Value) -> Result<Value, String> {
   if let Some(meta_keys) = confirmed.get("meta").and_then(|v| v.as_array()) {
     for k in meta_keys {
       if let Some(key) = k.as_str() {
-        let count = conn.execute("DELETE FROM local_meta WHERE key = ?1", params![key]).unwrap_or(0);
-        cleaned_meta += count;
+        let count = conn.execute(
+          "UPDATE local_meta SET synced = 1 WHERE key = ?1 AND action != 'delete'",
+          params![key],
+        ).unwrap_or(0);
+        let del = conn.execute(
+          "DELETE FROM local_meta WHERE key = ?1 AND action = 'delete'",
+          params![key],
+        ).unwrap_or(0);
+        cleaned_meta += count + del;
       }
     }
   }
