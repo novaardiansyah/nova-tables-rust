@@ -39,6 +39,7 @@ export function useSessionManager({
   const [databaseCreate, setDatabaseCreate] = useState<{ error?: string | null } | null>(null)
   const [databaseCreateBusy, setDatabaseCreateBusy] = useState(false)
   const [appVersion, setAppVersion] = useState('')
+  const duplicateSaveInFlightRef = useRef(false)
 
   const sessionsRef = useRef<Record<string, SessionData>>({})
   const activeIdRef = useRef<string | null>(null)
@@ -511,6 +512,8 @@ export function useSessionManager({
 
   const handleDuplicateConnection = useCallback(
     async (connection: any) => {
+      if (duplicateSaveInFlightRef.current) return
+      duplicateSaveInFlightRef.current = true
       try {
         const saved = connection.id
           ? await api.duplicateConnection(connection.id, `${connection.name} (copy)`)
@@ -532,6 +535,8 @@ export function useSessionManager({
         }
       } catch (error: any) {
         showBanner('error', error.message)
+      } finally {
+        duplicateSaveInFlightRef.current = false
       }
     },
     [showBanner],
@@ -648,6 +653,24 @@ export function useSessionManager({
   const handleReorderTree = useCallback(
     async (payload: any) => {
       try {
+        const connectionOrder = Array.isArray(payload?.connections) ? payload.connections : []
+        const folderOrder = Array.isArray(payload?.folders) ? payload.folders : []
+        if (connectionOrder.length > 0) {
+          setConnections((prev) => {
+            const byId = new Map(prev.map((c: any) => [c.id, c]))
+            return connectionOrder
+              .map((id: string) => byId.get(id))
+              .filter(Boolean)
+          })
+        }
+        if (folderOrder.length > 0) {
+          setFolders((prev) => {
+            const byId = new Map(prev.map((f: any) => [f.id, f]))
+            return folderOrder
+              .map((id: string) => byId.get(id))
+              .filter(Boolean)
+          })
+        }
         const result = await api.reorderTree(payload)
         setConnections(result.connections)
         setFolders(result.folders)

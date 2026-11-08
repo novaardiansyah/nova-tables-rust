@@ -81,6 +81,7 @@ export interface SidebarProps {
   canCreateDatabase?: boolean
   canDropDatabase?: boolean
   canManageUsers?: boolean
+  onReorderSessions?: (fromConnectionId: string, toConnectionId: string, position: 'before' | 'after') => void
 }
 
 type MenuState =
@@ -128,12 +129,15 @@ export default function Sidebar({
   canCreateDatabase = true,
   canDropDatabase = true,
   canManageUsers = true,
+  onReorderSessions,
 }: SidebarProps) {
   const [expanded, setExpanded] = useState(true)
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
   const [menu, setMenu] = useState<MenuState>(null)
   const [filter, setFilter] = useState('')
   const [hoverOpen, setHoverOpen] = useState(false)
+  const [dragSessionId, setDragSessionId] = useState<string | null>(null)
+  const [dropSessionTarget, setDropSessionTarget] = useState<{ connectionId: string; position: 'before' | 'after' } | null>(null)
   const hoverOpenRef = useRef(false)
   const closeTimer = useRef<number | null>(null)
   const railRef = useRef<HTMLElement | null>(null)
@@ -415,13 +419,58 @@ export default function Sidebar({
   const renderSession = (item: SidebarSessionItem) => {
     const isActive = item.connectionId === activeConnectionId
 
+    const isDragging = dragSessionId === item.connectionId
+    const dropIndicator = (position: 'before' | 'after') =>
+      dropSessionTarget?.connectionId === item.connectionId && dropSessionTarget.position === position
+
+    const handleSessionDragStart = (event: React.DragEvent<HTMLDivElement>) => {
+      event.dataTransfer.effectAllowed = 'move'
+      event.dataTransfer.setData('text/plain', item.connectionId)
+      setDragSessionId(item.connectionId)
+    }
+
+    const handleSessionDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+      if (!dragSessionId || dragSessionId === item.connectionId) return
+      event.preventDefault()
+      event.stopPropagation()
+      event.dataTransfer.dropEffect = 'move'
+      const rect = event.currentTarget.getBoundingClientRect()
+      const mid = rect.top + rect.height / 2
+      setDropSessionTarget({ connectionId: item.connectionId, position: event.clientY < mid ? 'before' : 'after' })
+    }
+
+    const handleSessionDrop = (event: React.DragEvent<HTMLDivElement>) => {
+      if (!dragSessionId || dragSessionId === item.connectionId) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (dropSessionTarget?.connectionId === item.connectionId) {
+        onReorderSessions?.(dragSessionId, item.connectionId, dropSessionTarget.position)
+      } else {
+        onReorderSessions?.(dragSessionId, item.connectionId, 'after')
+      }
+      setDragSessionId(null)
+      setDropSessionTarget(null)
+    }
+
+    const handleSessionDragEnd = () => {
+      setDragSessionId(null)
+      setDropSessionTarget(null)
+    }
+
     return (
       <div key={item.connectionId} className="mb-1">
         <div
+          draggable
           onContextMenu={(event) => handleConnectionContextMenu(event, item)}
+          onDragStart={handleSessionDragStart}
+          onDragOver={handleSessionDragOver}
+          onDrop={handleSessionDrop}
+          onDragEnd={handleSessionDragEnd}
           className={`group relative flex items-center gap-1.5 rounded-md pr-1 ${
             isActive ? 'bg-accent-soft' : 'hover:bg-tint/[0.03]'
-          }`}
+          } ${isDragging ? 'cursor-grabbing opacity-40' : 'cursor-grab active:cursor-grabbing'} ${
+            dropIndicator('before') ? 'border-t-[3px] border-t-accent' : ''
+          } ${dropIndicator('after') ? 'border-b-[3px] border-b-accent' : ''}`}
         >
           <button
             type="button"

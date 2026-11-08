@@ -534,22 +534,22 @@ export default function ConnectionsScreen({
   }
 
   const connectionMenuItems = (connection: ConnectionItem): ContextMenuItem[] => [
-    { id: 'open', label: 'Open connection', onSelect: () => onOpen(connection) },
-    {
-      id: 'test',
-      label: testingConnectionId === connection.id ? 'Testing connection…' : 'Test connection',
-      onSelect: () => handleTestConnection(connection),
-    },
-    { id: 'edit', label: 'Edit connection', onSelect: () => onEditConnection(connection) },
-    { id: 'replicate', label: 'Replicate connection', onSelect: () => onDuplicateConnection(connection) },
+    { id: 'delete', label: 'Delete Connection', onSelect: () => onDeleteConnection(connection) },
+    { id: 'edit', label: 'Edit Connection', onSelect: () => onEditConnection(connection) },
     {
       id: 'move',
-      label: 'Move to folder',
+      label: 'Move To Folder',
       children: folderMoveItems((folderId) => onMoveConnection(connection, folderId), {
         skipFolderId: connection.folderId ?? null,
       }),
     },
-    { id: 'delete', label: 'Delete connection', onSelect: () => onDeleteConnection(connection) },
+    { id: 'open', label: 'Open Connection', onSelect: () => onOpen(connection) },
+    { id: 'replicate', label: 'Replicate Connection', onSelect: () => onDuplicateConnection(connection) },
+    {
+      id: 'test',
+      label: testingConnectionId === connection.id ? 'Testing Connection…' : 'Test Connection',
+      onSelect: () => handleTestConnection(connection),
+    },
   ]
 
   const folderMenuItems = (folder: FolderItem): ContextMenuItem[] => [

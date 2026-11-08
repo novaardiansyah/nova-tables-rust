@@ -498,6 +498,26 @@ export const api = {
       if (key) seen.add(key)
       merged.push(c)
     }
+
+    let order: string[] = []
+    try {
+      const stored = localStorage.getItem('nova_tables_tree_order')
+      if (stored) {
+        order = JSON.parse(stored).connections || []
+      }
+    } catch {
+    }
+    if (order.length > 0) {
+      const orderMap = new Map(order.map((id, idx) => [id, idx]))
+      merged.sort((a, b) => {
+        const idA = String(a.id || (a as any).uid)
+        const idB = String(b.id || (b as any).uid)
+        const idxA = orderMap.has(idA) ? orderMap.get(idA)! : 999999
+        const idxB = orderMap.has(idB) ? orderMap.get(idB)! : 999999
+        return idxA - idxB
+      })
+    }
+
     return merged
   },
 
@@ -647,6 +667,26 @@ export const api = {
       if (key) seen.add(key)
       merged.push(f)
     }
+
+    let order: string[] = []
+    try {
+      const stored = localStorage.getItem('nova_tables_tree_order')
+      if (stored) {
+        order = JSON.parse(stored).folders || []
+      }
+    } catch {
+    }
+    if (order.length > 0) {
+      const orderMap = new Map(order.map((id, idx) => [id, idx]))
+      merged.sort((a, b) => {
+        const idA = String(a.id || (a as any).uid)
+        const idB = String(b.id || (b as any).uid)
+        const idxA = orderMap.has(idA) ? orderMap.get(idA)! : 999999
+        const idxB = orderMap.has(idB) ? orderMap.get(idB)! : 999999
+        return idxA - idxB
+      })
+    }
+
     return merged
   },
 
@@ -686,10 +726,53 @@ export const api = {
   },
 
   reorderTree: async (input: unknown): Promise<{ connections: ConnectionModel[]; folders: FolderModel[];[key: string]: unknown }> => {
+    const payload = (input || {}) as {
+      connections?: string[]
+      folders?: string[]
+      connectionFolders?: Record<string, string | null>
+      folderParents?: Record<string, string | null>
+    }
+
+    try {
+      localStorage.setItem(
+        'nova_tables_tree_order',
+        JSON.stringify({
+          connections: payload.connections || [],
+          folders: payload.folders || [],
+        }),
+      )
+    } catch {
+    }
+
+    await callCommand('local_upsert_meta', {
+      key: 'tree_order',
+      value: {
+        connections: payload.connections || [],
+        folders: payload.folders || [],
+      },
+    }).catch(() => null)
+
+    if (payload.connectionFolders) {
+      for (const [connId, folderId] of Object.entries(payload.connectionFolders)) {
+        await api.moveConnection(connId, folderId).catch(() => null)
+      }
+    }
+
+    if (payload.folderParents) {
+      for (const [folderId, parentId] of Object.entries(payload.folderParents)) {
+        const folders = await api.listFolders().catch(() => [])
+        const existing = folders.find((f) => f.id === folderId)
+        if (existing) {
+          await api.saveFolder({ ...existing, parentId }).catch(() => null)
+        }
+      }
+    }
+
     await apiRequest('/api/member/connections/reorder', {
       method: 'POST',
       body: JSON.stringify(input),
-    })
+    }).catch(() => null)
+
     return {
       connections: await api.listConnections(),
       folders: await api.listFolders(),

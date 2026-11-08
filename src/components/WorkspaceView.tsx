@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useCallback } from 'react'
 import Sidebar, { SidebarSessionItem } from '@/components/Sidebar'
 import WorkspaceHeader from '@/components/WorkspaceHeader'
 import TabBar from '@/components/TabBar'
@@ -155,17 +155,65 @@ export default function WorkspaceView({
     [session?.tables, session?.columns, session?.connection?.driverType, session?.activeDatabase],
   )
 
-  const sidebarSessions: SidebarSessionItem[] = useMemo(
-    () =>
-      Object.values(sessions).map((s: any) => ({
-        connectionId: s.connectionId,
-        connection: s.connection,
-        activeDatabase: s.activeDatabase,
-        databases: s.databases || [],
-        tables: s.tables,
-        modules: s.modules,
-      })),
-    [sessions],
+  const sidebarSessions: SidebarSessionItem[] = useMemo(() => {
+    const sessionMap = new Map<string, any>(Object.entries(sessions))
+    const ordered: SidebarSessionItem[] = []
+    const seen = new Set<string>()
+
+    const connList = sessionManager.connections || []
+    for (const conn of connList) {
+      const s = sessionMap.get(conn.id)
+      if (s) {
+        seen.add(conn.id)
+        ordered.push({
+          connectionId: s.connectionId,
+          connection: s.connection,
+          activeDatabase: s.activeDatabase,
+          databases: s.databases || [],
+          tables: s.tables,
+          modules: s.modules,
+        })
+      }
+    }
+
+    for (const [id, s] of sessionMap.entries()) {
+      if (!seen.has(id)) {
+        ordered.push({
+          connectionId: s.connectionId,
+          connection: s.connection,
+          activeDatabase: s.activeDatabase,
+          databases: s.databases || [],
+          tables: s.tables,
+          modules: s.modules,
+        })
+      }
+    }
+
+    return ordered
+  }, [sessions, sessionManager.connections])
+
+  const handleReorderSessions = useCallback(
+    (fromConnectionId: string, toConnectionId: string, position: 'before' | 'after') => {
+      if (fromConnectionId === toConnectionId) return
+      const currentList: any[] = sessionManager.connections || []
+      const currentIds = currentList.map((c: any) => c.id)
+      if (!currentIds.includes(fromConnectionId) || !currentIds.includes(toConnectionId)) return
+
+      const next = currentIds.filter((id: string) => id !== fromConnectionId)
+      const toIndex = next.indexOf(toConnectionId)
+      if (toIndex < 0) return
+      const insertIndex = position === 'before' ? toIndex : toIndex + 1
+      next.splice(insertIndex, 0, fromConnectionId)
+
+      const folderOrder = (sessionManager.folders || []).map((f: any) => f.id)
+      sessionManager.handleReorderTree({
+        connections: next,
+        folders: folderOrder,
+        connectionFolders: {},
+        folderParents: {},
+      })
+    },
+    [sessionManager],
   )
 
   return (
@@ -177,6 +225,7 @@ export default function WorkspaceView({
         pinnedTables={pinnedTables}
         onActivateSession={activateSession}
         onCloseSession={closeSession}
+        onReorderSessions={handleReorderSessions}
         onBrowseTable={handleBrowseTable}
         onCopyObjectName={handleCopyObjectName}
         onScriptTable={handleScriptTable}
