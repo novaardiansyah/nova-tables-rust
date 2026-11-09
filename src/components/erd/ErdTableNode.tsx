@@ -13,6 +13,8 @@ export interface ErdTableNodeProps {
   onResizeStart?: (e: React.MouseEvent, tableKey: string, currentWidth: number, currentHeight: number) => void
   onBrowse?: (schema: string, name: string) => void
   onOpenStructure?: (table: { schema: string; name: string }) => void
+  onHide?: (tableKey: string) => void
+  onRemove?: (tableKey: string) => void
   viewOnly?: boolean
 }
 
@@ -27,6 +29,8 @@ export default function ErdTableNode({
   onResizeStart,
   onBrowse,
   onOpenStructure,
+  onHide,
+  onRemove,
   viewOnly = false,
 }: ErdTableNodeProps) {
   const tableKey = `${table.schema}.${table.name}`
@@ -96,6 +100,26 @@ export default function ErdTableNode({
             >
               <Icon name="pencil" size={10} />
             </button>
+          ) : null}
+          {!viewOnly ? (
+            <React.Fragment>
+              <button
+                type="button"
+                onClick={() => onRemove?.(tableKey)}
+                className="icon-btn h-5 w-5 text-text-faint hover:text-danger"
+                title="Remove table from diagram"
+              >
+                <Icon name="trash" size={11} />
+              </button>
+              <button
+                type="button"
+                onClick={() => onHide?.(tableKey)}
+                className="icon-btn h-5 w-5 text-text-faint hover:text-warning"
+                title="Hide table from diagram"
+              >
+                <Icon name="eye-off" size={11} />
+              </button>
+            </React.Fragment>
           ) : null}
         </div>
       </div>

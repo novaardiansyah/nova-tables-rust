@@ -2,10 +2,12 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/api'
 import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu'
 import Icon, { Spinner } from '@/components/common/Icon'
-import { ErdTable, ErdRelation, computeInitialPositions, erdRelationKey } from './erdTypes'
 import ErdTableNode from './ErdTableNode'
 import ErdRelationLine from './ErdRelationLine'
 import { exportDiagramToPng } from './erdExport'
+import ErdTableManager from './ErdTableManager'
+import { ErdTable, ErdRelation, computeInitialPositions, erdRelationKey } from './erdTypes'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 
 export interface ErdViewerProps {
   connectionId: string
@@ -25,6 +27,7 @@ export default function ErdViewer({
   initialTables = [],
   depth: initialDepth = 1,
   includeRelated = true,
+  sourceSql,
   driverType,
   onOpenTable,
   onOpenStructure,
@@ -42,6 +45,10 @@ export default function ErdViewer({
   const [hoveredRelation, setHoveredRelation] = useState<ErdRelation | null>(null)
   const [hoveredTableKey, setHoveredTableKey] = useState<string | null>(null)
   const [actionsMenu, setActionsMenu] = useState<{ x: number; y: number } | null>(null)
+  const [tableManagement, setTableManagement] = useState<{ x: number; y: number } | null>(null)
+  const [hiddenTableKeys, setHiddenTableKeys] = useState<Set<string>>(new Set())
+  const [databaseTables, setDatabaseTables] = useState<{ schema: string; name: string }[]>([])
+  const [loadingDatabaseTables, setLoadingDatabaseTables] = useState(false)
 
   const [cardDimensions, setCardDimensions] = useState<Record<string, { width: number; height: number }>>({})
   const [relationOffsets, setRelationOffsets] = useState<Record<string, { x: number; y: number }>>({})
@@ -99,12 +106,101 @@ export default function ErdViewer({
     panStartRef.current = { ...pan }
   }
 
+  const handlePointerMove = (e: React.MouseEvent) => {
+    if (isDraggingCanvasRef.current) {
+      const dx = e.clientX - dragStartRef.current.x
+      const dy = e.clientY - dragStartRef.current.y
+      setPan({
+        x: panStartRef.current.x + dx,
+        y: panStartRef.current.y + dy,
+      })
+    }
+  }
+
+  const handlePointerUp = () => {
+    isDraggingCanvasRef.current = false
+    draggingTableRef.current = null
+    resizingTableRef.current = null
+    draggingRelationRef.current = null
+  }
+
+  useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (isDraggingCanvasRef.current) {
+        const dx = e.clientX - dragStartRef.current.x
+        const dy = e.clientY - dragStartRef.current.y
+        setPan({
+          x: panStartRef.current.x + dx,
+          y: panStartRef.current.y + dy,
+        })
+      } else if (draggingTableRef.current) {
+        const tableKey = draggingTableRef.current
+        const dx = (e.clientX - tableDragStartRef.current.x) / zoom
+        const dy = (e.clientY - tableDragStartRef.current.y) / zoom
+        setPositions((prev) => ({
+          ...prev,
+          [tableKey]: {
+            x: Math.round(initialTablePosRef.current.x + dx),
+            y: Math.round(initialTablePosRef.current.y + dy),
+          },
+        }))
+      } else if (resizingTableRef.current) {
+        const { tableKey, startX, startY, startWidth, startHeight } = resizingTableRef.current
+        const dx = (e.clientX - startX) / zoom
+        const dy = (e.clientY - startY) / zoom
+        setCardDimensions((prev) => ({
+          ...prev,
+          [tableKey]: {
+            width: Math.max(200, Math.round(startWidth + dx)),
+            height: Math.max(140, Math.round(startHeight + dy)),
+          },
+        }))
+      } else if (draggingRelationRef.current) {
+        const { relKey, startX, startY, initialOffset } = draggingRelationRef.current
+        const dx = (e.clientX - startX) / zoom
+        const dy = (e.clientY - startY) / zoom
+        setRelationOffsets((prev) => ({
+          ...prev,
+          [relKey]: {
+            x: Math.round(initialOffset.x + dx),
+            y: Math.round(initialOffset.y + dy),
+          },
+        }))
+      }
+    }
+
+    const handleGlobalMouseUp = () => {
+      isDraggingCanvasRef.current = false
+      draggingTableRef.current = null
+      resizingTableRef.current = null
+      draggingRelationRef.current = null
+    }
+
+    window.addEventListener('mousemove', handleGlobalMouseMove)
+    window.addEventListener('mouseup', handleGlobalMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMouseMove)
+      window.removeEventListener('mouseup', handleGlobalMouseUp)
+    }
+  }, [zoom])
+
   const handleTableDragStart = (e: React.MouseEvent, tableKey: string) => {
     if (viewOnly) return
     e.stopPropagation()
     draggingTableRef.current = tableKey
     tableDragStartRef.current = { x: e.clientX, y: e.clientY }
     initialTablePosRef.current = positions[tableKey] || { x: 0, y: 0 }
+  }
+
+  const handleRelationDragStart = (e: React.MouseEvent, relKey: string) => {
+    if (viewOnly) return
+    e.stopPropagation()
+    draggingRelationRef.current = {
+      relKey,
+      startX: e.clientX,
+      startY: e.clientY,
+      initialOffset: relationOffsets[relKey] || { x: 0, y: 0 },
+    }
   }
 
   const handleTableResizeStart = (
@@ -122,77 +218,6 @@ export default function ErdViewer({
       startWidth: currentWidth,
       startHeight: currentHeight,
     }
-  }
-
-  const handleRelationDragStart = (e: React.MouseEvent, relKey: string) => {
-    if (viewOnly) return
-    e.stopPropagation()
-    const currentOffset = relationOffsets[relKey] || { x: 0, y: 0 }
-    draggingRelationRef.current = {
-      relKey,
-      startX: e.clientX,
-      startY: e.clientY,
-      initialOffset: currentOffset,
-    }
-  }
-
-  const handlePointerMove = (e: React.MouseEvent) => {
-    if (resizingTableRef.current) {
-      const { tableKey, startX, startY, startWidth, startHeight } = resizingTableRef.current
-      const dx = (e.clientX - startX) / zoom
-      const dy = (e.clientY - startY) / zoom
-      const newWidth = Math.min(500, Math.max(220, Math.round(startWidth + dx)))
-      const newHeight = Math.min(600, Math.max(100, Math.round(startHeight + dy)))
-      setCardDimensions((prev) => ({
-        ...prev,
-        [tableKey]: { width: newWidth, height: newHeight },
-      }))
-      return
-    }
-
-    if (draggingRelationRef.current) {
-      const { relKey, startX, startY, initialOffset } = draggingRelationRef.current
-      const dx = (e.clientX - startX) / zoom
-      const dy = (e.clientY - startY) / zoom
-      setRelationOffsets((prev) => ({
-        ...prev,
-        [relKey]: {
-          x: Math.round(initialOffset.x + dx),
-          y: Math.round(initialOffset.y + dy),
-        },
-      }))
-      return
-    }
-
-    if (draggingTableRef.current) {
-      const dx = (e.clientX - tableDragStartRef.current.x) / zoom
-      const dy = (e.clientY - tableDragStartRef.current.y) / zoom
-      const key = draggingTableRef.current
-      setPositions((prev) => ({
-        ...prev,
-        [key]: {
-          x: Math.round(initialTablePosRef.current.x + dx),
-          y: Math.round(initialTablePosRef.current.y + dy),
-        },
-      }))
-      return
-    }
-
-    if (isDraggingCanvasRef.current) {
-      const dx = e.clientX - dragStartRef.current.x
-      const dy = e.clientY - dragStartRef.current.y
-      setPan({
-        x: panStartRef.current.x + dx,
-        y: panStartRef.current.y + dy,
-      })
-    }
-  }
-
-  const handlePointerUp = () => {
-    isDraggingCanvasRef.current = false
-    draggingTableRef.current = null
-    resizingTableRef.current = null
-    draggingRelationRef.current = null
   }
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -218,7 +243,6 @@ export default function ErdViewer({
     const fresh = computeInitialPositions(tables, relations)
     setPositions(fresh)
     setRelationOffsets({})
-    handleResetView()
   }
 
   const handleFitScreen = () => {
@@ -253,10 +277,16 @@ export default function ErdViewer({
   }
 
   const handleSavePng = () => {
+    const visibleTables = tables.filter((t) => !hiddenTableKeys.has(`${t.schema}.${t.name}`))
+    const visibleRelations = relations.filter(
+      (rel) =>
+        !hiddenTableKeys.has(`${rel.sourceSchema}.${rel.sourceTable}`) &&
+        !hiddenTableKeys.has(`${rel.targetSchema}.${rel.targetTable}`),
+    )
     void exportDiagramToPng(
       database,
-      tables,
-      relations,
+      visibleTables,
+      visibleRelations,
       positions,
       cardDimensions,
       relationOffsets,
@@ -265,6 +295,127 @@ export default function ErdViewer({
 
   const handleViewOnlyToggle = () => {
     setViewOnly((prev) => !prev)
+  }
+
+  const handleDepth = (newDepth: number) => {
+    setDepth(newDepth)
+    void loadData(newDepth)
+  }
+
+  const handleFetchDatabaseTables = async () => {
+    if (!connectionId || !database) return
+    setLoadingDatabaseTables(true)
+    try {
+      const res = await api.listTables(connectionId, database)
+      if (res) {
+        setDatabaseTables(
+          res.map((t: { schema: string; name: string }) => ({
+            schema: t.schema,
+            name: t.name,
+          })),
+        )
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingDatabaseTables(false)
+    }
+  }
+
+  const handleToggleVisibility = (tableKey: string) => {
+    setHiddenTableKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(tableKey)) {
+        next.delete(tableKey)
+      } else {
+        next.add(tableKey)
+      }
+      return next
+    })
+  }
+
+  const handleShowAll = () => {
+    setHiddenTableKeys(new Set())
+  }
+
+  const handleHideAll = () => {
+    const allKeys = new Set(tables.map((t) => `${t.schema}.${t.name}`))
+    setHiddenTableKeys(allKeys)
+  }
+
+  const handleRemoveTable = (tableKey: string) => {
+    setTables((prev) => prev.filter((t) => `${t.schema}.${t.name}` !== tableKey))
+    setRelations((prev) =>
+      prev.filter(
+        (rel) =>
+          `${rel.sourceSchema}.${rel.sourceTable}` !== tableKey &&
+          `${rel.targetSchema}.${rel.targetTable}` !== tableKey,
+      ),
+    )
+    setHiddenTableKeys((prev) => {
+      const next = new Set(prev)
+      next.delete(tableKey)
+      return next
+    })
+  }
+
+  const handleAddTables = async (tablesToAdd: { schema: string; name: string }[]) => {
+    if (!connectionId || !database) return
+    setLoading(true)
+    setError(null)
+    try {
+      const newTableKeys = tablesToAdd.map((t) => `${t.schema}.${t.name}`)
+      const res = await api.getErdData(
+        connectionId,
+        database,
+        newTableKeys,
+        true,
+        1,
+      )
+      if (res && res.ok) {
+        const existingTableKeys = new Set(tables.map((t) => `${t.schema}.${t.name}`))
+        const newTables = (res.tables || []).filter(
+          (t: { schema: string; name: string }) =>
+            !existingTableKeys.has(`${t.schema}.${t.name}`),
+        )
+        const fullRelations = res.relations || []
+        const newRelations = fullRelations.filter(
+          (rel) =>
+            newTables.some(
+              (t) =>
+                `${t.schema}.${t.name}` === `${rel.sourceSchema}.${rel.sourceTable}` ||
+                `${t.schema}.${t.name}` === `${rel.targetSchema}.${rel.targetTable}`,
+            ) ||
+            existingTableKeys.has(`${rel.sourceSchema}.${rel.sourceTable}`) ||
+            existingTableKeys.has(`${rel.targetSchema}.${rel.targetTable}`),
+        )
+        setTables((prev) => [...prev, ...newTables])
+        setRelations((prev) => [...prev, ...newRelations])
+        // Compute fresh positions preserving existing positions for old tables
+        const freshLayout = computeInitialPositions(
+          [...tables, ...newTables],
+          [...(res.relations || []), ...newRelations],
+        )
+        const posRecord: Record<string, { x: number; y: number }> = { ...positions }
+        Object.keys(freshLayout).forEach((key) => {
+          if (!posRecord[key]) {
+            posRecord[key] = freshLayout[key]
+          }
+        })
+        setPositions(posRecord)
+      } else {
+        setError('Failed to load ERD metadata for new tables.')
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleOpenAddTablePanel = () => {
+    setTableManagement((prev) => (prev ? null : { x: 0, y: 0 }))
+    void handleFetchDatabaseTables()
   }
 
   return (
@@ -328,42 +479,20 @@ export default function ErdViewer({
             </button>
           </div>
 
-          <div className="h-4 w-px bg-line" />
-
-          <button
-            type="button"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect()
-              setActionsMenu({ x: rect.right - 188, y: rect.bottom + 4 })
-            }}
-            className="flex h-7 items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-[length:var(--app-text-11)] text-text-muted hover:border-line-strong hover:text-text"
-            title="More diagram actions"
-          >
-            <Icon name="more-horizontal" size={13} />
-            <span>Actions</span>
-          </button>
-
-          {viewOnly ? (
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleViewOnlyToggle}
-              className="flex items-center gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2 py-0.5 text-[length:var(--app-text-11)] font-medium text-warning hover:bg-warning/20 transition-colors"
-              title="Toggle view-only mode"
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                setActionsMenu({ x: rect.right - 188, y: rect.bottom + 4 })
+              }}
+              className="flex h-7 items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-[length:var(--app-text-11)] text-text-muted hover:border-line-strong hover:text-text"
+              title="More diagram actions"
             >
-              <Icon name="eye" size={12} />
-              <span>View-Only</span>
+              <Icon name="more-horizontal" size={13} />
+              <span>Actions</span>
             </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleViewOnlyToggle}
-              className="flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-0.5 text-[length:var(--app-text-11)] text-text-muted hover:border-line-strong hover:text-text transition-colors"
-              title="Toggle view-only mode"
-            >
-              <Icon name="eye" size={12} />
-              <span>View-Only</span>
-            </button>
-          )}
+          </div>
 
           {actionsMenu ? (
             <ContextMenu
@@ -373,39 +502,51 @@ export default function ErdViewer({
                 [
                   { id: 'auto-arrange', label: 'Auto-Arrange Tables', onSelect: handleAutoArrange, disabled: viewOnly },
                   {
+                    id: 'table-management',
+                    label: `Manage Tables (${tables.length})`,
+                    children: [
+                      {
+                        id: 'hide-all',
+                        label: 'Hide All Tables',
+                        onSelect: handleHideAll,
+                      },
+                      {
+                        id: 'open-table-manager',
+                        label: 'Open Table Manager',
+                        onSelect: () => setTableManagement((prev) => (prev ? null : { x: 0, y: 0 })),
+                      },
+                      {
+                        id: 'manage-all',
+                        label: 'Show All Tables',
+                        onSelect: handleShowAll,
+                      },
+                    ],
+                  },
+                  {
                     id: 'depth',
                     label: `Relation Depth: Level ${depth}`,
                     children: [
                       {
                         id: 'depth-1',
                         label: depth === 1 ? '✓ Level 1 (Direct)' : 'Level 1 (Direct)',
-                        onSelect: () => {
-                          setDepth(1)
-                          void loadData(1)
-                        },
+                        onSelect: () => handleDepth(1),
                       },
                       {
                         id: 'depth-2',
                         label: depth === 2 ? '✓ Level 2 (2 Levels)' : 'Level 2 (2 Levels)',
-                        onSelect: () => {
-                          setDepth(2)
-                          void loadData(2)
-                        },
+                        onSelect: () => handleDepth(2),
                       },
                       {
                         id: 'depth-3',
                         label: depth === 3 ? '✓ Level 3 (3 Levels)' : 'Level 3 (3 Levels)',
-                        onSelect: () => {
-                          setDepth(3)
-                          void loadData(3)
-                        },
+                        onSelect: () => handleDepth(3),
                       },
                     ],
                   },
                   { id: 'reset-view', label: 'Reset View (100%)', onSelect: handleResetView },
-                  { id: 'export-png', label: 'Save as PNG', onSelect: handleSavePng },
+                  { id: 'export-png', label: 'Save As PNG', onSelect: handleSavePng },
                   {
-                    id: 'toggle-view-only',
+                    id: 'view-only',
                     label: viewOnly ? 'View-Only Mode (Enabled)' : 'View-Only Mode (Disabled)',
                     onSelect: handleViewOnlyToggle,
                   },
@@ -465,95 +606,122 @@ export default function ErdViewer({
               <rect width="20000" height="20000" x="-10000" y="-10000" fill="url(#erd-grid)" />
 
               <g className="pointer-events-auto">
-                {relations.map((rel) => {
-                  const sKey = `${rel.sourceSchema}.${rel.sourceTable}`
-                  const tKey = `${rel.targetSchema}.${rel.targetTable}`
-                  const sPos = positions[sKey]
-                  const tPos = positions[tKey]
-                  if (!sPos || !tPos) return null
-
-                  const sTable = tables.find((t) => `${t.schema}.${t.name}` === sKey)
-                  const tTable = tables.find((t) => `${t.schema}.${t.name}` === tKey)
-                  const sColIndex = sTable?.columns.findIndex((c) => c.name.toLowerCase() === rel.sourceColumn.toLowerCase()) ?? 0
-                  const tColIndex = tTable?.columns.findIndex((c) => c.name.toLowerCase() === rel.targetColumn.toLowerCase()) ?? 0
-
-                  const sWidth = cardDimensions[sKey]?.width ?? 260
-                  const tWidth = cardDimensions[tKey]?.width ?? 260
-                  const relKey = erdRelationKey(rel)
-                  const offset = relationOffsets[relKey]
-
-                  const isRelHovered = hoveredRelation?.name === rel.name
-                  const isTableHovered = hoveredTableKey === sKey || hoveredTableKey === tKey
-                  const isHighlighted = isRelHovered || isTableHovered
-                  const isDimmed = Boolean((hoveredRelation && !isRelHovered) || (hoveredTableKey && !isTableHovered))
-
-                  return (
-                    <ErdRelationLine
-                      key={relKey}
-                      relation={rel}
-                      sourcePos={sPos}
-                      targetPos={tPos}
-                      sourceWidth={sWidth}
-                      targetWidth={tWidth}
-                      sourceColIndex={sColIndex >= 0 ? sColIndex : 0}
-                      targetColIndex={tColIndex >= 0 ? tColIndex : 0}
-                      offset={offset}
-                      isHighlighted={isHighlighted}
-                      isDimmed={isDimmed}
-                      onMouseEnter={() => setHoveredRelation(rel)}
-                      onMouseLeave={() => setHoveredRelation(null)}
-                      onDragStart={handleRelationDragStart}
-                      viewOnly={viewOnly}
-                    />
+                {relations
+                  .filter(
+                    (rel) =>
+                      !hiddenTableKeys.has(`${rel.sourceSchema}.${rel.sourceTable}`) &&
+                      !hiddenTableKeys.has(`${rel.targetSchema}.${rel.targetTable}`),
                   )
-                })}
+                  .map((rel) => {
+                    const sKey = `${rel.sourceSchema}.${rel.sourceTable}`
+                    const tKey = `${rel.targetSchema}.${rel.targetTable}`
+                    const sPos = positions[sKey]
+                    const tPos = positions[tKey]
+                    if (!sPos || !tPos) return null
+
+                    const sTable = tables.find((t) => `${t.schema}.${t.name}` === sKey)
+                    const tTable = tables.find((t) => `${t.schema}.${t.name}` === tKey)
+                    const sColIndex = sTable?.columns.findIndex((c: { name: string }) => c.name.toLowerCase() === rel.sourceColumn.toLowerCase()) ?? 0
+                    const tColIndex = tTable?.columns.findIndex((c: { name: string }) => c.name.toLowerCase() === rel.targetColumn.toLowerCase()) ?? 0
+
+                    const sWidth = cardDimensions[sKey]?.width ?? 260
+                    const tWidth = cardDimensions[tKey]?.width ?? 260
+                    const relKey = erdRelationKey(rel)
+                    const offset = relationOffsets[relKey]
+
+                    const isRelHovered = hoveredRelation?.name === rel.name
+                    const isTableHovered = hoveredTableKey === sKey || hoveredTableKey === tKey
+                    const isHighlighted = isRelHovered || isTableHovered
+                    const isDimmed = Boolean((hoveredRelation && !isRelHovered) || (hoveredTableKey && !isTableHovered))
+
+                    return (
+                      <ErdRelationLine
+                        key={relKey}
+                        relation={rel}
+                        sourcePos={sPos}
+                        targetPos={tPos}
+                        sourceWidth={sWidth}
+                        targetWidth={tWidth}
+                        sourceColIndex={sColIndex >= 0 ? sColIndex : 0}
+                        targetColIndex={tColIndex >= 0 ? tColIndex : 0}
+                        offset={offset}
+                        isHighlighted={isHighlighted}
+                        isDimmed={isDimmed}
+                        onMouseEnter={() => setHoveredRelation(rel)}
+                        onMouseLeave={() => setHoveredRelation(null)}
+                        onDragStart={handleRelationDragStart}
+                        viewOnly={viewOnly}
+                      />
+                    )
+                  })}
               </g>
             </svg>
 
             <div className="pointer-events-auto">
-              {tables.map((table) => {
-                const key = `${table.schema}.${table.name}`
-                const pos = positions[key] || { x: 0, y: 0 }
-                const dim = cardDimensions[key]
+              {tables
+                .filter((table) => !hiddenTableKeys.has(`${table.schema}.${table.name}`))
+                .map((table) => {
+                  const key = `${table.schema}.${table.name}`
+                  const pos = positions[key] || { x: 0, y: 0 }
+                  const dim = cardDimensions[key]
 
-                const isConnectedToHoveredRel =
-                  hoveredRelation &&
-                  (`${hoveredRelation.sourceSchema}.${hoveredRelation.sourceTable}` === key ||
-                    `${hoveredRelation.targetSchema}.${hoveredRelation.targetTable}` === key)
+                  const isConnectedToHoveredRel =
+                    hoveredRelation &&
+                    (`${hoveredRelation.sourceSchema}.${hoveredRelation.sourceTable}` === key ||
+                      `${hoveredRelation.targetSchema}.${hoveredRelation.targetTable}` === key)
 
-                const isHovered = hoveredTableKey === key
-                const isHighlighted = Boolean(isConnectedToHoveredRel || isHovered)
-                const isDimmed = Boolean(
-                  (hoveredRelation && !isConnectedToHoveredRel) ||
-                    (hoveredTableKey && !isHovered && !isConnectedToHoveredRel),
-                )
+                  const isHovered = hoveredTableKey === key
+                  const isHighlighted = Boolean(isConnectedToHoveredRel || isHovered)
+                  const isDimmed = Boolean(
+                    (hoveredRelation && !isConnectedToHoveredRel) ||
+                      (hoveredTableKey && !isHovered && !isConnectedToHoveredRel),
+                  )
 
-                return (
-                  <div
-                    key={key}
-                    onMouseEnter={() => setHoveredTableKey(key)}
-                    onMouseLeave={() => setHoveredTableKey(null)}
-                  >
-                    <ErdTableNode
-                      table={table}
-                      position={pos}
-                      dimension={dim}
-                      isHighlighted={isHighlighted}
-                      isDimmed={isDimmed}
-                      searchQuery={search}
-                      onDragStart={handleTableDragStart}
-                      onResizeStart={handleTableResizeStart}
-                      onBrowse={onOpenTable}
-                      onOpenStructure={onOpenStructure}
-                      viewOnly={viewOnly}
-                    />
-                  </div>
-                )
-              })}
+                  return (
+                    <div
+                      key={key}
+                      onMouseEnter={() => setHoveredTableKey(key)}
+                      onMouseLeave={() => setHoveredTableKey(null)}
+                    >
+                      <ErdTableNode
+                        table={table}
+                        position={pos}
+                        dimension={dim}
+                        isHighlighted={isHighlighted}
+                        isDimmed={isDimmed}
+                        searchQuery={search}
+                        onDragStart={handleTableDragStart}
+                        onResizeStart={handleTableResizeStart}
+                        onBrowse={onOpenTable}
+                        onOpenStructure={onOpenStructure}
+                        onHide={handleToggleVisibility}
+                        onRemove={handleRemoveTable}
+                        viewOnly={viewOnly}
+                      />
+                    </div>
+                  )
+                })}
             </div>
           </div>
         )}
       </div>
+      {tableManagement ? (
+        <ErdTableManager
+          isOpen={tableManagement !== null}
+          onClose={() => setTableManagement(null)}
+          allTables={tables}
+          visibleTableKeys={new Set(tables.map((t) => `${t.schema}.${t.name}`).filter((k) => !hiddenTableKeys.has(k)))}
+          onToggleVisibility={handleToggleVisibility}
+          onShowAll={handleShowAll}
+          onHideAll={handleHideAll}
+          onRemoveTable={handleRemoveTable}
+          onAddTables={handleAddTables}
+          databaseTables={databaseTables}
+          loadingDatabaseTables={loadingDatabaseTables}
+          onFetchDatabaseTables={handleFetchDatabaseTables}
+          viewOnly={viewOnly}
+        />
+      ) : null}
     </div>
   )
 }
