@@ -91,22 +91,40 @@ pub fn init() -> Result<(), String> {
   Ok(())
 }
 
-pub fn upsert_folder(uid: &str, name: &str, parent_id: Option<&str>) -> Result<Value, String> {
+pub fn upsert_folder(uid: &str, name: &str, parent_id: Option<&str>, from_server: bool) -> Result<Value, String> {
   let conn = open()?;
   let now = Utc::now().to_rfc3339();
+  let synced_flag = if from_server { 1 } else { 0 };
 
-  conn.execute(
-    "INSERT INTO local_folders (uid, name, parent_id, created_at, updated_at, action, synced)
-     VALUES (?1, ?2, ?3, ?4, ?4, 'upsert', 0)
-     ON CONFLICT(uid) DO UPDATE SET
-       name = excluded.name,
-       parent_id = excluded.parent_id,
-       updated_at = excluded.updated_at,
-       action = 'upsert',
-       synced = 0",
-    params![uid, name, parent_id, now],
-  )
-  .map_err(|e| format!("Failed to upsert local folder: {e}"))?;
+  if from_server {
+    conn.execute(
+      "INSERT INTO local_folders (uid, name, parent_id, created_at, updated_at, action, synced)
+       VALUES (?1, ?2, ?3, ?4, ?4, 'upsert', 1)
+       ON CONFLICT(uid) DO UPDATE SET
+         name = excluded.name,
+         parent_id = excluded.parent_id,
+         updated_at = excluded.updated_at,
+         action = 'upsert',
+         synced = 1
+       WHERE local_folders.synced = 1",
+      params![uid, name, parent_id, now],
+    )
+    .map_err(|e| format!("Failed to upsert local folder from server: {e}"))?;
+  } else {
+    conn.execute(
+      "INSERT INTO local_folders (uid, name, parent_id, created_at, updated_at, action, synced)
+       VALUES (?1, ?2, ?3, ?4, ?4, 'upsert', 0)
+       ON CONFLICT(uid) DO UPDATE SET
+         name = excluded.name,
+         parent_id = excluded.parent_id,
+         updated_at = excluded.updated_at,
+         action = 'upsert',
+         synced = 0",
+      params![uid, name, parent_id, now],
+    )
+    .map_err(|e| format!("Failed to upsert local folder: {e}"))?;
+  }
+  let _ = synced_flag;
 
   Ok(json!({
     "id": uid,
@@ -164,7 +182,7 @@ pub fn list_folders() -> Result<Vec<Value>, String> {
   Ok(list)
 }
 
-pub fn upsert_connection(data: &Value) -> Result<Value, String> {
+pub fn upsert_connection(data: &Value, from_server: bool) -> Result<Value, String> {
   let conn = open()?;
   let uid = data.get("id").or_else(|| data.get("uid")).and_then(|v| v.as_str()).unwrap_or("");
   if uid.is_empty() {
@@ -187,30 +205,58 @@ pub fn upsert_connection(data: &Value) -> Result<Value, String> {
   let last_conn = data.get("lastConnectedAt").and_then(|v| v.as_str());
   let now = Utc::now().to_rfc3339();
 
-  conn.execute(
-    "INSERT INTO local_connections (uid, folder_id, name, host, port, username, password_cipher, database_name, environment, encrypt, trust_server_certificate, driver_type, timezone, last_database_used, last_connected_at, created_at, updated_at, action, synced)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?16, 'upsert', 0)
-     ON CONFLICT(uid) DO UPDATE SET
-       folder_id = excluded.folder_id,
-       name = excluded.name,
-       host = excluded.host,
-       port = excluded.port,
-       username = excluded.username,
-       password_cipher = COALESCE(excluded.password_cipher, local_connections.password_cipher),
-       database_name = excluded.database_name,
-       environment = excluded.environment,
-       encrypt = excluded.encrypt,
-       trust_server_certificate = excluded.trust_server_certificate,
-       driver_type = excluded.driver_type,
-       timezone = excluded.timezone,
-       last_database_used = COALESCE(excluded.last_database_used, local_connections.last_database_used),
-       last_connected_at = COALESCE(excluded.last_connected_at, local_connections.last_connected_at),
-       updated_at = excluded.updated_at,
-       action = 'upsert',
-       synced = 0",
-    params![uid, folder_id, name, host, port, username, password_cipher, database_name, environment, encrypt, trust_cert, driver_type, timezone, last_db, last_conn, now],
-  )
-  .map_err(|e| format!("Failed to upsert local connection: {e}"))?;
+  if from_server {
+    conn.execute(
+      "INSERT INTO local_connections (uid, folder_id, name, host, port, username, password_cipher, database_name, environment, encrypt, trust_server_certificate, driver_type, timezone, last_database_used, last_connected_at, created_at, updated_at, action, synced)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?16, 'upsert', 1)
+       ON CONFLICT(uid) DO UPDATE SET
+         folder_id = excluded.folder_id,
+         name = excluded.name,
+         host = excluded.host,
+         port = excluded.port,
+         username = excluded.username,
+         password_cipher = COALESCE(excluded.password_cipher, local_connections.password_cipher),
+         database_name = excluded.database_name,
+         environment = excluded.environment,
+         encrypt = excluded.encrypt,
+         trust_server_certificate = excluded.trust_server_certificate,
+         driver_type = excluded.driver_type,
+         timezone = excluded.timezone,
+         last_database_used = COALESCE(excluded.last_database_used, local_connections.last_database_used),
+         last_connected_at = COALESCE(excluded.last_connected_at, local_connections.last_connected_at),
+         updated_at = excluded.updated_at,
+         action = 'upsert',
+         synced = 1
+       WHERE local_connections.synced = 1",
+      params![uid, folder_id, name, host, port, username, password_cipher, database_name, environment, encrypt, trust_cert, driver_type, timezone, last_db, last_conn, now],
+    )
+    .map_err(|e| format!("Failed to upsert local connection from server: {e}"))?;
+  } else {
+    conn.execute(
+      "INSERT INTO local_connections (uid, folder_id, name, host, port, username, password_cipher, database_name, environment, encrypt, trust_server_certificate, driver_type, timezone, last_database_used, last_connected_at, created_at, updated_at, action, synced)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?16, 'upsert', 0)
+       ON CONFLICT(uid) DO UPDATE SET
+         folder_id = excluded.folder_id,
+         name = excluded.name,
+         host = excluded.host,
+         port = excluded.port,
+         username = excluded.username,
+         password_cipher = COALESCE(excluded.password_cipher, local_connections.password_cipher),
+         database_name = excluded.database_name,
+         environment = excluded.environment,
+         encrypt = excluded.encrypt,
+         trust_server_certificate = excluded.trust_server_certificate,
+         driver_type = excluded.driver_type,
+         timezone = excluded.timezone,
+         last_database_used = COALESCE(excluded.last_database_used, local_connections.last_database_used),
+         last_connected_at = COALESCE(excluded.last_connected_at, local_connections.last_connected_at),
+         updated_at = excluded.updated_at,
+         action = 'upsert',
+         synced = 0",
+      params![uid, folder_id, name, host, port, username, password_cipher, database_name, environment, encrypt, trust_cert, driver_type, timezone, last_db, last_conn, now],
+    )
+    .map_err(|e| format!("Failed to upsert local connection: {e}"))?;
+  }
 
   Ok(json!({
     "id": uid,
@@ -230,6 +276,19 @@ pub fn upsert_connection(data: &Value) -> Result<Value, String> {
     "lastDatabaseUsed": last_db,
     "lastConnectedAt": last_conn,
   }))
+}
+
+pub fn update_last_database(uid: &str, database: &str) -> Result<bool, String> {
+  let conn = open()?;
+  let now = Utc::now().to_rfc3339();
+
+  conn.execute(
+    "UPDATE local_connections SET last_database_used = ?1, last_connected_at = ?2, updated_at = ?2, synced = 0 WHERE uid = ?3",
+    params![database, now, uid],
+  )
+  .map_err(|e| format!("Failed to update local connection last database: {e}"))?;
+
+  Ok(true)
 }
 
 pub fn delete_connection(uid: &str) -> Result<bool, String> {
@@ -310,7 +369,7 @@ pub fn list_connections() -> Result<Vec<Value>, String> {
   Ok(list)
 }
 
-pub fn upsert_saved_query(data: &Value) -> Result<Value, String> {
+pub fn upsert_saved_query(data: &Value, from_server: bool) -> Result<Value, String> {
   let conn = open()?;
   let uid = data.get("id").or_else(|| data.get("uid")).and_then(|v| v.as_str()).unwrap_or("");
   if uid.is_empty() {
@@ -323,20 +382,38 @@ pub fn upsert_saved_query(data: &Value) -> Result<Value, String> {
   let sql = data.get("sql").or_else(|| data.get("query")).and_then(|v| v.as_str()).unwrap_or("");
   let now = Utc::now().to_rfc3339();
 
-  conn.execute(
-    "INSERT INTO local_saved_queries (uid, connection_id, database_name, name, sql, created_at, updated_at, action, synced)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, 'upsert', 0)
-     ON CONFLICT(uid) DO UPDATE SET
-       connection_id = COALESCE(excluded.connection_id, local_saved_queries.connection_id),
-       database_name = excluded.database_name,
-       name = excluded.name,
-       sql = excluded.sql,
-       updated_at = excluded.updated_at,
-       action = 'upsert',
-       synced = 0",
-    params![uid, connection_id, database_name, name, sql, now],
-  )
-  .map_err(|e| format!("Failed to upsert local saved query: {e}"))?;
+  if from_server {
+    conn.execute(
+      "INSERT INTO local_saved_queries (uid, connection_id, database_name, name, sql, created_at, updated_at, action, synced)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, 'upsert', 1)
+       ON CONFLICT(uid) DO UPDATE SET
+         connection_id = COALESCE(excluded.connection_id, local_saved_queries.connection_id),
+         database_name = excluded.database_name,
+         name = excluded.name,
+         sql = excluded.sql,
+         updated_at = excluded.updated_at,
+         action = 'upsert',
+         synced = 1
+       WHERE local_saved_queries.synced = 1",
+      params![uid, connection_id, database_name, name, sql, now],
+    )
+    .map_err(|e| format!("Failed to upsert local saved query from server: {e}"))?;
+  } else {
+    conn.execute(
+      "INSERT INTO local_saved_queries (uid, connection_id, database_name, name, sql, created_at, updated_at, action, synced)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, 'upsert', 0)
+       ON CONFLICT(uid) DO UPDATE SET
+         connection_id = COALESCE(excluded.connection_id, local_saved_queries.connection_id),
+         database_name = excluded.database_name,
+         name = excluded.name,
+         sql = excluded.sql,
+         updated_at = excluded.updated_at,
+         action = 'upsert',
+         synced = 0",
+      params![uid, connection_id, database_name, name, sql, now],
+    )
+    .map_err(|e| format!("Failed to upsert local saved query: {e}"))?;
+  }
 
   Ok(json!({
     "id": uid,
@@ -421,22 +498,37 @@ pub fn list_saved_queries(connection_id: Option<&str>, database: Option<&str>) -
   Ok(list)
 }
 
-pub fn upsert_meta(key: &str, value: &Value) -> Result<Value, String> {
+pub fn upsert_meta(key: &str, value: &Value, from_server: bool) -> Result<Value, String> {
   let conn = open()?;
   let now = Utc::now().to_rfc3339();
   let val_str = value.to_string();
 
-  conn.execute(
-    "INSERT INTO local_meta (key, value, updated_at, action, synced)
-     VALUES (?1, ?2, ?3, 'upsert', 0)
-     ON CONFLICT(key) DO UPDATE SET
-       value = excluded.value,
-       updated_at = excluded.updated_at,
-       action = 'upsert',
-       synced = 0",
-    params![key, val_str, now],
-  )
-  .map_err(|e| format!("Failed to upsert local meta: {e}"))?;
+  if from_server {
+    conn.execute(
+      "INSERT INTO local_meta (key, value, updated_at, action, synced)
+       VALUES (?1, ?2, ?3, 'upsert', 1)
+       ON CONFLICT(key) DO UPDATE SET
+         value = excluded.value,
+         updated_at = excluded.updated_at,
+         action = 'upsert',
+         synced = 1
+       WHERE local_meta.synced = 1",
+      params![key, val_str, now],
+    )
+    .map_err(|e| format!("Failed to upsert local meta from server: {e}"))?;
+  } else {
+    conn.execute(
+      "INSERT INTO local_meta (key, value, updated_at, action, synced)
+       VALUES (?1, ?2, ?3, 'upsert', 0)
+       ON CONFLICT(key) DO UPDATE SET
+         value = excluded.value,
+         updated_at = excluded.updated_at,
+         action = 'upsert',
+         synced = 0",
+      params![key, val_str, now],
+    )
+    .map_err(|e| format!("Failed to upsert local meta: {e}"))?;
+  }
 
   Ok(value.clone())
 }

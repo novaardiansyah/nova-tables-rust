@@ -13,7 +13,8 @@ pub fn local_upsert_folder(input: Value) -> Result<Value, String> {
     .get("parentId")
     .or_else(|| input.get("parent_id"))
     .and_then(|v| v.as_str());
-  local_store::upsert_folder(uid, name, parent_id)
+  let from_server = input.get("_fromServer").and_then(|v| v.as_bool()).unwrap_or(false);
+  local_store::upsert_folder(uid, name, parent_id, from_server)
 }
 
 #[tauri::command]
@@ -30,7 +31,7 @@ pub fn local_list_folders() -> Result<Value, String> {
 
 #[tauri::command]
 pub fn local_upsert_connection(input: Value) -> Result<Value, String> {
-  let saved = local_store::upsert_connection(&input)?;
+  let saved = local_store::upsert_connection(&input, input.get("_fromServer").and_then(|v| v.as_bool()).unwrap_or(false))?;
   Ok(serde_json::json!({ "ok": true, "connection": saved }))
 }
 
@@ -48,7 +49,7 @@ pub fn local_list_connections() -> Result<Value, String> {
 
 #[tauri::command]
 pub fn local_upsert_saved_query(input: Value) -> Result<Value, String> {
-  let saved = local_store::upsert_saved_query(&input)?;
+  let saved = local_store::upsert_saved_query(&input, input.get("_fromServer").and_then(|v| v.as_bool()).unwrap_or(false))?;
   Ok(serde_json::json!({ "ok": true, "query": saved }))
 }
 
@@ -69,8 +70,72 @@ pub fn local_list_saved_queries(
 
 #[tauri::command]
 pub fn local_upsert_meta(key: String, value: Value) -> Result<Value, String> {
-  let stored = local_store::upsert_meta(&key, &value)?;
+  let stored = local_store::upsert_meta(&key, &value, false)?;
   Ok(serde_json::json!({ "ok": true, "value": stored }))
+}
+
+#[tauri::command]
+pub fn local_upsert_meta_from_server(key: String, value: Value) -> Result<Value, String> {
+  let stored = local_store::upsert_meta(&key, &value, true)?;
+  Ok(serde_json::json!({ "ok": true, "value": stored }))
+}
+
+#[tauri::command]
+pub fn local_upsert_query_history_from_server(input: Value) -> Result<Value, String> {
+  let uid = input
+    .get("uid")
+    .or_else(|| input.get("id"))
+    .and_then(|v| v.as_str())
+    .ok_or_else(|| "Query history uid is required".to_string())?;
+  let user_id = input.get("user_id").and_then(|v| v.as_i64());
+  let connection_id = input
+    .get("connectionId")
+    .or_else(|| input.get("connection_id"))
+    .and_then(|v| v.as_str());
+  let database = input
+    .get("databaseName")
+    .or_else(|| input.get("database_name"))
+    .or_else(|| input.get("database"))
+    .and_then(|v| v.as_str())
+    .unwrap_or("");
+  let sql = input.get("sql").and_then(|v| v.as_str()).unwrap_or("");
+  if sql.is_empty() {
+    return Ok(serde_json::json!({ "ok": true, "skipped": true }));
+  }
+  let status = input.get("status").and_then(|v| v.as_str()).unwrap_or("success");
+  let duration_ms = input
+    .get("durationMs")
+    .or_else(|| input.get("duration_ms"))
+    .and_then(|v| v.as_i64())
+    .unwrap_or(0);
+  let row_count = input
+    .get("rowCount")
+    .or_else(|| input.get("row_count"))
+    .and_then(|v| v.as_i64())
+    .unwrap_or(0);
+  let error_message = input
+    .get("errorMessage")
+    .or_else(|| input.get("error_message"))
+    .and_then(|v| v.as_str());
+  let created_at = input
+    .get("createdAt")
+    .or_else(|| input.get("created_at"))
+    .and_then(|v| v.as_str())
+    .unwrap_or("");
+
+  let saved = crate::database::query_history_store::upsert_from_server(
+    uid,
+    user_id,
+    connection_id,
+    database,
+    sql,
+    status,
+    duration_ms,
+    row_count,
+    error_message,
+    created_at,
+  )?;
+  Ok(serde_json::json!({ "ok": true, "history": saved }))
 }
 
 #[tauri::command]

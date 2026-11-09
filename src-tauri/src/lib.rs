@@ -81,6 +81,8 @@ pub fn run() {
       commands::local_sync::local_delete_saved_query,
       commands::local_sync::local_list_saved_queries,
       commands::local_sync::local_upsert_meta,
+      commands::local_sync::local_upsert_meta_from_server,
+      commands::local_sync::local_upsert_query_history_from_server,
       commands::local_sync::local_get_meta,
       commands::local_sync::local_delete_meta,
       commands::local_sync::local_unsynced_batch,

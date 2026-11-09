@@ -281,6 +281,71 @@ pub fn clear_synced() -> Result<usize, String> {
     Ok(affected)
 }
 
+pub fn upsert_from_server(
+    uid: &str,
+    user_id: Option<i64>,
+    connection_id: Option<&str>,
+    database_name: &str,
+    sql: &str,
+    status: &str,
+    duration_ms: i64,
+    row_count: i64,
+    error_message: Option<&str>,
+    created_at: &str,
+) -> Result<Value, String> {
+    let conn = open()?;
+    conn.execute(
+        "INSERT INTO query_history (uid, user_id, connection_id, database_name, sql, status, duration_ms, row_count, error_message, created_at, synced)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 1)
+         ON CONFLICT(uid) DO UPDATE SET
+           user_id = COALESCE(excluded.user_id, query_history.user_id),
+           connection_id = COALESCE(excluded.connection_id, query_history.connection_id),
+           database_name = excluded.database_name,
+           sql = excluded.sql,
+           status = excluded.status,
+           duration_ms = excluded.duration_ms,
+           row_count = excluded.row_count,
+           error_message = excluded.error_message,
+           created_at = excluded.created_at,
+           synced = 1
+         WHERE query_history.synced = 1",
+        params![
+            uid,
+            user_id,
+            connection_id,
+            database_name,
+            sql,
+            status,
+            duration_ms,
+            row_count,
+            error_message,
+            created_at,
+        ],
+    )
+    .map_err(|e| format!("Failed to upsert query history from server: {e}"))?;
+
+    Ok(json!({
+        "id": uid,
+        "uid": uid,
+        "connectionId": connection_id,
+        "connection_id": connection_id,
+        "database": database_name,
+        "databaseName": database_name,
+        "database_name": database_name,
+        "sql": sql,
+        "status": status,
+        "durationMs": duration_ms,
+        "duration_ms": duration_ms,
+        "rowCount": row_count,
+        "row_count": row_count,
+        "errorMessage": error_message,
+        "error_message": error_message,
+        "createdAt": created_at,
+        "created_at": created_at,
+        "synced": true,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

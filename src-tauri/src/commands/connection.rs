@@ -34,7 +34,8 @@ pub fn delete_connection(_id: String) -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub fn update_last_database(_connection_id: String, _database: String) -> Result<Value, String> {
+pub fn update_last_database(connection_id: String, database: String) -> Result<Value, String> {
+  crate::database::local_store::update_last_database(&connection_id, &database)?;
   Ok(json!({ "ok": true }))
 }
 
