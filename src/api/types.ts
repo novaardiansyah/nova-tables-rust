@@ -48,6 +48,7 @@ export interface ConnectionModel {
   lastConnectedAt?: string | null
   hasPassword?: boolean
   isDuplicate?: boolean
+  isRecent?: boolean
   timezone?: string | null
   [key: string]: unknown
 }

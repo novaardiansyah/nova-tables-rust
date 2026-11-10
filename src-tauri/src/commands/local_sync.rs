@@ -19,8 +19,8 @@ pub fn local_upsert_folder(input: Value) -> Result<Value, String> {
 
 #[tauri::command]
 pub fn local_delete_folder(id: String) -> Result<Value, String> {
-  let deleted = local_store::delete_folder(&id)?;
-  Ok(serde_json::json!({ "ok": true, "deleted": deleted }))
+  let deleted_connection_ids = local_store::delete_folder(&id)?;
+  Ok(serde_json::json!({ "ok": true, "deleted": true, "deletedConnectionIds": deleted_connection_ids }))
 }
 
 #[tauri::command]

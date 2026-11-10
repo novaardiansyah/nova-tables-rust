@@ -271,18 +271,16 @@ export function useSessionManager({
         const database = pickDatabase(result.databases, result.database)
         const detectedTz = result?.timezone || (connection as any)?.timezone
 
+        await api.setLastConnectedId(connection.id)
         setLastConnectedId(connection.id)
         setConnections((prev) =>
-          prev.map((c) =>
-            c.id === connection.id
-              ? {
-                  ...c,
-                  lastConnectedAt: new Date().toISOString(),
-                  lastDatabaseUsed: database,
-                  database,
-                }
-              : c,
-          ),
+          prev.map((c) => ({
+            ...c,
+            lastConnectedAt: c.id === connection.id ? new Date().toISOString() : c.lastConnectedAt,
+            lastDatabaseUsed: c.id === connection.id ? database : c.lastDatabaseUsed,
+            database: c.id === connection.id ? database : c.database,
+            isRecent: c.id === connection.id,
+          })),
         )
 
         tabIdRef.current += 1
@@ -590,13 +588,16 @@ export function useSessionManager({
       const result = await api.deleteTree({ connectionIds, folderIds })
       setConnections(result.connections)
       setFolders(result.folders)
-      setLastConnectedId((prev) => (prev && result.connectionIds.includes(prev) ? null : prev))
+      if (lastConnectedId && result.connectionIds.includes(lastConnectedId)) {
+        setLastConnectedId(null)
+        void api.setLastConnectedId(null)
+      }
       for (const id of result.connectionIds) {
         if (sessionsRef.current[id]) await closeSession(id)
       }
       return result
     },
-    [closeSession],
+    [closeSession, lastConnectedId],
   )
 
   const handleDeleteConfirm = useCallback(async () => {
@@ -655,11 +656,16 @@ export function useSessionManager({
       try {
         const connectionOrder = Array.isArray(payload?.connections) ? payload.connections : []
         const folderOrder = Array.isArray(payload?.folders) ? payload.folders : []
+        const connectionFolders = (payload?.connectionFolders || {}) as Record<string, string | null>
+        const folderParents = (payload?.folderParents || {}) as Record<string, string | null>
         if (connectionOrder.length > 0) {
           setConnections((prev) => {
             const byId = new Map(prev.map((c: any) => [c.id, c]))
             return connectionOrder
-              .map((id: string) => byId.get(id))
+              .map((id: string) => {
+                const item = byId.get(id)
+                return item ? { ...item, folderId: id in connectionFolders ? connectionFolders[id] : item.folderId } : null
+              })
               .filter(Boolean)
           })
         }
@@ -667,7 +673,10 @@ export function useSessionManager({
           setFolders((prev) => {
             const byId = new Map(prev.map((f: any) => [f.id, f]))
             return folderOrder
-              .map((id: string) => byId.get(id))
+              .map((id: string) => {
+                const item = byId.get(id)
+                return item ? { ...item, parentId: id in folderParents ? folderParents[id] : item.parentId } : null
+              })
               .filter(Boolean)
           })
         }

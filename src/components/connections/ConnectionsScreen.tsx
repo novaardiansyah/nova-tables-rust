@@ -122,17 +122,15 @@ export default function ConnectionsScreen({
   const [bulkDelete, setBulkDelete] = useState<{ connectionIds: string[]; folderIds: string[] } | null>(null)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [actionMoveMenu, setActionMoveMenu] = useState<{ x: number; y: number } | null>(null)
-  const [viewTab, setViewTab] = useState<'all' | 'recent'>('all')
   const [testingConnectionId, setTestingConnectionId] = useState<string | null>(null)
 
   const effectiveLastConnectedId = useMemo(() => {
+    const marked = connections.find((c) => c.isRecent === true)
+    if (marked) return marked.id
     if (lastConnectedId && connections.some((c) => c.id === lastConnectedId)) {
       return lastConnectedId
     }
-    const withTimestamp = connections
-      .filter((c) => typeof c.lastConnectedAt === 'string')
-      .sort((a, b) => String(b.lastConnectedAt).localeCompare(String(a.lastConnectedAt)))
-    return withTimestamp[0]?.id || null
+    return null
   }, [connections, lastConnectedId])
 
   const lastConnection = useMemo(() => {
@@ -140,24 +138,20 @@ export default function ConnectionsScreen({
     return connections.find((c) => c.id === effectiveLastConnectedId) || null
   }, [connections, effectiveLastConnectedId])
 
-  const recentConnections = useMemo(() => {
-    return connections
-      .filter((c) => c.lastConnectedAt || c.id === effectiveLastConnectedId)
-      .sort((a, b) => {
-        if (a.id === effectiveLastConnectedId) return -1
-        if (b.id === effectiveLastConnectedId) return 1
-        const timeA = a.lastConnectedAt ? new Date(String(a.lastConnectedAt)).getTime() : 0
-        const timeB = b.lastConnectedAt ? new Date(String(b.lastConnectedAt)).getTime() : 0
-        return timeB - timeA
-      })
-  }, [connections, effectiveLastConnectedId])
-
   const flatFolders = useMemo(() => folderTree(folders), [folders])
   const connectionOrder = useMemo(() => connections.map((item) => item.id), [connections])
   const folderOrder = useMemo(() => folders.map((item) => item.id), [folders])
+  const treeConnections = useMemo(() => {
+    const folderIds = new Set(folders.map((item) => item.id))
+    return connections.map((connection) => {
+      const folderId = connection.folderId ?? null
+      if (!folderId || folderIds.has(folderId)) return connection
+      return { ...connection, folderId: null }
+    })
+  }, [connections, folders])
   const visibleRows = useMemo(
-    () => flattenRows(connections, folders, openFolders),
-    [connections, folders, openFolders],
+    () => flattenRows(treeConnections, folders, openFolders),
+    [treeConnections, folders, openFolders],
   )
   const selectedCount = selectedConnectionIds.size + selectedFolderIds.size
   const selectedSummary = [
@@ -405,7 +399,7 @@ export default function ConnectionsScreen({
         const targetIndex = next.indexOf(target.id)
         if (targetIndex < 0) return
         index = target.position === 'before' ? targetIndex : targetIndex + 1
-        folderId = connections.find((item) => item.id === target.id)?.folderId ?? null
+        folderId = treeConnections.find((item) => item.id === target.id)?.folderId ?? null
       } else if (target.kind === 'folder') {
         folderId = target.id
         setOpenFolders((prev) => new Set(prev).add(target.id))
@@ -429,6 +423,8 @@ export default function ConnectionsScreen({
     if (target.kind === 'folder') {
       const targetFolder = folders.find((item) => item.id === target.id)
       if (!targetFolder) return
+      const blocked = folderSubtree(folders, dragged.id)
+      if (blocked.has(target.id)) return
       if (target.position === 'inside') {
         parentId = target.id
         setOpenFolders((prev) => new Set(prev).add(target.id))
@@ -457,7 +453,10 @@ export default function ConnectionsScreen({
     if (!drag) return
     event.stopPropagation()
     if (kind === 'connection' && (drag.kind !== 'connection' || drag.ids?.includes(item.id))) return
-    if (kind === 'folder' && drag.kind === 'folder' && drag.id === item.id) return
+    if (kind === 'folder' && drag.kind === 'folder' && drag.id) {
+      if (drag.id === item.id) return
+      if (folderSubtree(folders, drag.id).has(item.id)) return
+    }
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
     setDropTarget(resolveTarget(event as any, kind, item, drag as any) as any)
@@ -476,15 +475,14 @@ export default function ConnectionsScreen({
 
   const handleRootDragOver = (event: DragEvent<HTMLDivElement>) => {
     if (!drag) return
-    if (event.target !== event.currentTarget) return
     event.preventDefault()
+    event.stopPropagation()
     event.dataTransfer.dropEffect = 'move'
     setDropTarget({ kind: 'root' })
   }
 
   const handleRootDrop = (event: DragEvent<HTMLDivElement>) => {
     if (!drag) return
-    if (event.target !== event.currentTarget) return
     event.preventDefault()
     event.stopPropagation()
     applyDrop(drag, { kind: 'root' })
@@ -695,7 +693,7 @@ export default function ConnectionsScreen({
       folder={folder}
       depth={depth}
       folders={folders}
-      connections={connections}
+      connections={treeConnections}
       openFolders={openFolders}
       selectedFolderIds={selectedFolderIds}
       selectedCount={selectedCount}
@@ -716,7 +714,7 @@ export default function ConnectionsScreen({
   )
 
   const rootFolders = folders.filter((folder) => (folder.parentId ?? null) === null)
-  const rootConnections = connections.filter((connection) => (connection.folderId ?? null) === null)
+  const rootConnections = treeConnections.filter((connection) => (connection.folderId ?? null) === null)
   const isEmpty = connections.length === 0 && folders.length === 0
 
   return (
@@ -774,37 +772,7 @@ export default function ConnectionsScreen({
             </div>
             {!isEmpty ? (
               <div className="flex items-center gap-3">
-                <div className="flex items-center gap-0.5 rounded-lg border border-line bg-surface p-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setViewTab('all')}
-                    className={`rounded-md px-2.5 py-1 text-[length:var(--app-text-11)] font-medium transition-colors ${
-                      viewTab === 'all'
-                        ? 'bg-panel text-text-strong shadow-sm'
-                        : 'text-text-muted hover:text-text'
-                    }`}
-                  >
-                    All ({connections.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewTab('recent')}
-                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[length:var(--app-text-11)] font-medium transition-colors ${
-                      viewTab === 'recent'
-                        ? 'bg-panel text-text-strong shadow-sm'
-                        : 'text-text-muted hover:text-text'
-                    }`}
-                  >
-                    Recent
-                    {recentConnections.length > 0 ? (
-                      <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[length:var(--app-text-9)] font-semibold text-accent">
-                        {recentConnections.length}
-                      </span>
-                    ) : null}
-                  </button>
-                </div>
-
-                {viewTab === 'all' && folders.length > 0 ? (
+                {folders.length > 0 ? (
                   <div className="flex items-center gap-1 text-[length:var(--app-text-11)] text-text-faint">
                     <button
                       type="button"
@@ -841,136 +809,6 @@ export default function ConnectionsScreen({
                 New connection
               </button>
             </div>
-          ) : viewTab === 'recent' ? (
-            recentConnections.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-line-strong py-16 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-tint/[0.04] text-text-faint">
-                  <Icon name="history" size={24} />
-                </div>
-                <p className="mt-3 text-[length:var(--app-text-13)] font-medium text-text">No recent connections</p>
-                <p className="mt-1 max-w-sm text-[length:var(--app-text-11)] leading-[calc(var(--app-text-12)+6px)] text-text-muted">
-                  Connect to a Microsoft SQL Server database to see your session history here.
-                </p>
-                <button type="button" className="btn-soft mt-4" onClick={() => setViewTab('all')}>
-                  View all connections
-                </button>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-line bg-panel p-2">
-                <div className="space-y-px">
-                  {recentConnections.map((conn) => {
-                    const isConnecting = connectingId === conn.id || testingConnectionId === conn.id
-                    const isOpen = openIds.includes(conn.id)
-                    const isSelected = selectedConnectionIds.has(conn.id)
-                    return (
-                      <div
-                        key={conn.id}
-                        className={`group/row flex items-center gap-2 rounded-md px-2.5 py-2 transition-colors ${
-                          isSelected ? 'bg-accent/[0.08]' : 'hover:bg-tint/[0.04]'
-                        }`}
-                        onContextMenu={(event) => openRowMenu(event, 'connection', conn)}
-                      >
-                        <button
-                          type="button"
-                          disabled={isConnecting}
-                          onClick={(event) => {
-                            if (applyModifierClick(event, 'connection', conn.id)) return
-                            onOpen(conn)
-                          }}
-                          className="flex min-w-0 flex-1 items-center gap-2.5 text-left disabled:opacity-70"
-                          title={
-                            isOpen
-                              ? `Switch to ${conn.name}`
-                              : `Connect to ${conn.name} (${conn.host}:${conn.port})`
-                          }
-                        >
-                          {isConnecting ? (
-                            <Spinner size={12} className="shrink-0 text-accent" />
-                          ) : (
-                            <span
-                              className={`h-[7px] w-[7px] shrink-0 rounded-full ${
-                                isOpen ? 'bg-success shadow-[0_0_6px_rgba(52,211,153,0.6)]' : 'bg-line-strong'
-                              }`}
-                            />
-                          )}
-                          <span className="min-w-0 flex-1">
-                            <span className="flex items-center gap-2">
-                              <span className="truncate text-[length:var(--app-text-12)] font-medium text-text">
-                                {conn.name}
-                              </span>
-                              <span className="flex shrink-0 items-center gap-1.5">
-                                <EnvironmentBadge environment={conn.environment} />
-                                {conn.driverType === 'sqlserver' ? (
-                                  <span
-                                    title={conn.driverType}
-                                    className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-success"
-                                  >
-                                    <span className="h-1 w-1 rounded-full bg-current" />
-                                    {conn.driverType}
-                                  </span>
-                                ) : conn.driverType === 'mysql' ? (
-                                  <span
-                                    title={conn.driverType}
-                                    className="flex shrink-0 items-center gap-1 rounded-full bg-warning/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-warning"
-                                  >
-                                    <span className="h-1 w-1 rounded-full bg-current" />
-                                    {conn.driverType}
-                                  </span>
-                                ) : null}
-                                {isOpen ? (
-                                  <span
-                                    title="Session is open"
-                                    className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-success"
-                                  >
-                                    <span className="h-1 w-1 rounded-full bg-current" />
-                                    Open
-                                  </span>
-                                ) : null}
-                              </span>
-                            </span>
-                            <span className="block truncate text-[length:var(--app-text-10)] leading-[calc(var(--app-text-12)+4px)] text-text-faint">
-                              {conn.host}:{conn.port}
-                              {conn.lastDatabaseUsed || conn.database || conn.databaseName
-                                ? ` · ${conn.lastDatabaseUsed || conn.database || conn.databaseName}`
-                                : ''}
-                              {conn.lastConnectedAt ? ` · ${formatRelativeTime(String(conn.lastConnectedAt))}` : ''}
-                            </span>
-                          </span>
-                        </button>
-
-                        <button
-                          type="button"
-                          className="btn-soft h-7 shrink-0 px-2.5 text-[length:var(--app-text-11)]"
-                          disabled={isConnecting}
-                          onClick={() => onOpen(conn)}
-                        >
-                          {isConnecting ? (
-                            <Spinner size={12} />
-                          ) : (
-                            <Icon name={isOpen ? 'chevron-right' : 'play'} size={12} />
-                          )}
-                          {isOpen ? 'Open' : 'Connect'}
-                        </button>
-
-                        <button
-                          type="button"
-                          className={`icon-btn h-6 w-6 shrink-0 transition-opacity ${
-                            menu?.kind === 'connection' && menu.item.id === conn.id
-                              ? 'opacity-100'
-                              : 'opacity-0 focus-visible:opacity-100 group-hover/row:opacity-100'
-                          }`}
-                          title="Connection actions"
-                          aria-label={`Actions for ${conn.name}`}
-                          onClick={(event) => openRowMenu(event, 'connection', conn)}
-                        >
-                          <Icon name="more-horizontal" size={13} />
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )
           ) : (
             <>
               {lastConnection ? (

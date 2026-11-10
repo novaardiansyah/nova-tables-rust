@@ -469,7 +469,8 @@ export const api = {
       })
     }
 
-    return merged
+    const recentId = await api.getLastConnectedId().catch(() => null)
+    return merged.map((c) => ({ ...c, isRecent: c.id === recentId }))
   },
 
   rememberServerConnection: async (serverConn: any): Promise<void> => {
@@ -566,15 +567,31 @@ export const api = {
 
   getLastConnectedId: async (): Promise<string | null> => {
     try {
-      const res = await api.loadWorkspaceState()
-      const activeId = (res as { activeConnectionId?: string | null })?.activeConnectionId
-      if (typeof activeId === 'string' && activeId) return activeId
+      const metaRes = await callCommand<{ ok: boolean; value: unknown }>('local_get_meta', { key: 'last_connected_id' }).catch(() => null)
+      const value = metaRes?.value
+      if (typeof value === 'string' && value) return value
     } catch {
     }
     try {
       return localStorage.getItem('nova_tables_last_connected_id') || null
     } catch {
-      return null
+    }
+    try {
+      const res = await api.loadWorkspaceState()
+      const activeId = (res as { activeConnectionId?: string | null })?.activeConnectionId
+      if (typeof activeId === 'string' && activeId) return activeId
+    } catch {
+    }
+    return null
+  },
+
+  setLastConnectedId: async (id: string | null): Promise<void> => {
+    await callCommand('local_upsert_meta', { key: 'last_connected_id', value: id }).catch(() => null)
+    notifyLocalWrite()
+    try {
+      if (id) localStorage.setItem('nova_tables_last_connected_id', id)
+      else localStorage.removeItem('nova_tables_last_connected_id')
+    } catch {
     }
   },
 
@@ -648,6 +665,13 @@ export const api = {
 
   deleteConnection: async (id: string): Promise<unknown> => {
     await callCommand('local_delete_connection', { id }).catch(() => null)
+    try {
+      const lastId = await api.getLastConnectedId()
+      if (lastId === id) {
+        await api.setLastConnectedId(null)
+      }
+    } catch {
+    }
     notifyLocalWrite()
 
     return { ok: true }
@@ -680,6 +704,33 @@ export const api = {
   listFolders: async (): Promise<FolderModel[]> => {
     const localRes = await callCommand<{ ok: boolean; folders: FolderModel[] }>('local_list_folders').catch(() => null)
     const localList = localRes?.folders || []
+
+    let order: string[] = []
+    try {
+      const stored = localStorage.getItem('nova_tables_tree_order')
+      if (stored) {
+        order = JSON.parse(stored).folders || []
+      }
+    } catch {
+    }
+    if (order.length === 0) {
+      try {
+        const metaRes = await callCommand<{ ok: boolean; value: unknown }>('local_get_meta', { key: 'tree_order' }).catch(() => null)
+        if (metaRes?.value) {
+          const parsed = typeof metaRes.value === 'string' ? JSON.parse(metaRes.value) : metaRes.value
+          order = (parsed as { folders?: string[] })?.folders || []
+        }
+      } catch {
+      }
+    }
+    if (order.length > 0) {
+      const orderMap = new Map(order.map((id, idx) => [id, idx]))
+      localList.sort((a, b) => {
+        const idxA = orderMap.has(a.id) ? orderMap.get(a.id)! : 999999
+        const idxB = orderMap.has(b.id) ? orderMap.get(b.id)! : 999999
+        return idxA - idxB
+      })
+    }
     return localList
   },
 
@@ -700,11 +751,10 @@ export const api = {
     return folderWithId
   },
 
-  deleteFolder: async (id: string): Promise<unknown> => {
-    await callCommand('local_delete_folder', { id }).catch(() => null)
+  deleteFolder: async (id: string): Promise<{ ok?: boolean; deletedConnectionIds?: string[] } | null> => {
+    const res = await callCommand<{ ok?: boolean; deletedConnectionIds?: string[] }>('local_delete_folder', { id }).catch(() => null)
     notifyLocalWrite()
-
-    return { ok: true }
+    return res || { ok: true, deletedConnectionIds: [] }
   },
 
   reorderTree: async (input: unknown): Promise<{ connections: ConnectionModel[]; folders: FolderModel[];[key: string]: unknown }> => {
@@ -713,6 +763,36 @@ export const api = {
       folders?: string[]
       connectionFolders?: Record<string, string | null>
       folderParents?: Record<string, string | null>
+    }
+
+    if (payload.connectionFolders && Object.keys(payload.connectionFolders).length > 0) {
+      const currentConnections = await api.listConnections()
+      for (const [cId, targetFolderId] of Object.entries(payload.connectionFolders)) {
+        const found = currentConnections.find((c) => c.id === cId)
+        if (found) {
+          await callCommand('local_upsert_connection', {
+            input: {
+              ...found,
+              folderId: targetFolderId,
+            },
+          }).catch(() => null)
+        }
+      }
+    }
+
+    if (payload.folderParents && Object.keys(payload.folderParents).length > 0) {
+      const currentFolders = await api.listFolders()
+      for (const [fId, targetParentId] of Object.entries(payload.folderParents)) {
+        const found = currentFolders.find((f) => f.id === fId)
+        if (found) {
+          await callCommand('local_upsert_folder', {
+            input: {
+              ...found,
+              parentId: targetParentId,
+            },
+          }).catch(() => null)
+        }
+      }
     }
 
     // Client-first: persist tree order directly to local SQLite (synced=0).
@@ -774,6 +854,11 @@ export const api = {
         await api.deleteConnection(cId)
       } catch {
       }
+    }
+
+    const lastId = await api.getLastConnectedId().catch(() => null)
+    if (lastId && connectionIds.includes(lastId)) {
+      await api.setLastConnectedId(null)
     }
 
     return {

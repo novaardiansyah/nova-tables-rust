@@ -1,6 +1,7 @@
 use chrono::Utc;
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 pub fn app_db_path() -> Result<PathBuf, String> {
@@ -135,22 +136,75 @@ pub fn upsert_folder(uid: &str, name: &str, parent_id: Option<&str>, from_server
   }))
 }
 
-pub fn delete_folder(uid: &str) -> Result<bool, String> {
+pub fn delete_folder(uid: &str) -> Result<Vec<String>, String> {
   let conn = open()?;
   let now = Utc::now().to_rfc3339();
 
-  conn.execute(
-    "INSERT INTO local_folders (uid, name, parent_id, created_at, updated_at, action, synced)
-     VALUES (?1, '', NULL, ?2, ?2, 'delete', 0)
-     ON CONFLICT(uid) DO UPDATE SET
-       action = 'delete',
-       updated_at = excluded.updated_at,
-       synced = 0",
-    params![uid, now],
-  )
-  .map_err(|e| format!("Failed to record delete local folder: {e}"))?;
+  // Collect all descendant folders recursively
+  let mut stmt = conn.prepare("SELECT uid, parent_id FROM local_folders WHERE action != 'delete'").map_err(|e| format!("Failed to prepare folders for delete: {e}"))?;
+  let rows = stmt.query_map([], |row| {
+    let uid: String = row.get(0)?;
+    let parent_id: Option<String> = row.get(1)?;
+    Ok((uid, parent_id))
+  }).map_err(|e| format!("Failed to query folders: {e}"))?;
 
-  Ok(true)
+  let mut all_folders: Vec<(String, Option<String>)> = Vec::new();
+  for r in rows { all_folders.push(r.map_err(|e| format!("Row error: {e}"))?); }
+
+  // Build parent -> children map
+  let mut children: HashMap<String, Vec<String>> = HashMap::new();
+  for (child_uid, parent_id) in &all_folders {
+    let parent = parent_id.as_deref().unwrap_or("");
+    children.entry(parent.to_string()).or_default().push(child_uid.clone());
+  }
+
+  // Find all folders in the subtree of `uid` (including self)
+  let mut subtree: Vec<String> = vec![uid.to_string()];
+  let mut visited: HashSet<String> = HashSet::new();
+  visited.insert(uid.to_string());
+  let mut queue: Vec<String> = vec![uid.to_string()];
+  while let Some(current) = queue.pop() {
+    if let Some(kids) = children.get(&current) {
+      for kid in kids {
+        if visited.insert(kid.clone()) {
+          subtree.push(kid.clone());
+          queue.push(kid.clone());
+        }
+      }
+    }
+  }
+
+  // Mark all folders in subtree as deleted
+  for folder_uid in &subtree {
+    conn.execute(
+      "INSERT INTO local_folders (uid, name, parent_id, created_at, updated_at, action, synced)
+       VALUES (?1, '', NULL, ?2, ?2, 'delete', 0)
+       ON CONFLICT(uid) DO UPDATE SET
+         action = 'delete',
+         updated_at = excluded.updated_at,
+         synced = 0",
+      params![folder_uid, now],
+    ).map_err(|e| format!("Failed to mark folder {} as deleted: {e}", folder_uid))?;
+  }
+
+  // Mark all connections in those folders as deleted
+  let mut deleted_connection_ids: Vec<String> = Vec::new();
+  for folder_uid in &subtree {
+    let mut stmt = conn.prepare("SELECT uid FROM local_connections WHERE action != 'delete' AND folder_id = ?1").map_err(|e| format!("Failed to prepare connection query: {e}"))?;
+    let rows = stmt.query_map(params![folder_uid], |row| {
+      let c_uid: String = row.get(0)?;
+      Ok(c_uid)
+    }).map_err(|e| format!("Failed to query connections for folder {}: {e}", folder_uid))?;
+    for r in rows {
+      deleted_connection_ids.push(r.map_err(|e| format!("Row error: {e}"))?);
+    }
+    conn.execute(
+      "UPDATE local_connections SET action = 'delete', updated_at = ?1, synced = 0 WHERE action != 'delete' AND folder_id = ?2",
+      params![now, folder_uid],
+    ).map_err(|e| format!("Failed to mark connections in folder {} as deleted: {e}", folder_uid))?;
+  }
+
+  Ok(deleted_connection_ids)
 }
 
 pub fn list_folders() -> Result<Vec<Value>, String> {
