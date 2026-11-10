@@ -357,22 +357,6 @@ export default function TableDesigner({
       ),
     }))
 
-  const addForeignColumn = (index: number) =>
-    setDraft((prev) => ({
-      ...prev,
-      foreignKeys: (prev.foreignKeys || []).map((key, position) =>
-        position === index ? { ...key, columns: [...key.columns, { column: '', referencedColumn: '' }] } : key,
-      ),
-    }))
-
-  const removeForeignColumn = (index: number, columnIndex: number) =>
-    setDraft((prev) => ({
-      ...prev,
-      foreignKeys: (prev.foreignKeys || []).map((key, position) =>
-        position === index ? { ...key, columns: key.columns.filter((_, itemPosition) => itemPosition !== columnIndex) } : key,
-      ),
-    }))
-
   const removeForeign = (index: number) =>
     setDraft((prev) => ({
       ...prev,
@@ -570,8 +554,6 @@ export default function TableDesigner({
           removeForeign={removeForeign}
           addForeign={addForeign}
           updateForeignColumn={updateForeignColumn}
-          addForeignColumn={addForeignColumn}
-          removeForeignColumn={removeForeignColumn}
           updateIndex={updateIndex}
           removeIndex={removeIndex}
           addIndex={addIndex}

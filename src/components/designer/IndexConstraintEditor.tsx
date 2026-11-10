@@ -32,8 +32,6 @@ export interface IndexConstraintEditorProps {
   removeForeign: (index: number) => void
   addForeign: () => void
   updateForeignColumn: (fkIndex: number, colIndex: number, patch: Partial<DesignForeignKeyColumn>) => void
-  addForeignColumn: (fkIndex: number) => void
-  removeForeignColumn: (fkIndex: number, colIndex: number) => void
   updateIndex: (index: number, patch: Partial<DesignIndex>) => void
   removeIndex: (index: number) => void
   addIndex: () => void
@@ -53,8 +51,6 @@ export default function IndexConstraintEditor({
   removeForeign,
   addForeign,
   updateForeignColumn,
-  addForeignColumn,
-  removeForeignColumn,
   updateIndex,
   removeIndex,
   addIndex,
@@ -110,111 +106,133 @@ export default function IndexConstraintEditor({
       </Section>
 
       <Section title="Foreign keys" count={foreignKeys.length} onAdd={addForeign} addLabel="Add foreign key">
-        {foreignKeys.length === 0 ? (
-          <p className="text-[length:var(--app-text-11)] text-text-faint">No foreign keys.</p>
-        ) : (
-          <div className="space-y-3">
-            {foreignKeys.map((key, index) => {
-              const currentTableValue = key.referencedTable
-                ? `${key.referencedSchema || 'dbo'}.${key.referencedTable}`
-                : ''
-              const currentTableLabel = key.referencedTable
-                ? (!key.referencedSchema || key.referencedSchema.toLowerCase() === 'dbo'
-                    ? key.referencedTable
-                    : `${key.referencedSchema}.${key.referencedTable}`)
-                : ''
-              const fkTableOptions =
-                currentTableValue && !tableOptions.some((o) => o.value === currentTableValue)
-                  ? [{ value: currentTableValue, label: currentTableLabel }, ...tableOptions]
-                  : tableOptions
-              const refColOptions = getReferencedColumnOptions(key.referencedSchema, key.referencedTable)
+        <div className="space-y-2">
+          <div className="overflow-x-auto">
+            <table className="w-full table-fixed border-collapse text-[length:var(--app-text-12)]">
+              <thead>
+                <tr className="text-left text-[length:var(--app-text-10)] uppercase tracking-wider text-text-faint">
+                  <th className="w-[34%] px-2 py-2 font-medium">Name</th>
+                  <th className="w-[22%] px-2 py-2 font-medium">Column</th>
+                  <th className="w-[22%] px-2 py-2 font-medium">Referenced table</th>
+                  <th className="w-[14%] px-2 py-2 font-medium">Referenced column</th>
+                  <th className="w-[8%] px-2 py-2 font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {foreignKeys.length === 0 ? (
+                  <tr className="border-t border-line">
+                    <td colSpan={5} className="px-2 py-3 text-center text-[length:var(--app-text-11)] text-text-faint">
+                      No foreign keys.
+                    </td>
+                  </tr>
+                ) : (
+                  foreignKeys.map((key, index) => {
+                    const currentTableValue = key.referencedTable
+                      ? `${key.referencedSchema || 'dbo'}.${key.referencedTable}`
+                      : ''
+                    const currentTableLabel = key.referencedTable
+                      ? (!key.referencedSchema || key.referencedSchema.toLowerCase() === 'dbo'
+                          ? key.referencedTable
+                          : `${key.referencedSchema}.${key.referencedTable}`)
+                      : ''
+                    const fkTableOptions =
+                      currentTableValue && !tableOptions.some((o) => o.value === currentTableValue)
+                        ? [{ value: currentTableValue, label: currentTableLabel }, ...tableOptions]
+                        : tableOptions
+                    const refColOptions = getReferencedColumnOptions(key.referencedSchema, key.referencedTable)
+                    const firstColumn = key.columns[0] || { column: '', referencedColumn: '' }
+                    const fkColOptions =
+                      firstColumn.referencedColumn && !refColOptions.some((o) => o.value === firstColumn.referencedColumn)
+                        ? [{ value: firstColumn.referencedColumn, label: firstColumn.referencedColumn }, ...refColOptions]
+                        : refColOptions
 
-              return (
-                <div key={index} className="rounded-md border border-line bg-base p-2.5">
-                  <div className="flex items-end gap-2">
-                    <Editor label="Name" value={key.name} onChange={(value) => updateForeign(index, { name: value })} className="w-56" />
-                    <div className="w-56">
-                      <span className="field-label">Referenced table</span>
-                      <Select
-                        value={currentTableValue}
-                        options={fkTableOptions}
-                        onChange={(value) => handleReferencedTableChange(index, value)}
-                        icon="table"
-                        placeholder="Select table…"
-                        emptyLabel="No tables"
-                        searchable
-                        searchPlaceholder="Search table…"
-                        panelClassName="w-64"
-                      />
-                    </div>
-                    <button type="button" className="icon-btn h-8 w-8 hover:text-danger" onClick={() => removeForeign(index)} title="Remove foreign key">
-                      <Icon name="trash" size={12} />
-                    </button>
-                  </div>
-                  <div className="mt-2 space-y-1.5">
-                    {key.columns.map((item, columnIndex) => {
-                      const fkColOptions =
-                        item.referencedColumn && !refColOptions.some((o) => o.value === item.referencedColumn)
-                          ? [{ value: item.referencedColumn, label: item.referencedColumn }, ...refColOptions]
-                          : refColOptions
-
-                      return (
-                        <div key={columnIndex} className="flex items-center gap-2">
+                    return (
+                      <tr key={index} className="border-t border-line align-top">
+                        <td className="px-2 py-1.5">
+                          <input
+                            className="field"
+                            value={key.name}
+                            onChange={(event) => updateForeign(index, { name: event.target.value })}
+                            placeholder="FK_name"
+                            spellCheck={false}
+                          />
+                        </td>
+                        <td className="px-2 py-1.5">
                           <Select
-                            value={item.column}
+                            value={firstColumn.column}
                             options={columnOptions}
-                            onChange={(value) => updateForeignColumn(index, columnIndex, { column: value })}
+                            onChange={(value) => updateForeignColumn(index, 0, { column: value })}
                             icon="key"
-                            placeholder="Select column…"
+                            placeholder="Column…"
                             searchable
                             searchPlaceholder="Search column…"
-                            className="w-44"
+                            className="w-full"
                           />
-                          <Icon name="chevron-right" size={12} className="shrink-0 text-text-faint" />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Select
+                            value={currentTableValue}
+                            options={fkTableOptions}
+                            onChange={(value) => handleReferencedTableChange(index, value)}
+                            icon="table"
+                            placeholder="Select table…"
+                            emptyLabel="No tables"
+                            searchable
+                            searchPlaceholder="Search table…"
+                            className="w-full"
+                            panelClassName="w-64"
+                          />
+                        </td>
+                        <td className="px-2 py-1.5">
                           {refColOptions.length > 0 ? (
                             <Select
-                              value={item.referencedColumn}
+                              value={firstColumn.referencedColumn}
                               options={fkColOptions}
-                              onChange={(value) => updateForeignColumn(index, columnIndex, { referencedColumn: value })}
+                              onChange={(value) => updateForeignColumn(index, 0, { referencedColumn: value })}
                               icon="key"
-                              placeholder="Referenced column…"
+                              placeholder="Column…"
                               emptyLabel="No columns"
                               searchable
                               searchPlaceholder="Search column…"
-                              className="w-48"
+                              className="w-full"
                             />
                           ) : (
                             <input
-                              className="field h-8 w-48 py-0 text-[length:var(--app-text-12)]"
-                              value={item.referencedColumn}
-                              onChange={(event) => updateForeignColumn(index, columnIndex, { referencedColumn: event.target.value })}
-                              placeholder={key.referencedTable ? 'referenced column' : 'select table first'}
+                              className="field h-8 w-full py-0 text-[length:var(--app-text-12)]"
+                              value={firstColumn.referencedColumn}
+                              onChange={(event) => updateForeignColumn(index, 0, { referencedColumn: event.target.value })}
+                              placeholder={key.referencedTable ? 'Column' : 'Select table'}
                               disabled={!key.referencedTable}
                               spellCheck={false}
                             />
                           )}
-                          <button
-                            type="button"
-                            className="icon-btn h-6 w-6 hover:text-danger"
-                            onClick={() => removeForeignColumn(index, columnIndex)}
-                            disabled={key.columns.length === 1}
-                            title="Remove column pair"
-                          >
-                            <Icon name="x" size={12} />
+                        </td>
+                        <td className="px-2 py-1.5 text-center">
+                          <button type="button" className="icon-btn h-8 w-8 hover:text-danger" onClick={() => removeForeign(index)} title="Remove foreign key">
+                            <Icon name="trash" size={12} />
                           </button>
-                        </div>
-                      )
-                    })}
-                    <button type="button" className="btn-ghost h-6 px-2 text-[length:var(--app-text-11)]" onClick={() => addForeignColumn(index)}>
-                      <Icon name="plus" size={11} />
-                      Add column pair
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
+          <div className="flex items-center justify-between border-t border-line pt-2">
+            <button
+              type="button"
+              className="btn-soft h-7 px-2.5 text-[length:var(--app-text-11)]"
+              onClick={addForeign}
+            >
+              <Icon name="plus" size={12} />
+              Add foreign key
+            </button>
+            <span className="text-[length:var(--app-text-11)] text-text-muted">
+              {foreignKeys.length} foreign key{foreignKeys.length === 1 ? '' : 's'}
+            </span>
+          </div>
+        </div>
       </Section>
 
       <Section title="Indexes" count={indexes.length} onAdd={addIndex} addLabel="Add index">
