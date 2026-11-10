@@ -46,9 +46,7 @@ import {
   decryptConnectionPassword,
 } from './crypto'
 import { callCommand, isTauri } from './ipc'
-import { syncAll } from './sync'
 import { createDatabaseOps } from './database'
-import { notifyLocalWrite } from './syncBus'
 
 export * from './types'
 export {
@@ -84,8 +82,18 @@ function legacyCopyText(text: string): boolean {
 // Database operations are delegated to a separate module that calls Tauri commands directly.
 // It receives listConnections/updateLastDatabase/openExternal context from this api object.
 const databaseOps = createDatabaseOps({
-  listConnections: () => api.listConnections(),
-  updateLastDatabase: (connectionId: string, database: string) => api.updateLastDatabase(connectionId, database),
+  listConnections: async () => {
+    const res = await apiRequest<{ ok: boolean; connections?: ConnectionModel[] }>('/api/member/connections')
+    if (!res?.ok || !res?.connections) return []
+    return res.connections
+  },
+  updateLastDatabase: async (connectionId: string, database: string) => {
+    await apiRequest<{ ok: boolean }>(`/api/member/connections/${connectionId}/last-database`, {
+      method: 'PATCH',
+      body: JSON.stringify({ database }),
+    }).catch(() => null)
+    return { ok: true }
+  },
   openExternal: (url: string) => api.openExternal(url),
 })
 
@@ -169,10 +177,7 @@ export const api = {
               '/api/member/google/exchange',
               {
                 method: 'POST',
-                body: JSON.stringify({
-                  code: localCheck.code,
-                  redirectUri,
-                }),
+                body: JSON.stringify({ code: localCheck.code, redirectUri }),
               }
             )
 
@@ -193,32 +198,32 @@ export const api = {
           }
         }
       }
+    }
 
-      try {
-        const statusRes = await apiRequest<{ ok: boolean; status: string; token?: string; refreshToken?: string; user?: AuthUser; message?: string }>(
-          `/api/member/google/status/${encodeURIComponent(redirectRes.state)}`
-        )
+    try {
+      const statusRes = await apiRequest<{ ok: boolean; status: string; token?: string; refreshToken?: string; user?: AuthUser; message?: string }>(
+        `/api/member/google/status/${encodeURIComponent(redirectRes.state)}`
+      )
 
-        if (statusRes.status === 'completed' && statusRes.token && statusRes.user) {
-          setAuthToken(statusRes.token)
-          if (statusRes.refreshToken) {
-            setRefreshToken(statusRes.refreshToken)
-          }
-          setStoredSession({ user: statusRes.user, token: statusRes.token, refreshToken: statusRes.refreshToken })
-          return statusRes.user
+      if (statusRes.status === 'completed' && statusRes.token && statusRes.user) {
+        setAuthToken(statusRes.token)
+        if (statusRes.refreshToken) {
+          setRefreshToken(statusRes.refreshToken)
         }
+        setStoredSession({ user: statusRes.user, token: statusRes.token, refreshToken: statusRes.refreshToken })
+        return statusRes.user
+      }
 
-        if (statusRes.status === 'failed') {
-          throw new Error(statusRes.message || 'Google authentication was cancelled or failed.')
-        }
+      if (statusRes.status === 'failed') {
+        throw new Error(statusRes.message || 'Google authentication was cancelled or failed.')
+      }
 
-        if (statusRes.status === 'expired') {
-          throw new Error('Authentication session expired. Please try again.')
-        }
-      } catch (err: any) {
-        if (err.message && (err.message.includes('cancelled') || err.message.includes('failed') || err.message.includes('expired'))) {
-          throw err
-        }
+      if (statusRes.status === 'expired') {
+        throw new Error('Authentication session expired. Please try again.')
+      }
+    } catch (err: any) {
+      if (err.message && (err.message.includes('cancelled') || err.message.includes('failed') || err.message.includes('expired'))) {
+        throw err
       }
     }
 
@@ -249,12 +254,7 @@ export const api = {
   ): Promise<{ ok: boolean; message: string }> => {
     const res = await apiRequest<{ ok: boolean; message: string }>('/api/member/reset-password', {
       method: 'POST',
-      body: JSON.stringify({
-        email: email.trim().toLowerCase(),
-        password,
-        password_confirmation: confirmPassword,
-        resetToken,
-      }),
+      body: JSON.stringify({ email: email.trim().toLowerCase(), password, password_confirmation: confirmPassword, resetToken }),
     })
     return res
   },
@@ -312,7 +312,9 @@ export const api = {
 
   loadSettings: async (): Promise<Record<string, unknown> | null> => {
     try {
-      const res = await callCommand<{ ok: boolean; value: Record<string, unknown> | null }>('local_get_meta', { key: 'settings' })
+      const res = await apiRequest<{ ok: boolean; value: Record<string, unknown> | null }>('/api/member/meta/settings', {
+        method: 'GET',
+      })
       const value = res?.value ?? null
       if (value === undefined || value === null) return null
       const raw = typeof value === 'string' ? JSON.parse(value) : value
@@ -324,26 +326,18 @@ export const api = {
   },
 
   saveSettings: async (settings: unknown): Promise<unknown> => {
-    let serialized: string
-    try {
-      serialized = typeof settings === 'string' ? settings : JSON.stringify(settings)
-    } catch {
-      serialized = ''
-    }
-    try {
-      localStorage.setItem('nova_tables_settings', serialized)
-    } catch {
-    }
-
-    await callCommand('local_upsert_meta', { key: 'settings', value: settings }).catch(() => null)
-    notifyLocalWrite()
-
+    await apiRequest('/api/member/meta/settings', {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    })
     return settings
   },
 
   loadWorkspaceState: async (): Promise<Record<string, unknown> | null> => {
     try {
-      const res = await callCommand<{ ok: boolean; value: Record<string, unknown> | null }>('local_get_meta', { key: 'workspace' })
+      const res = await apiRequest<{ ok: boolean; value: Record<string, unknown> | null }>('/api/member/meta/workspace', {
+        method: 'GET',
+      })
       const value = res?.value ?? null
       if (value === undefined || value === null) return null
       const raw = typeof value === 'string' ? JSON.parse(value) : value
@@ -355,20 +349,10 @@ export const api = {
   },
 
   saveWorkspaceState: async (workspace: unknown): Promise<unknown> => {
-    let serialized: string
-    try {
-      serialized = typeof workspace === 'string' ? workspace : JSON.stringify(workspace)
-    } catch {
-      serialized = ''
-    }
-    try {
-      localStorage.setItem('nova_tables_workspace', serialized)
-    } catch {
-    }
-
-    await callCommand('local_upsert_meta', { key: 'workspace', value: workspace }).catch(() => null)
-    notifyLocalWrite()
-
+    await apiRequest('/api/member/meta/workspace', {
+      method: 'POST',
+      body: JSON.stringify(workspace),
+    })
     return workspace
   },
 
@@ -397,7 +381,7 @@ export const api = {
     }
   },
 
-  saveFile: async (input: unknown): Promise<{ saved?: boolean; filePath?: string;[key: string]: unknown }> => {
+  saveFile: async (input: unknown): Promise<{ saved?: boolean; filePath?: string; [key: string]: unknown }> => {
     const res = await callCommand<any>('save_file', { input })
     return res || { saved: false }
   },
@@ -415,8 +399,10 @@ export const api = {
   },
 
   listConnections: async (): Promise<ConnectionModel[]> => {
-    const localRes = await callCommand<{ ok: boolean; connections: ConnectionModel[] }>('local_list_connections').catch(() => null)
-    const localList: ConnectionModel[] = (localRes?.connections || []).map((conn) => {
+    const res = await apiRequest<{ ok: boolean; connections?: ConnectionModel[] }>('/api/member/connections')
+    if (!res?.ok || !res?.connections) return []
+
+    const localList: ConnectionModel[] = res.connections.map((conn) => {
       const explicitDb =
         conn.databaseName !== undefined && conn.databaseName !== null
           ? conn.databaseName
@@ -434,165 +420,43 @@ export const api = {
       }
     })
 
-    const merged: ConnectionModel[] = [...localList]
-
-    let order: string[] = []
     try {
-      const stored = localStorage.getItem('nova_tables_tree_order')
-      if (stored) {
-        order = JSON.parse(stored).connections || []
+      const metaRes = await apiRequest<{ ok: boolean; value: unknown }>('/api/member/meta/tree_order').catch(() => null)
+      if (metaRes?.value) {
+        const parsed = typeof metaRes.value === 'string' ? JSON.parse(metaRes.value) : metaRes.value
+        const order = (parsed.connections || []) as string[]
+        const orderMap = new Map<string, number>(order.map((id, idx) => [id, idx] as [string, number]))
+        localList.sort((a, b) => {
+          const idA = String(a.id || (a as any).uid)
+          const idB = String(b.id || (b as any).uid)
+          const idxA = orderMap.has(idA) ? orderMap.get(idA)! : 999999
+          const idxB = orderMap.has(idB) ? orderMap.get(idB)! : 999999
+          return idxA - idxB
+        })
       }
     } catch {
     }
-    if (order.length === 0) {
-      try {
-        const metaRes = await callCommand<{ ok: boolean; value: unknown }>('local_get_meta', { key: 'tree_order' }).catch(() => null)
-        if (metaRes?.value) {
-          const parsed = typeof metaRes.value === 'string' ? JSON.parse(metaRes.value) : metaRes.value
-          order = (parsed as { connections?: string[] })?.connections || []
-          try {
-            localStorage.setItem('nova_tables_tree_order', JSON.stringify(parsed))
-          } catch {
-          }
-        }
-      } catch {
-      }
-    }
-    if (order.length > 0) {
-      const orderMap = new Map(order.map((id, idx) => [id, idx]))
-      merged.sort((a, b) => {
-        const idA = String(a.id || (a as any).uid)
-        const idB = String(b.id || (b as any).uid)
-        const idxA = orderMap.has(idA) ? orderMap.get(idA)! : 999999
-        const idxB = orderMap.has(idB) ? orderMap.get(idB)! : 999999
-        return idxA - idxB
-      })
-    }
 
-    const recentId = await api.getLastConnectedId().catch(() => null)
-    return merged.map((c) => ({ ...c, isRecent: c.id === recentId }))
-  },
-
-  rememberServerConnection: async (serverConn: any): Promise<void> => {
-    if (!serverConn) return
-    const id = serverConn.uid || serverConn.id
-    if (!id) return
-    const name = serverConn.name || ''
-    const host = serverConn.host || ''
-    if (!name || !host) return
-
-    const payload = {
-      id,
-      uid: id,
-      name,
-      host,
-      port: serverConn.port || 1433,
-      username: serverConn.username || '',
-      password: serverConn.password || serverConn.password_cipher || null,
-      databaseName: serverConn.database_name || serverConn.databaseName || serverConn.database || '',
-      environment: serverConn.environment || '',
-      encrypt: serverConn.encrypt ?? true,
-      trustServerCertificate: serverConn.trust_server_certificate ?? serverConn.trustServerCertificate ?? true,
-      driverType: serverConn.driver_type || serverConn.driverType || 'sqlserver',
-      folderId: serverConn.folder_id || serverConn.folderId || null,
-      timezone: serverConn.timezone || null,
-      lastDatabaseUsed: serverConn.last_database_used || serverConn.lastDatabaseUsed || null,
-      lastConnectedAt: serverConn.last_connected_at || serverConn.lastConnectedAt || null,
-      _fromServer: true,
-    }
-    await callCommand('local_upsert_connection', { input: payload }).catch(() => null)
-  },
-
-  rememberServerFolder: async (serverFolder: any): Promise<void> => {
-    if (!serverFolder) return
-    const id = serverFolder.uid || serverFolder.id
-    if (!id) return
-    const name = serverFolder.name || ''
-    if (!name) return
-
-    const payload = {
-      id,
-      uid: id,
-      name,
-      parentId: serverFolder.parent_id || serverFolder.parentId || null,
-      _fromServer: true,
-    }
-    await callCommand('local_upsert_folder', { input: payload }).catch(() => null)
-  },
-
-  rememberServerSavedQuery: async (serverQuery: any): Promise<void> => {
-    if (!serverQuery) return
-    const id = serverQuery.uid || serverQuery.id
-    if (!id) return
-    const name = serverQuery.name || ''
-    const sql = serverQuery.sql || ''
-    if (!name || !sql) return
-
-    const payload = {
-      id,
-      uid: id,
-      connectionId: serverQuery.connection_id || serverQuery.connectionId || null,
-      databaseName: serverQuery.database_name || serverQuery.databaseName || '',
-      name,
-      sql,
-      _fromServer: true,
-    }
-    await callCommand('local_upsert_saved_query', { input: payload }).catch(() => null)
-  },
-
-  rememberServerQueryHistory: async (serverItem: any): Promise<void> => {
-    if (!serverItem) return
-    const sql = serverItem.sql || ''
-    if (!sql) return
-    await callCommand('local_upsert_query_history_from_server', {
-      input: {
-        uid: serverItem.uid || serverItem.id || String(Date.now()),
-        user_id: serverItem.user_id,
-        connectionId: serverItem.connection_id || serverItem.connectionId || null,
-        databaseName: serverItem.database_name || serverItem.databaseName || serverItem.database || '',
-        sql,
-        status: serverItem.status || 'success',
-        durationMs: serverItem.duration_ms || serverItem.durationMs || 0,
-        rowCount: serverItem.row_count || serverItem.rowCount || 0,
-        errorMessage: serverItem.error_message || serverItem.errorMessage || null,
-        createdAt: serverItem.created_at || serverItem.createdAt || new Date().toISOString(),
-      },
-    }).catch(() => null)
-  },
-
-  rememberServerMeta: async (key: string, value: unknown): Promise<void> => {
-    if (!key) return
-    await callCommand('local_upsert_meta_from_server', { key, value }).catch(() => null)
+    return localList
   },
 
   getLastConnectedId: async (): Promise<string | null> => {
     try {
-      const metaRes = await callCommand<{ ok: boolean; value: unknown }>('local_get_meta', { key: 'last_connected_id' }).catch(() => null)
-      const value = metaRes?.value
+      const res = await apiRequest<{ ok: boolean; value: unknown }>('/api/member/meta/last_connected_id', {
+        method: 'GET',
+      }).catch(() => null)
+      const value = res?.value
       if (typeof value === 'string' && value) return value
-    } catch {
-    }
-    try {
-      return localStorage.getItem('nova_tables_last_connected_id') || null
-    } catch {
-    }
-    try {
-      const res = await api.loadWorkspaceState()
-      const activeId = (res as { activeConnectionId?: string | null })?.activeConnectionId
-      if (typeof activeId === 'string' && activeId) return activeId
     } catch {
     }
     return null
   },
 
   setLastConnectedId: async (id: string | null): Promise<void> => {
-    await callCommand('local_upsert_meta', { key: 'last_connected_id', value: id }).catch(() => null)
-    notifyLocalWrite()
-    try {
-      if (id) localStorage.setItem('nova_tables_last_connected_id', id)
-      else localStorage.removeItem('nova_tables_last_connected_id')
-    } catch {
-    }
+    await apiRequest('/api/member/meta/last_connected_id', {
+      method: 'POST',
+      body: JSON.stringify(id),
+    }).catch(() => null)
   },
 
   saveConnection: async (connection: Partial<ConnectionModel>): Promise<ConnectionModel> => {
@@ -628,8 +492,10 @@ export const api = {
       payload.password = resolvedPassword
     }
 
-    await callCommand('local_upsert_connection', { input: payload }).catch(() => null)
-    notifyLocalWrite()
+    await apiRequest('/api/member/connections', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }).catch(() => null)
 
     const explicitDb = (connection.databaseName || connection.database || '') as string
     return {
@@ -664,7 +530,9 @@ export const api = {
   },
 
   deleteConnection: async (id: string): Promise<unknown> => {
-    await callCommand('local_delete_connection', { id }).catch(() => null)
+    await apiRequest(`/api/member/connections/${id}`, {
+      method: 'DELETE',
+    }).catch(() => null)
     try {
       const lastId = await api.getLastConnectedId()
       if (lastId === id) {
@@ -672,17 +540,14 @@ export const api = {
       }
     } catch {
     }
-    notifyLocalWrite()
-
     return { ok: true }
   },
 
   updateLastDatabase: async (connectionId: string, database: string): Promise<unknown> => {
-    // Client-first: persist last database to local SQLite (synced=0).
-    // No inline API call here; centralized background sync (syncService)
-    // driven by VITE_SYNC_INTERVAL_SEC will pick up the unsynced meta.
-    await callCommand('update_last_database', { connectionId, database }).catch(() => null)
-    notifyLocalWrite()
+    await apiRequest<{ ok: boolean }>(`/api/member/connections/${connectionId}/last-database`, {
+      method: 'PATCH',
+      body: JSON.stringify({ database }),
+    }).catch(() => null)
     return { ok: true }
   },
 
@@ -702,62 +567,59 @@ export const api = {
   importAppConfig,
 
   listFolders: async (): Promise<FolderModel[]> => {
-    const localRes = await callCommand<{ ok: boolean; folders: FolderModel[] }>('local_list_folders').catch(() => null)
-    const localList = localRes?.folders || []
+    const res = await apiRequest<{ ok: boolean; folders?: FolderModel[] }>('/api/member/folders')
+    if (!res?.ok || !res?.folders) return []
 
-    let order: string[] = []
+    const localList: FolderModel[] = res.folders || []
+
     try {
-      const stored = localStorage.getItem('nova_tables_tree_order')
-      if (stored) {
-        order = JSON.parse(stored).folders || []
+      const metaRes = await apiRequest<{ ok: boolean; value: unknown }>('/api/member/meta/tree_order').catch(() => null)
+      if (metaRes?.value) {
+        const parsed = typeof metaRes.value === 'string' ? JSON.parse(metaRes.value) : metaRes.value
+        const order = (parsed.folders || []) as string[]
+        const orderMap = new Map<string, number>(order.map((id, idx) => [id, idx] as [string, number]))
+        localList.sort((a, b) => {
+          const idA = String(a.id || (a as any).uid || '')
+          const idB = String(b.id || (b as any).uid || '')
+          const idxA = orderMap.has(idA) ? orderMap.get(idA)! : 999999
+          const idxB = orderMap.has(idB) ? orderMap.get(idB)! : 999999
+          return idxA - idxB
+        })
       }
     } catch {
     }
-    if (order.length === 0) {
-      try {
-        const metaRes = await callCommand<{ ok: boolean; value: unknown }>('local_get_meta', { key: 'tree_order' }).catch(() => null)
-        if (metaRes?.value) {
-          const parsed = typeof metaRes.value === 'string' ? JSON.parse(metaRes.value) : metaRes.value
-          order = (parsed as { folders?: string[] })?.folders || []
-        }
-      } catch {
-      }
-    }
-    if (order.length > 0) {
-      const orderMap = new Map(order.map((id, idx) => [id, idx]))
-      localList.sort((a, b) => {
-        const idxA = orderMap.has(a.id) ? orderMap.get(a.id)! : 999999
-        const idxB = orderMap.has(b.id) ? orderMap.get(b.id)! : 999999
-        return idxA - idxB
-      })
-    }
+
     return localList
   },
 
   saveFolder: async (folder: Partial<FolderModel>): Promise<FolderModel> => {
     const id = folder.id || (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
       const r = (Math.random() * 16) | 0
-      const v = c === 'x' ? r : (r & 0x3) | 0x8
+      const v = c === 'x' ? r : (r & 0x3f) | 0x80
       return v.toString(16)
     }))
+
     const folderWithId: FolderModel = {
       ...(folder as FolderModel),
       id,
     }
 
-    await callCommand('local_upsert_folder', { input: folderWithId }).catch(() => null)
-    notifyLocalWrite()
+    await apiRequest('/api/member/folders', {
+      method: 'POST',
+      body: JSON.stringify(folderWithId),
+    }).catch(() => null)
 
     return folderWithId
   },
 
   deleteFolder: async (id: string): Promise<{ ok?: boolean; deletedConnectionIds?: string[] } | null> => {
-    const res = await callCommand<{ ok?: boolean; deletedConnectionIds?: string[] }>('local_delete_folder', { id }).catch(() => null)
-    notifyLocalWrite()
+    const res = await apiRequest<{ ok?: boolean; deletedConnectionIds?: string[] }>(`/api/member/folders/${id}`, {
+      method: 'DELETE',
+    }).catch(() => null)
     return res || { ok: true, deletedConnectionIds: [] }
   },
 
-  reorderTree: async (input: unknown): Promise<{ connections: ConnectionModel[]; folders: FolderModel[];[key: string]: unknown }> => {
+  reorderTree: async (input: unknown): Promise<{ connections: ConnectionModel[]; folders: FolderModel[]; [key: string]: unknown }> => {
     const payload = (input || {}) as {
       connections?: string[]
       folders?: string[]
@@ -770,11 +632,9 @@ export const api = {
       for (const [cId, targetFolderId] of Object.entries(payload.connectionFolders)) {
         const found = currentConnections.find((c) => c.id === cId)
         if (found) {
-          await callCommand('local_upsert_connection', {
-            input: {
-              ...found,
-              folderId: targetFolderId,
-            },
+          await api.saveConnection({
+            ...found,
+            folderId: targetFolderId,
           }).catch(() => null)
         }
       }
@@ -785,38 +645,21 @@ export const api = {
       for (const [fId, targetParentId] of Object.entries(payload.folderParents)) {
         const found = currentFolders.find((f) => f.id === fId)
         if (found) {
-          await callCommand('local_upsert_folder', {
-            input: {
-              ...found,
-              parentId: targetParentId,
-            },
+          await api.saveFolder({
+            ...found,
+            parentId: targetParentId,
           }).catch(() => null)
         }
       }
     }
 
-    // Client-first: persist tree order directly to local SQLite (synced=0).
-    // No inline API call here; centralized background sync (syncService)
-    // driven by VITE_SYNC_INTERVAL_SEC will pick up the unsynced meta.
-    try {
-      localStorage.setItem(
-        'nova_tables_tree_order',
-        JSON.stringify({
-          connections: payload.connections || [],
-          folders: payload.folders || [],
-        }),
-      )
-    } catch {
-    }
-
-    await callCommand('local_upsert_meta', {
-      key: 'tree_order',
-      value: {
+    await apiRequest('/api/member/meta/tree_order', {
+      method: 'POST',
+      body: JSON.stringify({
         connections: payload.connections || [],
         folders: payload.folders || [],
-      },
+      }),
     }).catch(() => null)
-    notifyLocalWrite()
 
     return {
       connections: await api.listConnections(),
@@ -874,48 +717,32 @@ export const api = {
     database: string,
     limit?: number
   ): Promise<QueryHistoryItem[]> => {
-    const res = await callCommand<{ ok: boolean; history: QueryHistoryItem[] }>('list_query_history', {
-      connectionId,
-      database,
-      limit,
+    const res = await apiRequest<{ ok: boolean; history?: QueryHistoryItem[] }>(`/api/member/query-history?limit=${limit || 500}`, {
+      method: 'GET',
     }).catch(() => null)
     return res?.history || []
   },
 
   clearQueryHistory: async (connectionId: string, database: string): Promise<unknown> => {
-    await callCommand('clear_query_history', { connectionId, database }).catch(() => null)
-    notifyLocalWrite()
+    await apiRequest('/api/member/query-history/clear', {
+      method: 'DELETE',
+      body: JSON.stringify({ connectionId, database }),
+    }).catch(() => null)
     return { ok: true }
   },
 
   deleteQueryHistory: async (id: string): Promise<unknown> => {
-    await callCommand('delete_query_history', { id }).catch(() => null)
-    notifyLocalWrite()
+    await apiRequest(`/api/member/query-history/${id}`, {
+      method: 'DELETE',
+    }).catch(() => null)
     return { ok: true }
   },
 
-  getUnsyncedQueryHistory: async (limit?: number): Promise<QueryHistoryItem[]> => {
-    const res = await callCommand<{ ok: boolean; items: QueryHistoryItem[] }>('get_unsynced_query_history', { limit }).catch(() => null)
-    return res?.items || []
-  },
-
-  deleteSyncedQueryHistory: async (uids: string[]): Promise<number> => {
-    if (!uids || !uids.length) return 0
-    const res = await callCommand<{ ok: boolean; deleted: number }>('delete_synced_query_history', { uids }).catch(() => null)
-    return res?.deleted || 0
-  },
-
-  syncAllBatch: async (): Promise<{ synced: number; cleaned: number }> => {
-    return syncAll()
-  },
-
   listSavedQueries: async (connectionId: string, database: string): Promise<SavedQueryItem[]> => {
-    const localQueries = await callCommand<{ ok: boolean; queries: SavedQueryItem[] }>('local_list_saved_queries', { connectionId, database })
-      .then((r) => r?.queries || [])
-      .catch(() => [])
-
-    const localList = localQueries.map((q) => q as SavedQueryItem)
-    return localList
+    const res = await apiRequest<{ ok: boolean; queries?: SavedQueryItem[] }>('/api/member/saved-queries', {
+      method: 'GET',
+    }).catch(() => null)
+    return res?.queries || []
   },
 
   saveSavedQuery: async (input: {
@@ -927,7 +754,7 @@ export const api = {
   }): Promise<SavedQueryItem | null> => {
     const id = input.id || (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
       const r = (Math.random() * 16) | 0
-      const v = c === 'x' ? r : (r & 0x3) | 0x8
+      const v = c === 'x' ? r : (r & 0x3f) | 0x80
       return v.toString(16)
     }))
 
@@ -939,8 +766,10 @@ export const api = {
       sql: input.sql,
     }
 
-    await callCommand('local_upsert_saved_query', { input: payload }).catch(() => null)
-    notifyLocalWrite()
+    await apiRequest('/api/member/saved-queries', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }).catch(() => null)
 
     return payload
   },
@@ -949,16 +778,20 @@ export const api = {
     id: string
     name: string
   }): Promise<SavedQueryItem | null> => {
-    await callCommand('local_upsert_saved_query', { input: { ...input, id: input.id } }).catch(() => null)
-    notifyLocalWrite()
+    await apiRequest('/api/member/saved-queries/rename', {
+      method: 'POST',
+      body: JSON.stringify({ id: input.id, name: input.name }),
+    }).catch(() => null)
 
     return { id: input.id, name: input.name, sql: '' }
   },
 
   deleteSavedQuery: async (id: string): Promise<unknown> => {
-    await callCommand('local_delete_saved_query', { id }).catch(() => null)
-    notifyLocalWrite()
-
+    await apiRequest(`/api/member/saved-queries/${id}`, {
+      method: 'DELETE',
+    }).catch(() => null)
     return { ok: true }
   },
 }
+
+export * from './types'

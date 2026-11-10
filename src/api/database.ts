@@ -1,4 +1,5 @@
 import { callCommand } from './ipc'
+import { apiRequest } from './client'
 import {
   ColumnSummary,
   ConnectionModel,
@@ -367,6 +368,22 @@ export function createDatabaseOps(ctx: DatabaseOpsContext) {
         rowCount: 0,
         truncated: false,
         maxRows: 20000,
+      }
+      const shouldRecord = input.recordHistory ?? true
+      if (shouldRecord && input.sql && input.sql.trim().length > 0) {
+        await apiRequest('/api/member/query-history', {
+          method: 'POST',
+          body: JSON.stringify({
+            connectionId: input.connectionId,
+            database: input.database,
+            databaseName: input.database,
+            sql: input.sql,
+            status: result.ok ? 'success' : 'error',
+            durationMs: result.elapsedMs,
+            rowCount: result.rowCount,
+            errorMessage: result.ok ? null : 'Query failed.',
+          }),
+        }).catch(() => null)
       }
       return result
     },

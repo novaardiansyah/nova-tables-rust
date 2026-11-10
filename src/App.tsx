@@ -27,7 +27,6 @@ import WorkspaceView from '@/components/WorkspaceView'
 import AppDialogs from '@/components/dialogs/AppDialogs'
 import AuthScreen from '@/components/auth/AuthScreen'
 import { Spinner } from '@/components/common/Icon'
-import { syncService } from '@/api/sync'
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
@@ -77,14 +76,6 @@ export default function App() {
       cancelled = true
     }
   }, [])
-
-  useEffect(() => {
-    if (!currentUser) return
-    syncService.start()
-    return () => {
-      syncService.stop()
-    }
-  }, [currentUser])
 
   const layout = useWorkspaceLayout(settings.timezone)
   const { sqlRef, selectionRef, seedEditor } = layout

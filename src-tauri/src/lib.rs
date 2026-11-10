@@ -9,8 +9,6 @@ pub fn run() {
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_dialog::init())
     .setup(|_app| {
-      let _ = database::query_history_store::init();
-      let _ = database::local_store::init();
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -55,39 +53,12 @@ pub fn run() {
       commands::query::module_definition,
       commands::query::describe_result,
       commands::query::get_execution_plan,
-      commands::query::record_query_history,
-      commands::query::list_query_history,
-      commands::query::get_unsynced_query_history,
-      commands::query::delete_synced_query_history,
-      commands::query::clear_query_history,
-      commands::query::delete_query_history,
-      commands::query::list_saved_queries,
-      commands::query::save_saved_query,
-      commands::query::rename_saved_query,
-      commands::query::delete_saved_query,
       commands::query::create_database,
       commands::query::drop_database,
       commands::query::list_database_users,
       commands::query::create_database_user,
       commands::query::update_database_user_roles,
-      commands::query::drop_database_user,
-      commands::local_sync::local_upsert_folder,
-      commands::local_sync::local_delete_folder,
-      commands::local_sync::local_list_folders,
-      commands::local_sync::local_upsert_connection,
-      commands::local_sync::local_delete_connection,
-      commands::local_sync::local_list_connections,
-      commands::local_sync::local_upsert_saved_query,
-      commands::local_sync::local_delete_saved_query,
-      commands::local_sync::local_list_saved_queries,
-      commands::local_sync::local_upsert_meta,
-      commands::local_sync::local_upsert_meta_from_server,
-      commands::local_sync::local_upsert_query_history_from_server,
-      commands::local_sync::local_get_meta,
-      commands::local_sync::local_delete_meta,
-      commands::local_sync::local_unsynced_batch,
-      commands::local_sync::local_pending_delete_uids,
-      commands::local_sync::local_clean_synced_batch
+      commands::query::drop_database_user
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
