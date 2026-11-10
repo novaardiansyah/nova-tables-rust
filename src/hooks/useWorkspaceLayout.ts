@@ -20,7 +20,6 @@ export function useWorkspaceLayout(timezone?: string) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [jsonPanelWidth, setJsonPanelWidth] = useState(JSON_PANEL_DEFAULT_WIDTH)
   const [jsonPanelCollapsed, setJsonPanelCollapsed] = useState(true)
-  const [jsonPanelHovered, setJsonPanelHovered] = useState(false)
   const [activeResultData, setActiveResultData] = useState<ActiveDataPayload | null>(null)
 
   const sqlRef = useRef(STARTER_SQL)
@@ -79,7 +78,7 @@ export function useWorkspaceLayout(timezone?: string) {
     window.addEventListener('pointerup', stop)
   }, [])
 
-  const jsonPanelVisible = !jsonPanelCollapsed || jsonPanelHovered
+  const jsonPanelVisible = !jsonPanelCollapsed
   const jsonText = useMemo(
     () => (jsonPanelVisible && activeResultData ? jsonRecords(activeResultData.columnNames, activeResultData.rows, timezone) : ''),
     [jsonPanelVisible, activeResultData, timezone],
@@ -100,8 +99,6 @@ export function useWorkspaceLayout(timezone?: string) {
     setJsonPanelWidth,
     jsonPanelCollapsed,
     setJsonPanelCollapsed,
-    jsonPanelHovered,
-    setJsonPanelHovered,
     activeResultData,
     setActiveResultData,
     sqlRef,

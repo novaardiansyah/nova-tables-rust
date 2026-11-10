@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { api } from '@/api'
 import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu'
 import Icon, { BrandMark, Spinner } from '@/components/common/Icon'
@@ -135,59 +135,8 @@ export default function Sidebar({
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
   const [menu, setMenu] = useState<MenuState>(null)
   const [filter, setFilter] = useState('')
-  const [hoverOpen, setHoverOpen] = useState(false)
   const [dragSessionId, setDragSessionId] = useState<string | null>(null)
   const [dropSessionTarget, setDropSessionTarget] = useState<{ connectionId: string; position: 'before' | 'after' } | null>(null)
-  const hoverOpenRef = useRef(false)
-  const closeTimer = useRef<number | null>(null)
-  const railRef = useRef<HTMLElement | null>(null)
-
-  const showOverlay = useCallback(() => {
-    if (hoverOpenRef.current) return
-    hoverOpenRef.current = true
-    setHoverOpen(true)
-  }, [])
-
-  const hideOverlay = useCallback(() => {
-    if (!hoverOpenRef.current) return
-    hoverOpenRef.current = false
-    setHoverOpen(false)
-    setMenu(null)
-  }, [])
-
-  useEffect(() => {
-    if (!collapsed) return undefined
-
-    const handlePointerMove = (event: MouseEvent) => {
-      const rect = railRef.current?.getBoundingClientRect()
-      if (!rect) return
-      const withinRow = event.clientY >= rect.top && event.clientY <= rect.bottom
-      const overRail = withinRow && event.clientX >= rect.left && event.clientX <= rect.right
-      const overPanel = withinRow && event.clientX >= rect.left && event.clientX <= rect.left + width
-
-      if (closeTimer.current !== null) {
-        window.clearTimeout(closeTimer.current)
-      }
-      if (hoverOpenRef.current) {
-        if (overPanel) return
-        closeTimer.current = window.setTimeout(hideOverlay, 120)
-        return
-      }
-      if (overRail) showOverlay()
-    }
-
-    window.addEventListener('mousemove', handlePointerMove)
-    return () => {
-      window.removeEventListener('mousemove', handlePointerMove)
-      if (closeTimer.current !== null) {
-        window.clearTimeout(closeTimer.current)
-      }
-    }
-  }, [collapsed, hideOverlay, showOverlay, width])
-
-  useEffect(() => {
-    if (!collapsed) hideOverlay()
-  }, [collapsed, hideOverlay])
 
   const handleResizePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -764,10 +713,7 @@ export default function Sidebar({
   if (collapsed) {
     return (
       <>
-        <aside
-          ref={railRef}
-          className="flex w-11 shrink-0 flex-col items-center gap-2 border-r border-line bg-panel py-3"
-        >
+        <aside className="flex w-11 shrink-0 flex-col items-center gap-2 border-r border-line bg-panel py-3">
           <button
             type="button"
             className="icon-btn h-7 w-7"
@@ -778,21 +724,6 @@ export default function Sidebar({
             <Icon name="chevron-right" size={13} />
           </button>
           <BrandMark size={18} className="mt-1 opacity-70" />
-        </aside>
-
-        <aside
-          style={{ width }}
-          className={`absolute inset-y-0 left-0 z-30 flex flex-col border-r border-line bg-panel shadow-2xl shadow-black/60 ${
-            hoverOpen
-              ? 'translate-x-0 opacity-100 transition-[opacity,transform] duration-200 ease-out'
-              : '-translate-x-3 opacity-0 pointer-events-none transition-[opacity,transform] duration-150 ease-in'
-          }`}
-        >
-          {renderPanel({
-            icon: 'chevron-right',
-            title: 'Expand Sidebar',
-            onClick: () => onToggleCollapsed(false),
-          })}
         </aside>
 
         {menuNode}

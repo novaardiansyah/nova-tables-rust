@@ -60,7 +60,6 @@ export default function WorkspaceView({
     setJsonPanelWidth,
     jsonPanelCollapsed,
     setJsonPanelCollapsed,
-    setJsonPanelHovered,
     activeResultData,
     setActiveResultData,
     splitRef,
@@ -423,7 +422,6 @@ export default function WorkspaceView({
           if (!jsonText) return
           await handleCopyText(jsonText, 'Copied row JSON.')
         }}
-        onHoverVisibleChange={setJsonPanelHovered}
         columns={activeResultData?.columnNames ?? []}
         rows={activeResultData?.rows ?? []}
         columnTypes={activeResultData?.columnTypes ?? []}

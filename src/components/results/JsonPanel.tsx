@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import Icon from '@/components/common/Icon'
 import JsonView from '@/components/results/JsonView'
 import FormViewer from '@/components/results/FormViewer'
@@ -16,7 +16,6 @@ export interface JsonPanelProps {
   selectionLabel?: string
   onCopyJson?: () => void
   copied?: boolean
-  onHoverVisibleChange?: (visible: boolean) => void
   columns?: string[]
   rows?: unknown[][]
   columnTypes?: (string | null)[]
@@ -36,7 +35,6 @@ export default function JsonPanel({
   selectionLabel = 'Selection',
   onCopyJson,
   copied = false,
-  onHoverVisibleChange,
   columns = [],
   rows = [],
   columnTypes = [],
@@ -47,58 +45,6 @@ export default function JsonPanel({
   onCopyText,
 }: JsonPanelProps) {
   const [panelView, setPanelView] = useState<'json' | 'form'>('json')
-  const [hoverOpen, setHoverOpen] = useState(false)
-  const hoverOpenRef = useRef(false)
-  const closeTimer = useRef<number | null>(null)
-  const railRef = useRef<HTMLElement | null>(null)
-
-  const showOverlay = useCallback(() => {
-    if (hoverOpenRef.current) return
-    hoverOpenRef.current = true
-    setHoverOpen(true)
-    onHoverVisibleChange?.(true)
-  }, [onHoverVisibleChange])
-
-  const hideOverlay = useCallback(() => {
-    if (!hoverOpenRef.current) return
-    hoverOpenRef.current = false
-    setHoverOpen(false)
-    onHoverVisibleChange?.(false)
-  }, [onHoverVisibleChange])
-
-  useEffect(() => {
-    if (!collapsed) return undefined
-
-    const handlePointerMove = (event: MouseEvent) => {
-      const rect = railRef.current?.getBoundingClientRect()
-      if (!rect) return
-      const withinRow = event.clientY >= rect.top && event.clientY <= rect.bottom
-      const overRail = withinRow && event.clientX >= rect.left && event.clientX <= rect.right
-      const overPanel = withinRow && event.clientX >= rect.right - width && event.clientX <= rect.right
-
-      if (closeTimer.current !== null) {
-        window.clearTimeout(closeTimer.current)
-      }
-      if (hoverOpenRef.current) {
-        if (overPanel) return
-        closeTimer.current = window.setTimeout(hideOverlay, 120)
-        return
-      }
-      if (overRail) showOverlay()
-    }
-
-    window.addEventListener('mousemove', handlePointerMove)
-    return () => {
-      window.removeEventListener('mousemove', handlePointerMove)
-      if (closeTimer.current !== null) {
-        window.clearTimeout(closeTimer.current)
-      }
-    }
-  }, [collapsed, hideOverlay, showOverlay, width])
-
-  useEffect(() => {
-    if (!collapsed) hideOverlay()
-  }, [collapsed, hideOverlay])
 
   const handleResizePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -207,10 +153,7 @@ export default function JsonPanel({
   if (collapsed) {
     return (
       <>
-        <aside
-          ref={railRef}
-          className="flex w-11 shrink-0 flex-col items-center gap-2 border-l border-line bg-panel py-3"
-        >
+        <aside className="flex w-11 shrink-0 flex-col items-center gap-2 border-l border-line bg-panel py-3">
           <button
             type="button"
             className="icon-btn h-7 w-7"
@@ -220,21 +163,6 @@ export default function JsonPanel({
           >
             <Icon name="panel-right" size={13} />
           </button>
-        </aside>
-
-        <aside
-          style={{ width }}
-          className={`absolute inset-y-0 right-0 z-30 flex flex-col border-l border-line bg-panel shadow-2xl shadow-black/60 ${
-            hoverOpen
-              ? 'translate-x-0 opacity-100 transition-[opacity,transform] duration-200 ease-out'
-              : 'translate-x-3 opacity-0 pointer-events-none transition-[opacity,transform] duration-150 ease-in'
-          }`}
-        >
-          {renderPanel({
-            icon: 'panel-right',
-            title: 'Expand JSON review panel',
-            onClick: () => onToggleCollapsed(false),
-          })}
         </aside>
       </>
     )
