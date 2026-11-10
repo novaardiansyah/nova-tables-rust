@@ -1,6 +1,10 @@
 import { api } from '@/api'
 import { ErdTable, ErdRelation, computeRelationPath } from './erdTypes'
 
+const CARD_HEADER_HEIGHT = 34
+const CARD_ROW_HEIGHT = 26
+const CARD_BOTTOM_PADDING = 8
+
 function getCssColor(varName: string, alpha = 1): string {
   if (typeof window === 'undefined') return '#000000'
   const raw = getComputedStyle(document.documentElement).getPropertyValue(varName).trim()
@@ -100,7 +104,8 @@ export async function exportDiagramToPng(
     const custom = cardDimensions[key]
     const el = typeof document !== 'undefined' ? (document.querySelector(`[data-table-key="${key}"]`) as HTMLElement | null) : null
     const w = custom?.width ?? (el ? el.offsetWidth : 260)
-    const h = custom?.height ?? (el ? el.offsetHeight : (36 + table.columns.length * 27 + 8))
+    const naturalHeight = CARD_HEADER_HEIGHT + table.columns.length * CARD_ROW_HEIGHT + CARD_BOTTOM_PADDING
+    const h = custom?.height ?? naturalHeight
     resolvedDimensions[key] = { width: w, height: h }
   }
 
@@ -301,7 +306,7 @@ export async function exportDiagramToPng(
     ctx.stroke()
     ctx.restore()
 
-    const headerH = 34
+    const headerH = CARD_HEADER_HEIGHT
     ctx.save()
     ctx.beginPath()
     drawRoundedRect(ctx, x, y, w, headerH, 8)
@@ -352,7 +357,7 @@ export async function exportDiagramToPng(
     drawRoundedRect(ctx, x, y, w, h, 8)
     ctx.clip()
 
-    const rowH = 26
+    const rowH = CARD_ROW_HEIGHT
     let rowY = y + headerH + 1
     for (const col of table.columns) {
       if (rowY + rowH > y + h - 2) break
