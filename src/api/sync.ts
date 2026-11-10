@@ -261,17 +261,6 @@ export const syncService = {
     return currentIntervalMs
   },
 
-  setIntervalMs(intervalMs: number): void {
-    if (intervalMs <= 0) return
-    currentIntervalMs = intervalMs
-    if (isEnabled && syncTimer) {
-      clearInterval(syncTimer)
-      syncTimer = setInterval(() => {
-        void syncAll()
-      }, intervalMs)
-    }
-  },
-
   getStatus(): SyncStatus {
     return syncStatus
   },

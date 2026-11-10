@@ -680,7 +680,6 @@ export const api = {
   listFolders: async (): Promise<FolderModel[]> => {
     const localRes = await callCommand<{ ok: boolean; folders: FolderModel[] }>('local_list_folders').catch(() => null)
     const localList = localRes?.folders || []
-    notifyLocalWrite()
     return localList
   },
 
@@ -831,7 +830,6 @@ export const api = {
       .catch(() => [])
 
     const localList = localQueries.map((q) => q as SavedQueryItem)
-    notifyLocalWrite()
     return localList
   },
 

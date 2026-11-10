@@ -12,12 +12,6 @@ export function getSyncIntervalMs(): number {
   return activeSyncIntervalMs
 }
 
-export function setSyncIntervalMs(intervalMs: number): void {
-  if (intervalMs > 0) {
-    activeSyncIntervalMs = intervalMs
-  }
-}
-
 export function updateFromEnv(): void {
   if (typeof window !== 'undefined') {
     const envVal = Number(import.meta.env?.VITE_SYNC_INTERVAL_SEC)
