@@ -153,12 +153,40 @@ function stripCommentsAndStrings(sql: string): string {
     .replace(/'(?:''|[^'])*'/g, (m) => ' '.repeat(m.length))
 }
 
+const STATEMENT_START_RE =
+  /^\s*(?:select|insert|update|delete|merge|with|truncate|exec|execute|declare|create|alter|drop|use)\b/i
+const CONTINUATION_END_RE =
+  /[(,]$|\b(?:from|join|on|and|or|where|having|group|order|by|union|all|select|values|into|using|when|then|else|as|outer|inner|left|right|cross|full|natural|not|is|in|exists|like|between|case|apply)\s*$/i
+
 function getContextualSql(strippedSql: string, offset: number): string {
   const prevSemi = strippedSql.lastIndexOf(';', Math.max(0, offset - 1))
-  const start = prevSemi === -1 ? 0 : prevSemi + 1
+  let start = prevSemi === -1 ? 0 : prevSemi + 1
 
+  let end = strippedSql.length
   const nextSemi = strippedSql.indexOf(';', offset)
-  const end = nextSemi === -1 ? strippedSql.length : nextSemi
+  if (nextSemi !== -1) end = nextSemi
+
+  const lines = strippedSql.split('\n')
+  const lineStarts: number[] = []
+  let position = 0
+  for (const line of lines) {
+    lineStarts.push(position)
+    position += line.length + 1
+  }
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const lineStart = lineStarts[i]
+    if (lineStart <= start || lineStart >= end) continue
+    if (!STATEMENT_START_RE.test(lines[i])) continue
+    if (i > 0 && CONTINUATION_END_RE.test(lines[i - 1].trim())) continue
+
+    if (lineStart <= offset) {
+      start = lineStart
+    } else {
+      end = lineStart
+      break
+    }
+  }
 
   return strippedSql.slice(start, end)
 }
@@ -477,10 +505,7 @@ function provideCompletionItems(
   const offset = model.getOffsetAt(position)
   const strippedSql = stripCommentsAndStrings(fullSql)
   const contextualSql = getContextualSql(strippedSql, offset)
-  let references = extractReferences(contextualSql)
-  if (references.length === 0) {
-    references = extractReferences(strippedSql)
-  }
+  const references = extractReferences(contextualSql)
 
   if (segments.length === 1) {
     return {
