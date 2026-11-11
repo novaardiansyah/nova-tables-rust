@@ -571,8 +571,8 @@ export default function TableDesigner({
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 pb-40">
-        <div className="flex items-start gap-3 w-[50%]">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-40">
+        <div className="flex items-start gap-3 w-[50%] pt-3">
           <Editor
             className="min-w-0 flex-1"
             label="Table name"

@@ -31,23 +31,29 @@ export interface SectionProps {
   count: number | string
   onAdd: () => void
   addLabel: string
+  search?: React.ReactNode
   children: React.ReactNode
 }
 
-export function Section({ title, count, onAdd, addLabel, children }: SectionProps) {
+export function Section({ title, count, onAdd, addLabel, search, children }: SectionProps) {
   return (
-    <section className="rounded-lg border border-line bg-panel p-3">
-      <div className="mb-2 flex items-center justify-between">
+    <section className="rounded-lg border border-line bg-panel">
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-t-lg border-b border-line bg-panel px-3 py-2">
         <div className="flex items-center gap-2">
           <span className="text-[length:var(--app-text-11)] font-semibold uppercase tracking-wider text-text-muted">{title}</span>
           <span className="text-[length:var(--app-text-11)] text-text-faint">{count}</span>
         </div>
-        <button type="button" className="btn-ghost h-6 px-2 text-[length:var(--app-text-11)]" onClick={onAdd}>
-          <Icon name="plus" size={12} />
-          {addLabel}
-        </button>
+        <div className="flex items-center gap-2">
+          {search}
+          <button type="button" className="btn-ghost h-6 px-2 text-[length:var(--app-text-11)]" onClick={onAdd}>
+            <Icon name="plus" size={12} />
+            {addLabel}
+          </button>
+        </div>
       </div>
-      {children}
+      <div className="p-3">
+        {children}
+      </div>
     </section>
   )
 }

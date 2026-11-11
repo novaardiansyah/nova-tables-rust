@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import Icon from '@/components/common/Icon'
 import Select from '@/components/common/Select'
 import { DesignerColumn, TYPE_BY_NAME, TYPE_OPTIONS } from '@/components/designer/designerConstants'
@@ -132,15 +132,56 @@ export default function ColumnEditor({
   dragOverState,
   setDragOverState,
 }: ColumnEditorProps) {
+  const [search, setSearch] = useState('')
+
+  const filteredColumns = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return columns
+      .map((column, originalIndex) => ({ column, originalIndex }))
+      .filter(({ column }) => {
+        if (!query) return true
+        return (
+          column.name.toLowerCase().includes(query) ||
+          column.typeName.toLowerCase().includes(query)
+        )
+      })
+  }, [columns, search])
+
   return (
     <section className="rounded-lg border border-line bg-panel">
-      <div className="flex items-center gap-2 border-b border-line px-3 py-2">
-        <span className="text-[length:var(--app-text-11)] font-semibold uppercase tracking-wider text-text-muted">Columns</span>
-        <span className="text-[length:var(--app-text-11)] text-text-faint">{columns.length}</span>
-        <button type="button" className="btn-ghost ml-auto h-6 px-2 text-[length:var(--app-text-11)]" onClick={addColumn}>
-          <Icon name="plus" size={12} />
-          Add column
-        </button>
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-t-lg border-b border-line bg-panel px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[length:var(--app-text-11)] font-semibold uppercase tracking-wider text-text-muted">Columns</span>
+          <span className="text-[length:var(--app-text-11)] text-text-faint">{columns.length}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex w-52 items-center gap-1.5 rounded-md border border-line bg-base px-2 py-1 focus-within:border-accent/70 focus-within:ring-2 focus-within:ring-accent/20">
+            <Icon name="search" size={12} className="shrink-0 text-text-faint" />
+            <input
+              type="text"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search columns…"
+              aria-label="Search columns"
+              className="w-full min-w-0 bg-transparent text-[length:var(--app-text-11)] text-text placeholder:text-text-muted outline-none"
+            />
+            {search ? (
+              <button
+                type="button"
+                className="icon-btn h-3.5 w-3.5 text-text-faint hover:text-text"
+                title="Clear search"
+                aria-label="Clear search"
+                onClick={() => setSearch('')}
+              >
+                <Icon name="x" size={10} />
+              </button>
+            ) : null}
+          </div>
+          <button type="button" className="btn-ghost h-6 px-2 text-[length:var(--app-text-11)]" onClick={addColumn}>
+            <Icon name="plus" size={12} />
+            Add column
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -159,178 +200,192 @@ export default function ColumnEditor({
             </tr>
           </thead>
           <tbody>
-            {columns.map((column, index) => {
-              const type = TYPE_BY_NAME.get(column.typeName)
-              return (
-                <tr
-                  key={index}
-                  onDragOver={(event) => {
-                    event.preventDefault()
-                    if (dragIndex === null) return
-                    const rect = event.currentTarget.getBoundingClientRect()
-                    const isTop = event.clientY - rect.top < rect.height / 2
-                    const position = isTop ? 'before' : 'after'
-                    if (dragOverState?.index !== index || dragOverState?.position !== position) {
-                      setDragOverState({ index, position })
-                    }
-                  }}
-                  onDragLeave={(event) => {
-                    if (!event.currentTarget.contains(event.relatedTarget as Node)) {
-                      setDragOverState(null)
-                    }
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault()
-                    handleDropColumn(index, dragOverState?.position || 'after')
-                    setDragIndex(null)
-                    setDragOverState(null)
-                  }}
-                  className={`border-t border-line align-top transition-colors ${
-                    dragOverState?.index === index
-                      ? dragOverState.position === 'before'
-                        ? 'border-t-2 !border-t-accent'
-                        : 'border-b-2 !border-b-accent'
-                      : ''
-                  } ${dragIndex === index ? 'opacity-40' : ''}`}
-                >
-                  <td className="w-8 px-1 py-2 text-center">
-                    <button
-                      type="button"
-                      draggable
-                      onDragStart={(event) => {
-                        event.dataTransfer.setData('text/plain', String(index))
-                        event.dataTransfer.effectAllowed = 'move'
-                        setDragIndex(index)
-                      }}
-                      onDragEnd={() => {
-                        setDragIndex(null)
+            {filteredColumns.length === 0 ? (
+              <tr className="border-t border-line">
+                <td colSpan={9} className="px-3 py-6 text-center text-[length:var(--app-text-11)] text-text-faint">
+                  {columns.length === 0 ? 'No columns.' : `No columns matching "${search}".`}
+                </td>
+              </tr>
+            ) : (
+              filteredColumns.map(({ column, originalIndex }) => {
+                const type = TYPE_BY_NAME.get(column.typeName)
+                return (
+                  <tr
+                    key={originalIndex}
+                    onDragOver={(event) => {
+                      if (search.trim()) return
+                      event.preventDefault()
+                      if (dragIndex === null) return
+                      const rect = event.currentTarget.getBoundingClientRect()
+                      const isTop = event.clientY - rect.top < rect.height / 2
+                      const position = isTop ? 'before' : 'after'
+                      if (dragOverState?.index !== originalIndex || dragOverState?.position !== position) {
+                        setDragOverState({ index: originalIndex, position })
+                      }
+                    }}
+                    onDragLeave={(event) => {
+                      if (search.trim()) return
+                      if (!event.currentTarget.contains(event.relatedTarget as Node)) {
                         setDragOverState(null)
-                      }}
-                      className="inline-flex cursor-grab items-center justify-center p-1 text-text-faint hover:text-text active:cursor-grabbing"
-                      title="Drag to reorder column"
-                    >
-                      <Icon name="grip" size={13} />
-                    </button>
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <input
-                      className="field"
-                      value={column.name}
-                      onChange={(event) => updateColumn(index, { name: event.target.value })}
-                      placeholder="column_name"
-                      spellCheck={false}
-                    />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <Select
-                      value={column.typeName}
-                      options={TYPE_OPTIONS}
-                      searchable
-                      searchPlaceholder="Search type…"
-                      panelClassName="w-48"
-                      onChange={(value) => updateColumn(index, { typeName: value })}
-                    />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    {type?.precision ? (
-                      <div className="flex items-center gap-1">
+                      }
+                    }}
+                    onDrop={(event) => {
+                      if (search.trim()) return
+                      event.preventDefault()
+                      handleDropColumn(originalIndex, dragOverState?.position || 'after')
+                      setDragIndex(null)
+                      setDragOverState(null)
+                    }}
+                    className={`border-t border-line align-top transition-colors ${
+                      dragOverState?.index === originalIndex
+                        ? dragOverState.position === 'before'
+                          ? 'border-t-2 !border-t-accent'
+                          : 'border-b-2 !border-b-accent'
+                        : ''
+                    } ${dragIndex === originalIndex ? 'opacity-40' : ''}`}
+                  >
+                    <td className="w-8 px-1 py-2 text-center">
+                      <button
+                        type="button"
+                        draggable={!search.trim()}
+                        onDragStart={(event) => {
+                          if (search.trim()) return
+                          event.dataTransfer.setData('text/plain', String(originalIndex))
+                          event.dataTransfer.effectAllowed = 'move'
+                          setDragIndex(originalIndex)
+                        }}
+                        onDragEnd={() => {
+                          setDragIndex(null)
+                          setDragOverState(null)
+                        }}
+                        className={`inline-flex items-center justify-center p-1 text-text-faint hover:text-text ${
+                          search.trim() ? 'cursor-not-allowed opacity-40' : 'cursor-grab active:cursor-grabbing'
+                        }`}
+                        title={search.trim() ? 'Clear search to reorder columns' : 'Drag to reorder column'}
+                      >
+                        <Icon name="grip" size={13} />
+                      </button>
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <input
+                        className="field"
+                        value={column.name}
+                        onChange={(event) => updateColumn(originalIndex, { name: event.target.value })}
+                        placeholder="column_name"
+                        spellCheck={false}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Select
+                        value={column.typeName}
+                        options={TYPE_OPTIONS}
+                        searchable
+                        searchPlaceholder="Search type…"
+                        panelClassName="w-48"
+                        onChange={(value) => updateColumn(originalIndex, { typeName: value })}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {type?.precision ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            className="field w-16"
+                            type="number"
+                            value={column.precision ?? ''}
+                            onChange={(event) => updateColumn(originalIndex, { precision: Number(event.target.value) })}
+                            placeholder="18"
+                          />
+                          <span className="text-text-faint">,</span>
+                          <input
+                            className="field w-14"
+                            type="number"
+                            value={column.scale ?? ''}
+                            onChange={(event) => updateColumn(originalIndex, { scale: Number(event.target.value) })}
+                            placeholder="0"
+                          />
+                        </div>
+                      ) : type?.scale ? (
                         <input
                           className="field w-16"
                           type="number"
-                          value={column.precision ?? ''}
-                          onChange={(event) => updateColumn(index, { precision: Number(event.target.value) })}
-                          placeholder="18"
-                        />
-                        <span className="text-text-faint">,</span>
-                        <input
-                          className="field w-14"
-                          type="number"
                           value={column.scale ?? ''}
-                          onChange={(event) => updateColumn(index, { scale: Number(event.target.value) })}
-                          placeholder="0"
+                          onChange={(event) => updateColumn(originalIndex, { scale: Number(event.target.value) })}
+                          placeholder="7"
                         />
-                      </div>
-                    ) : type?.scale ? (
+                      ) : type?.length ? (
+                        <LengthInput
+                          value={column.maxLength}
+                          allowMax={MAX_LENGTH_TYPES.has(column.typeName)}
+                          onChange={(value) => updateColumn(originalIndex, { maxLength: value })}
+                        />
+                      ) : (
+                        <span className="text-text-faint">—</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5">
                       <input
-                        className="field w-16"
-                        type="number"
-                        value={column.scale ?? ''}
-                        onChange={(event) => updateColumn(index, { scale: Number(event.target.value) })}
-                        placeholder="7"
+                        className="field"
+                        value={column.defaultDefinition ?? ''}
+                        onChange={(event) => updateColumn(originalIndex, { defaultDefinition: event.target.value || null })}
+                        spellCheck={false}
                       />
-                    ) : type?.length ? (
-                      <LengthInput
-                        value={column.maxLength}
-                        allowMax={MAX_LENGTH_TYPES.has(column.typeName)}
-                        onChange={(value) => updateColumn(index, { maxLength: value })}
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(column.isNullable)}
+                        onChange={(event) => updateColumn(originalIndex, { isNullable: event.target.checked })}
+                        className="h-3.5 w-3.5 accent-accent"
                       />
-                    ) : (
-                      <span className="text-text-faint">—</span>
-                    )}
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <input
-                      className="field"
-                      value={column.defaultDefinition ?? ''}
-                      onChange={(event) => updateColumn(index, { defaultDefinition: event.target.value || null })}
-                      spellCheck={false}
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-center">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(column.isNullable)}
-                      onChange={(event) => updateColumn(index, { isNullable: event.target.checked })}
-                      className="h-3.5 w-3.5 accent-accent"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-center">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(column.isIdentity)}
-                      onChange={(event) => updateColumn(index, { isIdentity: event.target.checked })}
-                      className="h-3.5 w-3.5 accent-accent"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-center">
-                    <input
-                      type="checkbox"
-                      checked={primaryNames.includes(column.name)}
-                      onChange={() => togglePrimaryColumn(column.name)}
-                      className="h-3.5 w-3.5 accent-accent"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <button
-                        type="button"
-                        className="icon-btn h-6 w-6 hover:text-accent"
-                        onClick={() => insertColumnAt(index)}
-                        title="Insert column above"
-                      >
-                        <Icon name="plus" size={12} />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn h-6 w-6 hover:text-accent"
-                        onClick={() => duplicateColumn(index)}
-                        title="Duplicate column"
-                      >
-                        <Icon name="replicate" size={12} />
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-btn h-6 w-6 hover:text-danger"
-                        onClick={() => removeColumn(index)}
-                        title="Remove column"
-                      >
-                        <Icon name="trash" size={12} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(column.isIdentity)}
+                        onChange={(event) => updateColumn(originalIndex, { isIdentity: event.target.checked })}
+                        className="h-3.5 w-3.5 accent-accent"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <input
+                        type="checkbox"
+                        checked={primaryNames.includes(column.name)}
+                        onChange={() => togglePrimaryColumn(column.name)}
+                        className="h-3.5 w-3.5 accent-accent"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          className="icon-btn h-6 w-6 hover:text-accent"
+                          onClick={() => insertColumnAt(originalIndex)}
+                          title="Insert column above"
+                        >
+                          <Icon name="plus" size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn h-6 w-6 hover:text-accent"
+                          onClick={() => duplicateColumn(originalIndex)}
+                          title="Duplicate column"
+                        >
+                          <Icon name="replicate" size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn h-6 w-6 hover:text-danger"
+                          onClick={() => removeColumn(originalIndex)}
+                          title="Remove column"
+                        >
+                          <Icon name="trash" size={12} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })
+            )}
           </tbody>
         </table>
       </div>
@@ -345,7 +400,7 @@ export default function ColumnEditor({
           Add column
         </button>
         <span className="text-[length:var(--app-text-11)] text-text-muted">
-          {columns.length} column{columns.length === 1 ? '' : 's'} · Drag grip to reorder or insert anywhere
+          {columns.length} column{columns.length === 1 ? '' : 's'}{search.trim() ? ` (${filteredColumns.length} matching)` : ''} · Drag grip to reorder or insert anywhere
         </span>
       </div>
     </section>

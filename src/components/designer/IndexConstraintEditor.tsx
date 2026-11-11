@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react'
 import Icon from '@/components/common/Icon'
 import Select from '@/components/common/Select'
 import { Editor, Section } from '@/components/designer/DesignerControls'
@@ -56,56 +57,63 @@ export default function IndexConstraintEditor({
   addIndex,
   toggleIndexColumn,
 }: IndexConstraintEditorProps) {
+  const [fkSearch, setFkSearch] = useState('')
   const uniqueKeys = draft.uniqueKeys || []
   const foreignKeys = draft.foreignKeys || []
   const indexes = draft.indexes || []
 
+  const filteredForeignKeys = useMemo(() => {
+    const query = fkSearch.trim().toLowerCase()
+    return foreignKeys
+      .map((key, originalIndex) => ({ key, originalIndex }))
+      .filter(({ key }) => {
+        if (!query) return true
+        const nameMatch = (key.name || '').toLowerCase().includes(query)
+        const tableMatch = (key.referencedTable || '').toLowerCase().includes(query)
+        const schemaMatch = (key.referencedSchema || '').toLowerCase().includes(query)
+        const columnMatch = (key.columns || []).some(
+          (col) =>
+            (col.column || '').toLowerCase().includes(query) ||
+            (col.referencedColumn || '').toLowerCase().includes(query),
+        )
+        return nameMatch || tableMatch || schemaMatch || columnMatch
+      })
+  }, [foreignKeys, fkSearch])
+
+  const fkSearchInput = (
+    <div className="flex w-52 items-center gap-1.5 rounded-md border border-line bg-base px-2 py-1 focus-within:border-accent/70 focus-within:ring-2 focus-within:ring-accent/20">
+      <Icon name="search" size={12} className="shrink-0 text-text-faint" />
+      <input
+        type="text"
+        value={fkSearch}
+        onChange={(event) => setFkSearch(event.target.value)}
+        placeholder="Search foreign keys…"
+        aria-label="Search foreign keys"
+        className="w-full min-w-0 bg-transparent text-[length:var(--app-text-11)] text-text placeholder:text-text-muted outline-none"
+      />
+      {fkSearch ? (
+        <button
+          type="button"
+          className="icon-btn h-3.5 w-3.5 text-text-faint hover:text-text"
+          title="Clear search"
+          aria-label="Clear search"
+          onClick={() => setFkSearch('')}
+        >
+          <Icon name="x" size={10} />
+        </button>
+      ) : null}
+    </div>
+  )
+
   return (
     <>
-      <Section title="Unique keys" count={uniqueKeys.length} onAdd={addUnique} addLabel="Add unique key">
-        {uniqueKeys.length === 0 ? (
-          <p className="text-[length:var(--app-text-11)] text-text-faint">No unique keys.</p>
-        ) : (
-          <div className="space-y-2">
-            {uniqueKeys.map((key, index) => (
-              <div key={index} className="flex items-end gap-2">
-                <Editor label="Name" value={key.name} onChange={(value) => updateUnique(index, { name: value })} className="w-64" />
-                <div className="flex-1">
-                  <span className="field-label">Columns</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {columnOptions.length === 0 ? (
-                      <span className="text-[length:var(--app-text-11)] text-text-faint">No columns.</span>
-                    ) : (
-                      columnOptions.map((option) => (
-                        <label key={option.value} className="flex items-center gap-1 rounded border border-line-strong px-2 py-1 text-[length:var(--app-text-11)] text-text">
-                          <input
-                            type="checkbox"
-                            className="h-3 w-3 accent-accent"
-                            checked={key.columns.includes(option.value)}
-                            onChange={() =>
-                              updateUnique(index, {
-                                columns: key.columns.includes(option.value)
-                                  ? key.columns.filter((column) => column !== option.value)
-                                  : [...key.columns, option.value],
-                              })
-                            }
-                          />
-                          {option.label}
-                        </label>
-                      ))
-                    )}
-                  </div>
-                </div>
-                <button type="button" className="icon-btn h-8 w-8 hover:text-danger" onClick={() => removeUnique(index)} title="Remove unique key">
-                  <Icon name="trash" size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
-
-      <Section title="Foreign keys" count={foreignKeys.length} onAdd={addForeign} addLabel="Add foreign key">
+      <Section
+        title="Foreign keys"
+        count={foreignKeys.length}
+        onAdd={addForeign}
+        addLabel="Add foreign key"
+        search={fkSearchInput}
+      >
         <div className="space-y-2">
           <div className="overflow-x-auto">
             <table className="w-full table-fixed border-collapse text-[length:var(--app-text-12)]">
@@ -119,14 +127,14 @@ export default function IndexConstraintEditor({
                 </tr>
               </thead>
               <tbody>
-                {foreignKeys.length === 0 ? (
+                {filteredForeignKeys.length === 0 ? (
                   <tr className="border-t border-line">
                     <td colSpan={5} className="px-2 py-3 text-center text-[length:var(--app-text-11)] text-text-faint">
-                      No foreign keys.
+                      {foreignKeys.length === 0 ? 'No foreign keys.' : `No foreign keys matching "${fkSearch}".`}
                     </td>
                   </tr>
                 ) : (
-                  foreignKeys.map((key, index) => {
+                  filteredForeignKeys.map(({ key, originalIndex }) => {
                     const currentTableValue = key.referencedTable
                       ? `${key.referencedSchema || 'dbo'}.${key.referencedTable}`
                       : ''
@@ -147,12 +155,12 @@ export default function IndexConstraintEditor({
                         : refColOptions
 
                     return (
-                      <tr key={index} className="border-t border-line align-top">
+                      <tr key={originalIndex} className="border-t border-line align-top">
                         <td className="px-2 py-1.5">
                           <input
                             className="field"
                             value={key.name}
-                            onChange={(event) => updateForeign(index, { name: event.target.value })}
+                            onChange={(event) => updateForeign(originalIndex, { name: event.target.value })}
                             placeholder="FK_name"
                             spellCheck={false}
                           />
@@ -161,7 +169,7 @@ export default function IndexConstraintEditor({
                           <Select
                             value={firstColumn.column}
                             options={columnOptions}
-                            onChange={(value) => updateForeignColumn(index, 0, { column: value })}
+                            onChange={(value) => updateForeignColumn(originalIndex, 0, { column: value })}
                             icon="key"
                             placeholder="Column…"
                             searchable
@@ -173,7 +181,7 @@ export default function IndexConstraintEditor({
                           <Select
                             value={currentTableValue}
                             options={fkTableOptions}
-                            onChange={(value) => handleReferencedTableChange(index, value)}
+                            onChange={(value) => handleReferencedTableChange(originalIndex, value)}
                             icon="table"
                             placeholder="Select table…"
                             emptyLabel="No tables"
@@ -188,7 +196,7 @@ export default function IndexConstraintEditor({
                             <Select
                               value={firstColumn.referencedColumn}
                               options={fkColOptions}
-                              onChange={(value) => updateForeignColumn(index, 0, { referencedColumn: value })}
+                              onChange={(value) => updateForeignColumn(originalIndex, 0, { referencedColumn: value })}
                               icon="key"
                               placeholder="Column…"
                               emptyLabel="No columns"
@@ -200,7 +208,7 @@ export default function IndexConstraintEditor({
                             <input
                               className="field h-8 w-full py-0 text-[length:var(--app-text-12)]"
                               value={firstColumn.referencedColumn}
-                              onChange={(event) => updateForeignColumn(index, 0, { referencedColumn: event.target.value })}
+                              onChange={(event) => updateForeignColumn(originalIndex, 0, { referencedColumn: event.target.value })}
                               placeholder={key.referencedTable ? 'Column' : 'Select table'}
                               disabled={!key.referencedTable}
                               spellCheck={false}
@@ -208,7 +216,7 @@ export default function IndexConstraintEditor({
                           )}
                         </td>
                         <td className="px-2 py-1.5 text-center">
-                          <button type="button" className="icon-btn h-8 w-8 hover:text-danger" onClick={() => removeForeign(index)} title="Remove foreign key">
+                          <button type="button" className="icon-btn h-8 w-8 hover:text-danger" onClick={() => removeForeign(originalIndex)} title="Remove foreign key">
                             <Icon name="trash" size={12} />
                           </button>
                         </td>
@@ -229,7 +237,7 @@ export default function IndexConstraintEditor({
               Add foreign key
             </button>
             <span className="text-[length:var(--app-text-11)] text-text-muted">
-              {foreignKeys.length} foreign key{foreignKeys.length === 1 ? '' : 's'}
+              {foreignKeys.length} foreign key{foreignKeys.length === 1 ? '' : 's'}{fkSearch.trim() ? ` (${filteredForeignKeys.length} matching)` : ''}
             </span>
           </div>
         </div>
@@ -268,6 +276,49 @@ export default function IndexConstraintEditor({
                   Unique
                 </label>
                 <button type="button" className="icon-btn h-8 w-8 hover:text-danger" onClick={() => removeIndex(position)} title="Remove index">
+                  <Icon name="trash" size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <Section title="Unique keys" count={uniqueKeys.length} onAdd={addUnique} addLabel="Add unique key">
+        {uniqueKeys.length === 0 ? (
+          <p className="text-[length:var(--app-text-11)] text-text-faint">No unique keys.</p>
+        ) : (
+          <div className="space-y-2">
+            {uniqueKeys.map((key, index) => (
+              <div key={index} className="flex items-end gap-2">
+                <Editor label="Name" value={key.name} onChange={(value) => updateUnique(index, { name: value })} className="w-64" />
+                <div className="flex-1">
+                  <span className="field-label">Columns</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {columnOptions.length === 0 ? (
+                      <span className="text-[length:var(--app-text-11)] text-text-faint">No columns.</span>
+                    ) : (
+                      columnOptions.map((option) => (
+                        <label key={option.value} className="flex items-center gap-1 rounded border border-line-strong px-2 py-1 text-[length:var(--app-text-11)] text-text">
+                          <input
+                            type="checkbox"
+                            className="h-3 w-3 accent-accent"
+                            checked={key.columns.includes(option.value)}
+                            onChange={() =>
+                              updateUnique(index, {
+                                columns: key.columns.includes(option.value)
+                                  ? key.columns.filter((column) => column !== option.value)
+                                  : [...key.columns, option.value],
+                              })
+                            }
+                          />
+                          {option.label}
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <button type="button" className="icon-btn h-8 w-8 hover:text-danger" onClick={() => removeUnique(index)} title="Remove unique key">
                   <Icon name="trash" size={12} />
                 </button>
               </div>
