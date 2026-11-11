@@ -26,7 +26,6 @@ import ConfirmDialog from '@/components/common/ConfirmDialog'
 import WorkspaceView from '@/components/WorkspaceView'
 import AppDialogs from '@/components/dialogs/AppDialogs'
 import AuthScreen from '@/components/auth/AuthScreen'
-import { Spinner } from '@/components/common/Icon'
 import { isDesignDirty } from '@/designSql'
 
 export default function App() {
@@ -488,11 +487,33 @@ export default function App() {
   ]
 
   if (authChecking) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-base text-text-muted">
-        <Spinner size={24} />
-      </div>
-    )
+    const hasToken = typeof window !== 'undefined' && Boolean(localStorage.getItem('nova_tables_sanctum_token'))
+    if (hasToken) {
+      return (
+        <div className="flex h-full flex-col overflow-hidden">
+          <MenuBar menus={menus} />
+          <ConnectionsScreen
+            connections={[]}
+            folders={[]}
+            openIds={[]}
+            loading={true}
+            appVersion={sessionManager.appVersion}
+            currentUser={null}
+            onOpen={() => {}}
+            onNewConnection={() => {}}
+            onEditConnection={() => {}}
+            onDeleteConnection={() => {}}
+            onDuplicateConnection={() => {}}
+            onCreateFolder={() => {}}
+            onRenameFolder={() => {}}
+            onDeleteSelection={() => {}}
+            onMoveConnection={() => {}}
+            onReorderTree={() => {}}
+          />
+        </div>
+      )
+    }
+    return null
   }
 
   if (!currentUser) {
@@ -542,6 +563,7 @@ export default function App() {
           appVersion={sessionManager.appVersion}
           lastConnectedId={sessionManager.lastConnectedId}
           currentUser={currentUser}
+          loading={sessionManager.loadingConnections}
           onLogout={requestLogout}
           onOpen={sessionManager.handleConnect}
           onNewConnection={() => sessionManager.setDialog({ mode: 'new' })}

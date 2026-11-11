@@ -50,6 +50,7 @@ export interface ConnectionModel {
   isDuplicate?: boolean
   isRecent?: boolean
   timezone?: string | null
+  pinnedTables?: string[]
   [key: string]: unknown
 }
 

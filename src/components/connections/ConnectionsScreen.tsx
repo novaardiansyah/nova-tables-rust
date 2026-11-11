@@ -25,6 +25,7 @@ import {
   DragState,
   DropTargetState,
 } from '@/components/connections/ConnectionTreeRow'
+import ConnectionsSkeleton from './ConnectionsSkeleton'
 
 function formatRelativeTime(dateString?: string | null) {
   if (!dateString) return null
@@ -82,6 +83,7 @@ export interface ConnectionsScreenProps {
   onTestConnection?: (connection: ConnectionItem) => Promise<unknown> | void
   currentUser?: AuthUser | null
   onLogout?: () => void
+  loading?: boolean
 }
 
 export default function ConnectionsScreen({
@@ -93,6 +95,7 @@ export default function ConnectionsScreen({
   currentUser = null,
   onLogout,
   lastConnectedId,
+  loading = false,
   onOpen,
   onNewConnection,
   onNewConnectionInFolder,
@@ -740,17 +743,22 @@ export default function ConnectionsScreen({
                 </button>
               ) : null}
             </div>
+          ) : loading ? (
+            <div className="mr-2 flex items-center gap-2 border-r border-line pr-3">
+              <div className="skeleton-shimmer-subtle h-3.5 w-32 rounded" />
+            </div>
           ) : null}
           <button
             type="button"
             className="btn-soft"
+            disabled={loading}
             onClick={() => openCreatePrompt(null)}
             title="Create a folder to group connections"
           >
             <Icon name="folder-plus" size={14} />
             New folder
           </button>
-          <button type="button" className="btn-primary" onClick={onNewConnection}>
+          <button type="button" className="btn-primary" disabled={loading} onClick={onNewConnection}>
             <Icon name="plus" size={14} />
             New connection
           </button>
@@ -763,7 +771,11 @@ export default function ConnectionsScreen({
         onDrop={handleRootDrop}
       >
         <div className="mx-auto w-full max-w-3xl">
-          <div className="mb-4 flex items-center justify-between gap-4">
+          {loading ? (
+            <ConnectionsSkeleton />
+          ) : (
+            <>
+              <div className="mb-4 flex items-center justify-between gap-4">
             <div>
               <h1 className="text-[length:var(--app-text-15)] font-semibold text-text-strong">Connections</h1>
               <p className="mt-0.5 text-[length:var(--app-text-11)] text-text-muted">
@@ -895,7 +907,9 @@ export default function ConnectionsScreen({
               </div>
             </>
           )}
-        </div>
+        </>
+      )}
+    </div>
 
         {selectedCount > 0 ? (
           <div className="animate-fade-in pointer-events-none sticky bottom-4 z-20 mt-auto flex justify-center pt-4">

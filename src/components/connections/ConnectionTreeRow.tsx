@@ -20,6 +20,7 @@ export interface ConnectionItem {
   encrypt?: boolean
   trustServerCertificate?: boolean
   driverType?: string | null
+  pinnedTables?: string[]
   [key: string]: unknown
 }
 

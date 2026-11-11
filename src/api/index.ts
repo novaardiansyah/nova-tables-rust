@@ -459,6 +459,29 @@ export const api = {
     }).catch(() => null)
   },
 
+  getPinnedTables: async (connectionId: string): Promise<string[]> => {
+    try {
+      const res = await apiRequest<{ ok: boolean; tables: string[] }>(`/api/member/connections/${connectionId}/pinned-tables`, {
+        method: 'GET',
+      })
+      return Array.isArray(res?.tables) ? res.tables : []
+    } catch {
+      return []
+    }
+  },
+
+  savePinnedTables: async (connectionId: string, tables: string[]): Promise<string[]> => {
+    try {
+      const res = await apiRequest<{ ok: boolean; tables: string[] }>(`/api/member/connections/${connectionId}/pinned-tables`, {
+        method: 'POST',
+        body: JSON.stringify({ tables }),
+      })
+      return Array.isArray(res?.tables) ? res.tables : []
+    } catch {
+      return tables
+    }
+  },
+
   saveConnection: async (connection: Partial<ConnectionModel>): Promise<ConnectionModel> => {
     let id = connection.id
     if (!id) {

@@ -26,6 +26,7 @@ export function useSessionManager({
 }: UseSessionManagerProps) {
   const [connections, setConnections] = useState<any[]>([])
   const [folders, setFolders] = useState<any[]>([])
+  const [loadingConnections, setLoadingConnections] = useState(true)
   const [sessions, setSessions] = useState<Record<string, SessionData>>({})
   const [activeConnectionId, setActiveConnectionId] = useState<string | null>(null)
   const [lastConnectedId, setLastConnectedId] = useState<string | null>(null)
@@ -113,55 +114,56 @@ export function useSessionManager({
 
   useEffect(() => {
     let cancelled = false
+    setLoadingConnections(true)
 
-    api
-      .listConnections()
-      .then((list) => {
-        if (!cancelled) setConnections(list)
-      })
-      .catch((error) => {
-        if (error?.status !== 401 && !error?.isUnauthorized) {
-          showBanner('error', error.message)
-        }
-      })
-
-    api
-      .listFolders()
-      .then((list) => {
-        if (!cancelled) setFolders(list)
-      })
-      .catch((error) => {
-        if (error?.status !== 401 && !error?.isUnauthorized) {
-          showBanner('error', error.message)
-        }
-      })
-
-    api
-      .getLastConnectedId()
-      .then((id) => {
-        if (!cancelled) setLastConnectedId(id)
-      })
-      .catch(() => {})
-
-    api
-      .appInfo()
-      .then((info) => {
-        if (!cancelled) setAppVersion(info.version)
-      })
-      .catch(() => {})
-
-    api
-      .loadSettings()
-      .then((stored) => {
-        if (!cancelled) {
-          const resolved = applySettings(stored)
-          setSettings(resolved)
-          if (!stored) {
-            api.saveSettings(resolved).catch(() => {})
+    Promise.all([
+      api
+        .listConnections()
+        .then((list) => {
+          if (!cancelled) setConnections(list)
+        })
+        .catch((error) => {
+          if (error?.status !== 401 && !error?.isUnauthorized) {
+            showBanner('error', error.message)
           }
-        }
-      })
-      .catch(() => {})
+        }),
+      api
+        .listFolders()
+        .then((list) => {
+          if (!cancelled) setFolders(list)
+        })
+        .catch((error) => {
+          if (error?.status !== 401 && !error?.isUnauthorized) {
+            showBanner('error', error.message)
+          }
+        }),
+      api
+        .getLastConnectedId()
+        .then((id) => {
+          if (!cancelled) setLastConnectedId(id)
+        })
+        .catch(() => {}),
+      api
+        .appInfo()
+        .then((info) => {
+          if (!cancelled) setAppVersion(info.version)
+        })
+        .catch(() => {}),
+      api
+        .loadSettings()
+        .then((stored) => {
+          if (!cancelled) {
+            const resolved = applySettings(stored)
+            setSettings(resolved)
+            if (!stored) {
+              api.saveSettings(resolved).catch(() => {})
+            }
+          }
+        })
+        .catch(() => {}),
+    ]).finally(() => {
+      if (!cancelled) setLoadingConnections(false)
+    })
 
     return () => {
       cancelled = true
@@ -691,6 +693,7 @@ export function useSessionManager({
   )
 
   const handleReloadConnections = useCallback(async () => {
+    setLoadingConnections(true)
     try {
       const [nextFolders, nextConnections, nextLastId] = await Promise.all([
         api.listFolders(),
@@ -704,6 +707,8 @@ export function useSessionManager({
       if (error?.status !== 401 && !error?.isUnauthorized) {
         showBanner('error', error.message)
       }
+    } finally {
+      setLoadingConnections(false)
     }
   }, [showBanner])
 
@@ -717,6 +722,7 @@ export function useSessionManager({
   return {
     connections,
     folders,
+    loadingConnections,
     sessions,
     setSessions,
     activeConnectionId,

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from '@/api'
 import { generateCreateTable } from '@/designSql'
 import { quoteIdentifier } from '@/resultFormats'
@@ -77,18 +77,62 @@ export function useTableOperations({
   const [tablePrompt, setTablePrompt] = useState<TablePromptState | null>(null)
   const [dropTarget, setDropTarget] = useState<TableItem | null>(null)
   const [tableBusy, setTableBusy] = useState(false)
-  const [pinnedTables, setPinnedTables] = useState<string[]>([])
+  const [pinnedByConnection, setPinnedByConnection] = useState<Record<string, string[]>>({})
+
+  const currentSession = activeSession()
+  const activeConnectionId = currentSession?.connectionId ?? null
+
+  useEffect(() => {
+    if (!activeConnectionId) return
+    let cancelled = false
+
+    const initialPinned = Array.isArray(currentSession?.connection?.pinnedTables)
+      ? (currentSession.connection.pinnedTables as string[])
+      : null
+
+    if (initialPinned && !pinnedByConnection[activeConnectionId]) {
+      setPinnedByConnection((prev) => ({ ...prev, [activeConnectionId]: initialPinned }))
+    }
+
+    void api.getPinnedTables(activeConnectionId).then((tables) => {
+      if (!cancelled && Array.isArray(tables)) {
+        setPinnedByConnection((prev) => ({ ...prev, [activeConnectionId]: tables }))
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeConnectionId])
+
+  const pinnedTables = activeConnectionId ? (pinnedByConnection[activeConnectionId] ?? []) : []
 
   const handleRenameTable = useCallback((table: TableItem) => {
     setTablePrompt({ kind: 'rename', table })
   }, [])
 
-  const handleTogglePin = useCallback((table: TableItem) => {
-    const key = `${table.schema}.${table.name}`
-    setPinnedTables((prev) =>
-      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key],
-    )
-  }, [])
+  const handleTogglePin = useCallback(
+    async (table: TableItem) => {
+      const current = activeSession()
+      if (!current?.connectionId) return
+      const connectionId = current.connectionId
+      const key = `${table.schema}.${table.name}`
+      const currentList = pinnedByConnection[connectionId] ?? []
+      const nextList = currentList.includes(key)
+        ? currentList.filter((item) => item !== key)
+        : [...currentList, key]
+
+      setPinnedByConnection((prev) => ({ ...prev, [connectionId]: nextList }))
+
+      try {
+        await api.savePinnedTables(connectionId, nextList)
+      } catch (error: any) {
+        setPinnedByConnection((prev) => ({ ...prev, [connectionId]: currentList }))
+        showBanner('error', error?.message || 'Failed to save pinned status')
+      }
+    },
+    [activeSession, pinnedByConnection, showBanner],
+  )
 
   const handleCloneTable = useCallback(
     async (table: TableItem) => {
@@ -165,9 +209,13 @@ export function useTableOperations({
         patchSession(current.connectionId, { selectedTable: `${table.schema}.${nextName}` })
         if (prompt.kind === 'rename') {
           const previousKey = `${table.schema}.${table.name}`
-          setPinnedTables((prev) =>
-            prev.map((item) => (item === previousKey ? `${table.schema}.${value}` : item)),
-          )
+          const nextKey = `${table.schema}.${value}`
+          const currentList = pinnedByConnection[current.connectionId] ?? []
+          if (currentList.includes(previousKey)) {
+            const nextList = currentList.map((item) => (item === previousKey ? nextKey : item))
+            setPinnedByConnection((prev) => ({ ...prev, [current.connectionId]: nextList }))
+            void api.savePinnedTables(current.connectionId, nextList).catch(() => {})
+          }
         }
         setTablePrompt(null)
         await loadTables(current.connectionId, current.activeDatabase)
@@ -178,7 +226,7 @@ export function useTableOperations({
         setTableBusy(false)
       }
     },
-    [activeSession, loadTables, loadColumns, patchSession, showBanner, tablePrompt],
+    [activeSession, loadTables, loadColumns, patchSession, pinnedByConnection, showBanner, tablePrompt],
   )
 
   const handleDropConfirm = useCallback(async () => {
@@ -194,9 +242,13 @@ export function useTableOperations({
       })
       showBanner('success', `Dropped ${dropTarget.schema}.${dropTarget.name}.`)
       patchSession(current.connectionId, { selectedTable: null })
-      setPinnedTables((prev) =>
-        prev.filter((item) => item !== `${dropTarget.schema}.${dropTarget.name}`),
-      )
+      const dropKey = `${dropTarget.schema}.${dropTarget.name}`
+      const currentList = pinnedByConnection[current.connectionId] ?? []
+      if (currentList.includes(dropKey)) {
+        const nextList = currentList.filter((item) => item !== dropKey)
+        setPinnedByConnection((prev) => ({ ...prev, [current.connectionId]: nextList }))
+        void api.savePinnedTables(current.connectionId, nextList).catch(() => {})
+      }
       setDropTarget(null)
       await loadTables(current.connectionId, current.activeDatabase)
       await loadColumns(current.connectionId, current.activeDatabase)
@@ -205,7 +257,7 @@ export function useTableOperations({
     } finally {
       setTableBusy(false)
     }
-  }, [activeSession, dropTarget, loadTables, loadColumns, patchSession, showBanner])
+  }, [activeSession, dropTarget, loadTables, loadColumns, patchSession, pinnedByConnection, showBanner])
 
   return {
     tablePrompt,

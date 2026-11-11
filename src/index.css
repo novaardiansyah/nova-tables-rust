@@ -394,3 +394,34 @@
 .monaco-editor .scroll-decoration {
   display: none;
 }
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgb(var(--color-tint) / 0.08) 20%,
+    rgb(var(--color-tint) / 0.20) 50%,
+    rgb(var(--color-tint) / 0.08) 80%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+}
+
+.skeleton-shimmer-subtle {
+  background: linear-gradient(
+    90deg,
+    rgb(var(--color-tint) / 0.05) 20%,
+    rgb(var(--color-tint) / 0.14) 50%,
+    rgb(var(--color-tint) / 0.05) 80%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+}
