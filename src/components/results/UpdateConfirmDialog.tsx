@@ -28,11 +28,33 @@ export default function UpdateConfirmDialog({
   useEffect(() => {
     if (!open) return
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') handleClose()
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        handleClose()
+        return
+      }
+      if (event.ctrlKey || event.metaKey) {
+        const key = event.key.toLowerCase()
+        if (key === 's') {
+          event.preventDefault()
+          onApply?.()
+          return
+        }
+        if (key === 'w') {
+          event.preventDefault()
+          handleClose()
+          return
+        }
+        if (key === 'r') {
+          event.preventDefault()
+          onDiscard?.()
+          return
+        }
+      }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, handleClose])
+  }, [open, handleClose, onApply, onDiscard])
 
   const [highlighted, setHighlighted] = useState<{ text: string; html: string | null }>({ text: '', html: null })
 

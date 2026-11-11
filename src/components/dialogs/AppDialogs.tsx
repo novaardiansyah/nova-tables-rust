@@ -23,6 +23,7 @@ import { api } from '@/api'
 import { BannerType } from '@/components/common/Banner'
 import { SessionData, SessionTab } from '@/utils/sessionHelpers'
 import { editSqlHeader, buildUpdateStatements, buildDeleteStatementsForRows } from '@/edits'
+import { getDesignSql, getDesignChangeCount } from '@/designSql'
 
 export interface AppDialogsProps {
   session: SessionData | null
@@ -88,6 +89,7 @@ export default function AppDialogs({
     setRunGuard,
     handleGuardConfirm,
     editConfirmOpen,
+    editConfirmTarget,
     handleEditConfirmClose,
     handleEditConfirmApply,
     handleEditConfirmCopy,
@@ -149,13 +151,31 @@ export default function AppDialogs({
   } = queryHistory
 
   const confirmSql = useMemo(() => {
-    if (!editConfirmOpen || !activeTab) return ''
+    if (!editConfirmOpen) return ''
+    const targetTab =
+      (editConfirmTarget?.tabId ? session?.tabs.find((t) => t.id === editConfirmTarget.tabId) : null) ??
+      activeTab
+    if (!targetTab) return ''
+    if (targetTab.kind === 'design') {
+      return getDesignSql(targetTab, session?.connection?.driverType)
+    }
     try {
-      return `${editSqlHeader(activeTab.editSource)}${buildUpdateStatements(activeTab.editSource, tabResultSet(activeTab), activeTab.edits || {}).join('\n\n')}`
+      return `${editSqlHeader(targetTab.editSource)}${buildUpdateStatements(targetTab.editSource, tabResultSet(targetTab), targetTab.edits || {}).join('\n\n')}`
     } catch {
       return ''
     }
-  }, [editConfirmOpen, activeTab, tabResultSet])
+  }, [editConfirmOpen, editConfirmTarget, session, activeTab, tabResultSet])
+
+  const confirmChangeCount = useMemo(() => {
+    const targetTab =
+      (editConfirmTarget?.tabId ? session?.tabs.find((t) => t.id === editConfirmTarget.tabId) : null) ??
+      activeTab
+    if (!targetTab) return 0
+    if (targetTab.kind === 'design') {
+      return getDesignChangeCount(targetTab, session?.connection?.driverType)
+    }
+    return Object.keys(targetTab.edits || {}).length
+  }, [editConfirmTarget, session, activeTab])
 
   const confirmDeleteSql = useMemo(() => {
     if (!deleteConfirmOpen || !activeTab) return ''
@@ -372,7 +392,7 @@ export default function AppDialogs({
 
       <UpdateConfirmDialog
         open={editConfirmOpen}
-        changeCount={activeTab ? Object.keys(activeTab.edits || {}).length : 0}
+        changeCount={confirmChangeCount}
         sql={confirmSql}
         onClose={handleEditConfirmClose}
         onApply={handleEditConfirmApply}

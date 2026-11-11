@@ -301,6 +301,7 @@ export default function WorkspaceView({
           <div className="flex min-h-0 flex-1 flex-col">
             <TableDesigner
               design={activeTab.design}
+              draft={activeTab.designDraft}
               mode={activeTab.target?.mode}
               loading={activeTab.loading}
               error={activeTab.error}
@@ -308,6 +309,9 @@ export default function WorkspaceView({
               availableTables={session?.tables?.tables ?? []}
               availableColumns={session?.columns?.tables ?? []}
               driverType={session?.connection?.driverType ?? null}
+              onDraftChange={(draft) =>
+                sessionManager.updateTab(session.connectionId, activeTab.id, { designDraft: draft })
+              }
               onGenerate={handleDesignGenerate}
               onApply={(sql, draft) => handleDesignApply(activeTab.id, sql, draft)}
               onRenameTable={(nextName) =>

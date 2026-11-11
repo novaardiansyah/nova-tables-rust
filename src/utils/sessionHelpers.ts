@@ -73,6 +73,7 @@ export interface SessionTab {
   // Design properties
   target?: any
   design?: TableDesign | null
+  designDraft?: TableDesign | null
   loading?: boolean
   error?: string | null
   busy?: boolean
@@ -148,6 +149,7 @@ export function createDesignTab(id: string, title: string, target: any): Session
     title,
     target,
     design: null,
+    designDraft: null,
     loading: true,
     error: null,
     busy: false,

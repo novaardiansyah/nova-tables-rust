@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Icon, { Spinner } from '@/components/common/Icon'
 import ColumnEditor, { DragOverState } from '@/components/designer/ColumnEditor'
 import IndexConstraintEditor from '@/components/designer/IndexConstraintEditor'
@@ -90,6 +90,7 @@ function RecreateConfirmDialog({ open, onCancel, onConfirmRecreate, onConfirmAlt
 
 export interface TableDesignerProps {
   design?: TableDesign | null
+  draft?: TableDesign | null
   mode: 'new' | 'edit'
   loading?: boolean
   error?: string | null
@@ -97,6 +98,7 @@ export interface TableDesignerProps {
   availableTables?: TableOptionItem[]
   availableColumns?: { schema: string; name: string; columns: string[] }[]
   driverType?: string | null
+  onDraftChange?: (draft: TableDesign | null) => void
   onRenameTable?: (nextName: string) => void
   onGenerate: (sql: string, draft?: TableDesign) => void
   onApply: (sql: string, draft: TableDesign) => void
@@ -104,6 +106,7 @@ export interface TableDesignerProps {
 
 export default function TableDesigner({
   design,
+  draft: draftProp,
   mode,
   loading = false,
   error = null,
@@ -111,11 +114,27 @@ export default function TableDesigner({
   availableTables = [],
   availableColumns = [],
   driverType,
+  onDraftChange,
   onRenameTable,
   onGenerate,
   onApply,
 }: TableDesignerProps) {
-  const [draft, setDraft] = useState<TableDesign>(design ?? (NEW_TABLE_TEMPLATE as unknown as TableDesign))
+  const [draft, setDraftState] = useState<TableDesign>(
+    draftProp ?? design ?? (NEW_TABLE_TEMPLATE as unknown as TableDesign),
+  )
+  const onDraftChangeRef = useRef(onDraftChange)
+  useEffect(() => {
+    onDraftChangeRef.current = onDraftChange
+  }, [onDraftChange])
+
+  const setDraft: Dispatch<SetStateAction<TableDesign>> = useCallback((updater) => {
+    setDraftState((prev) => {
+      const next = typeof updater === 'function' ? (updater as (prevState: TableDesign) => TableDesign)(prev) : updater
+      onDraftChangeRef.current?.(next)
+      return next
+    })
+  }, [])
+
   const [notice, setNotice] = useState<string | null>(null)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverState, setDragOverState] = useState<DragOverState | null>(null)
@@ -126,12 +145,16 @@ export default function TableDesigner({
   const originalRef = useRef<TableDesign | null>(design ?? null)
 
   useEffect(() => {
+    if (draftProp) {
+      setDraftState(draftProp)
+    } else if (design) {
+      setDraftState(design)
+    }
     if (design) {
       originalRef.current = design
-      setDraft(design)
     }
     setNotice(null)
-  }, [design])
+  }, [design, draftProp])
 
   const allTables = useMemo(() => {
     const list: TableOptionItem[] = [...availableTables]
@@ -154,8 +177,10 @@ export default function TableDesigner({
   )
 
   const discard = () => {
-    setDraft(originalRef.current ?? (NEW_TABLE_TEMPLATE as unknown as TableDesign))
+    const next = originalRef.current ?? (NEW_TABLE_TEMPLATE as unknown as TableDesign)
+    setDraftState(next)
     setNotice(null)
+    onDraftChange?.(null)
   }
 
   if (loading) {

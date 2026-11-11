@@ -13,6 +13,7 @@ import {
   editSqlHeader,
   editTableFromSql,
 } from '@/edits'
+import { isDesignDirty, getDesignSql } from '@/designSql'
 import { csvRecords, jsonRecords } from '@/resultFormats'
 
 export interface UseQueryExecutionProps {
@@ -26,7 +27,10 @@ export interface UseQueryExecutionProps {
   openTab: (connectionId: string, title: string, sql: string, editSource?: any | null, savedQuery?: any | null) => string
   patchSession: (connectionId: string, patch: Partial<SessionData>) => void
   seedEditor: (sql: string, focus?: boolean) => void
-  handleCloseTab: (tabId: string) => void
+  handleCloseTab: (tabId: string, force?: boolean) => void
+  reloadDesign?: (tabId: string, schema: string, table: string) => Promise<any>
+  loadTables?: (connectionId: string, database: string) => Promise<any>
+  loadColumns?: (connectionId: string, database: string) => Promise<any>
 }
 
 export function useQueryExecution({
@@ -41,6 +45,9 @@ export function useQueryExecution({
   patchSession,
   seedEditor,
   handleCloseTab,
+  reloadDesign,
+  loadTables,
+  loadColumns,
 }: UseQueryExecutionProps) {
   const [runGuard, setRunGuard] = useState<{ kind: string; sql: string; tabId: string } | null>(null)
   const [editConfirmOpen, setEditConfirmOpen] = useState(false)
@@ -240,7 +247,22 @@ export function useQueryExecution({
       return
     }
     const tab = current.tabs.find((item) => item.id === current.activeTabId)
-    if (!tab || tab.kind !== 'query') return
+    if (!tab) return
+    if (tab.kind === 'design') {
+      const driverType = current.connection?.driverType ?? null
+      if (isDesignDirty(tab, driverType)) {
+        setEditConfirmTarget({ type: 'reload', tabId: tab.id })
+        setEditConfirmOpen(true)
+        return
+      }
+      const schema = tab.design?.schema || tab.target?.schema || 'dbo'
+      const table = tab.design?.table || tab.target?.table || ''
+      if (table && reloadDesign) {
+        reloadDesign(tab.id, schema, table)
+      }
+      return
+    }
+    if (tab.kind !== 'query') return
     const sql = tab.lastExecutedSql
     if (Object.keys(tab.edits || {}).length > 0) {
       setEditConfirmTarget({ type: 'run', sql: sql || undefined })
@@ -257,7 +279,7 @@ export function useQueryExecution({
       return
     }
     runWithGuard(sql, current.activeTabId)
-  }, [activeSession, runWithGuard, showBanner])
+  }, [activeSession, runWithGuard, showBanner, reloadDesign])
 
   const handleEstimatedPlan = useCallback(async () => {
     const current = activeSession()
@@ -485,14 +507,39 @@ export function useQueryExecution({
     const target = editConfirmTarget
     const current = activeSession()
     if (!current) return
-    const tab = current.tabs.find((item) => item.id === current.activeTabId)
-    let sql = ''
-    if (tab) {
-      try {
-        sql = `${editSqlHeader(tab.editSource)}${buildUpdateStatements(tab.editSource, tabResultSet(tab), tab.edits || {}).join('\n\n')}`
-      } catch {
-        sql = ''
+    const targetTabId = target?.tabId || current.activeTabId
+    const tab = current.tabs.find((item) => item.id === targetTabId)
+    if (!tab) return
+
+    if (tab.kind === 'design') {
+      const driverType = current.connection?.driverType ?? null
+      const sql = getDesignSql(tab, driverType)
+      const ok = await handleRunUpdate(sql)
+      if (!ok) return
+      setEditConfirmOpen(false)
+      setEditConfirmTarget(null)
+      updateTab(current.connectionId, tab.id, { designDraft: null })
+      if (loadTables && current.activeDatabase) {
+        await loadTables(current.connectionId, current.activeDatabase)
       }
+      if (loadColumns && current.activeDatabase) {
+        await loadColumns(current.connectionId, current.activeDatabase)
+      }
+      if (target?.type === 'close-tab' && target.tabId) {
+        handleCloseTab(target.tabId, true)
+      } else if (target?.type === 'reload' || target?.type === 'save') {
+        const schema = tab.designDraft?.schema || tab.design?.schema || 'dbo'
+        const table = tab.designDraft?.table || tab.design?.table || ''
+        if (table && reloadDesign) await reloadDesign(tab.id, schema, table)
+      }
+      return
+    }
+
+    let sql = ''
+    try {
+      sql = `${editSqlHeader(tab.editSource)}${buildUpdateStatements(tab.editSource, tabResultSet(tab), tab.edits || {}).join('\n\n')}`
+    } catch {
+      sql = ''
     }
     const ok = await handleRunUpdate(sql)
     if (!ok) return
@@ -505,7 +552,7 @@ export function useQueryExecution({
         seedEditor(next.sql)
       }
     } else if (target?.type === 'close-tab' && target.tabId) {
-      handleCloseTab(target.tabId)
+      handleCloseTab(target.tabId, true)
     } else if (target?.type === 'run') {
       const runSql = target.sql ?? ''
       if (runSql.trim()) runWithGuard(runSql, current.activeTabId)
@@ -519,26 +566,57 @@ export function useQueryExecution({
     seedEditor,
     runWithGuard,
     tabResultSet,
+    updateTab,
+    loadTables,
+    loadColumns,
+    reloadDesign,
   ])
 
   const handleEditConfirmDiscard = useCallback(() => {
     const target = editConfirmTarget
     const current = activeSession()
     if (!current) return
-    const tab = current.tabs.find((item) => item.id === current.activeTabId)
+    const targetTabId = target?.tabId || current.activeTabId
+    const tab = current.tabs.find((item) => item.id === targetTabId)
+    if (tab?.kind === 'design') {
+      updateTab(current.connectionId, tab.id, { designDraft: null })
+      setEditConfirmOpen(false)
+      setEditConfirmTarget(null)
+      if (target?.type === 'close-tab' && target.tabId) {
+        handleCloseTab(target.tabId, true)
+      } else if (target?.type === 'reload') {
+        const schema = tab.design?.schema || tab.target?.schema || 'dbo'
+        const table = tab.design?.table || tab.target?.table || ''
+        if (table && reloadDesign) reloadDesign(tab.id, schema, table)
+      }
+      return
+    }
     if (tab) updateTab(current.connectionId, tab.id, { edits: {} })
     setEditConfirmOpen(false)
     setEditConfirmTarget(null)
     if (target?.type === 'close-tab' && target.tabId) {
-      handleCloseTab(target.tabId)
+      handleCloseTab(target.tabId, true)
     }
-  }, [activeSession, editConfirmTarget, updateTab, handleCloseTab])
+  }, [activeSession, editConfirmTarget, updateTab, handleCloseTab, reloadDesign])
 
   const handleEditConfirmCopy = useCallback(async () => {
+    const target = editConfirmTarget
     const current = activeSession()
     if (!current) return
-    const tab = current.tabs.find((item) => item.id === current.activeTabId)
+    const targetTabId = target?.tabId || current.activeTabId
+    const tab = current.tabs.find((item) => item.id === targetTabId)
     if (!tab) return
+    if (tab.kind === 'design') {
+      const driverType = current.connection?.driverType ?? null
+      const sql = getDesignSql(tab, driverType)
+      try {
+        await api.copyText(sql)
+        showBanner('success', 'Copied structure SQL to clipboard.')
+      } catch (error: any) {
+        showBanner('error', error.message)
+      }
+      return
+    }
     let sql = ''
     try {
       sql = `${editSqlHeader(tab.editSource)}${buildUpdateStatements(tab.editSource, tabResultSet(tab), tab.edits || {}).join('\n\n')}`
@@ -551,7 +629,7 @@ export function useQueryExecution({
     } catch (error: any) {
       showBanner('error', error.message)
     }
-  }, [activeSession, showBanner, tabResultSet])
+  }, [activeSession, editConfirmTarget, showBanner, tabResultSet])
 
   const handleEditConfirmClose = useCallback(() => {
     setEditConfirmOpen(false)

@@ -27,6 +27,7 @@ import WorkspaceView from '@/components/WorkspaceView'
 import AppDialogs from '@/components/dialogs/AppDialogs'
 import AuthScreen from '@/components/auth/AuthScreen'
 import { Spinner } from '@/components/common/Icon'
+import { isDesignDirty } from '@/designSql'
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
@@ -185,6 +186,8 @@ export default function App() {
     sqlRef,
   ])
 
+  const reloadDesignRef = useRef<((tabId: string, schema: string, table: string) => Promise<any>) | null>(null)
+
   const queryExecution = useQueryExecution({
     activeSession,
     showBanner,
@@ -196,7 +199,12 @@ export default function App() {
     openTab: (connId, title, sql, src, saved) => tabManager.openTab(connId, title, sql, src, saved),
     patchSession,
     seedEditor,
-    handleCloseTab: (tabId) => tabManager.handleCloseTab(tabId),
+    handleCloseTab: (tabId, force) => tabManager.handleCloseTab(tabId, force),
+    reloadDesign: async (tabId, schema, table) => {
+      await reloadDesignRef.current?.(tabId, schema, table)
+    },
+    loadTables: sessionManager.loadTables,
+    loadColumns: sessionManager.loadColumns,
   })
 
   const tabManager = useTabManager({
@@ -227,6 +235,8 @@ export default function App() {
     setSessions,
     tabIdRef,
   })
+
+  reloadDesignRef.current = tableBrowser.reloadDesign
 
   const databaseUsers = useDatabaseUsers({ activeSession, showBanner })
 
@@ -300,6 +310,10 @@ export default function App() {
     queryExecution.editConfirmOpen ||
     queryExecution.deleteConfirmOpen
 
+  const session = activeConnectionId ? sessions[activeConnectionId] || null : null
+  const activeTab = session ? session.tabs.find((tab) => tab.id === session.activeTabId) || null : null
+  const workspaceReady = screen === 'workspace' && Boolean(session)
+
   useKeyboardShortcuts({
     screen,
     hasDialog,
@@ -310,7 +324,10 @@ export default function App() {
     handleRun: queryExecution.handleRun,
     handleCancel: queryExecution.handleCancel,
     handleSaveQuery: () => {
-      if (activeTab && Object.keys(activeTab.edits || {}).length > 0) {
+      if (activeTab && activeTab.kind === 'design' && isDesignDirty(activeTab, session?.connection?.driverType)) {
+        queryExecution.setEditConfirmTarget({ type: 'save', tabId: activeTab.id })
+        queryExecution.setEditConfirmOpen(true)
+      } else if (activeTab && Object.keys(activeTab.edits || {}).length > 0) {
         queryExecution.handleReRun()
       } else {
         savedQueries.handleSaveQuery()
@@ -323,10 +340,6 @@ export default function App() {
     handleCycleTab: tabManager.handleCycleTab,
     handleSelectTabIndex: tabManager.handleSelectTabIndex,
   })
-
-  const session = activeConnectionId ? sessions[activeConnectionId] || null : null
-  const activeTab = session ? session.tabs.find((tab) => tab.id === session.activeTabId) || null : null
-  const workspaceReady = screen === 'workspace' && Boolean(session)
 
   const handleLogout = useCallback(async () => {
     setLogoutConfirmOpen(false)

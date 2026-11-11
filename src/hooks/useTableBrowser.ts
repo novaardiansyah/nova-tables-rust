@@ -393,6 +393,7 @@ export function useTableBrowser({
           indexes: indexesList,
           statement: structure?.statement || '',
         },
+        designDraft: null,
       })
     },
     [activeSession, updateTab],
@@ -497,7 +498,7 @@ export function useTableBrowser({
       const current = activeSession()
       if (!current) return
       // Persist the current draft into the design tab so switching back does not reset the form.
-      updateTab(current.connectionId, current.activeTabId, { design: draft })
+      updateTab(current.connectionId, current.activeTabId, { designDraft: draft })
       openTab(current.connectionId, 'Generated SQL', sql)
     },
     [activeSession, openTab, updateTab],
@@ -543,10 +544,17 @@ export function useTableBrowser({
 
       updateTab(current.connectionId, tabId, { busy: true })
       try {
+        const driverType = current.connection?.driverType ?? null
+        // MySQL driver: ALTER TABLE ... RENAME TO is required for renaming tables in MySQL
+        // SQL Server driver: sp_rename stored procedure is required for renaming tables in SQL Server
+        const renameSql =
+          driverType === 'mysql'
+            ? `ALTER TABLE ${quoteIdentifier(draft.schema || 'dbo', driverType)}.${quoteIdentifier(draft.table, driverType)} RENAME TO ${quoteIdentifier(nextName, driverType)};`
+            : `EXEC sp_rename N'${quoteIdentifier(draft.schema || 'dbo', driverType)}.${quoteIdentifier(draft.table, driverType)}', N'${nextName.replace(/'/g, "''")}';`
         await api.runQuery({
           connectionId: current.connectionId,
           database: current.activeDatabase,
-          sql: `EXEC sp_rename N'${quoteIdentifier(draft.schema)}.${quoteIdentifier(draft.table)}', N'${nextName.replace(/'/g, "''")}';`,
+          sql: renameSql,
         })
         showBanner('success', `Renamed table to ${nextName}.`)
         await loadTables(current.connectionId, current.activeDatabase)

@@ -398,10 +398,221 @@ export function generateRecreateTable(
   }
 
   statements.push(`DROP TABLE ${fullOriginalTable};`)
-  statements.push(
-    `EXEC sp_rename N'${design.schema.replace(/'/g, "''")}.${tmpName.replace(/'/g, "''")}', N'${design.table.replace(/'/g, "''")}', 'OBJECT';`,
-  )
+  if (driver === 'mysql') {
+    // MySQL driver: RENAME TABLE is required to finalize recreated table in MySQL
+    statements.push(`RENAME TABLE ${fullTmpTable} TO ${fullOriginalTable};`)
+  } else {
+    // SQL Server driver: sp_rename stored procedure is required to rename temporary table in SQL Server
+    statements.push(
+      `EXEC sp_rename N'${design.schema.replace(/'/g, "''")}.${tmpName.replace(/'/g, "''")}', N'${design.table.replace(/'/g, "''")}', 'OBJECT';`,
+    )
+  }
   statements.push('COMMIT TRANSACTION;')
 
   return statements.join('\n\n')
+}
+
+export function getDesignDiff(
+  original: TableDesign | null | undefined,
+  draft: TableDesign | null | undefined,
+  mode: 'new' | 'edit' = 'edit',
+  driverType?: string | null,
+): { isDirty: boolean; changeCount: number; sql: string } {
+  if (mode === 'new') {
+    if (!draft) return { isDirty: false, changeCount: 0, sql: '' }
+    const hasTableName = Boolean(draft.table && draft.table.trim().length > 0)
+    const isDefaultTemplate =
+      !hasTableName &&
+      (draft.columns ?? []).length === 1 &&
+      draft.columns[0]?.name === 'id' &&
+      draft.columns[0]?.typeName === 'bigint' &&
+      !(draft.uniqueKeys && draft.uniqueKeys.length > 0) &&
+      !(draft.foreignKeys && draft.foreignKeys.length > 0) &&
+      !(draft.indexes && draft.indexes.length > 0)
+    if (isDefaultTemplate) {
+      return { isDirty: false, changeCount: 0, sql: '' }
+    }
+    const changeCount = Math.max(
+      1,
+      (draft.columns ?? []).length +
+        (draft.uniqueKeys?.length ?? 0) +
+        (draft.foreignKeys?.length ?? 0) +
+        (draft.indexes?.length ?? 0),
+    )
+    let sql = ''
+    try {
+      sql = generateCreateTable(draft, driverType)
+    } catch {
+      sql = ''
+    }
+    return { isDirty: true, changeCount, sql }
+  }
+
+  if (!original || !draft) {
+    return { isDirty: false, changeCount: 0, sql: '' }
+  }
+  const tableRenamed = Boolean(
+    draft.table && draft.table.trim() && draft.table.trim() !== original.table,
+  )
+  const originalColumns = new Map<string, DesignColumn>(
+    (original.columns ?? []).map((col) => [col.name, col]),
+  )
+  const draftOriginalNames = new Set<string>()
+  let addedCount = 0
+  let alteredCount = 0
+  let renamedCount = 0
+  for (const col of draft.columns ?? []) {
+    const prevName = col.originalName ?? null
+    if (prevName) draftOriginalNames.add(prevName)
+    const prev = prevName ? originalColumns.get(prevName) : null
+    if (!prev) {
+      addedCount += 1
+    } else {
+      if (col.name !== prev.name) renamedCount += 1
+      if (
+        columnBody(col, driverType || 'mssql') !==
+        columnBody({ ...prev, name: col.name }, driverType || 'mssql')
+      ) {
+        alteredCount += 1
+      }
+    }
+  }
+  let droppedCount = 0
+  for (const name of originalColumns.keys()) {
+    if (!draftOriginalNames.has(name)) droppedCount += 1
+  }
+  const primaryChanged = !sameColumns(original.primaryKey ?? [], draft.primaryKey ?? []) ? 1 : 0
+
+  const originalForeign = new Map((original.foreignKeys ?? []).map((k) => [k.name, k]))
+  const draftForeign = new Map((draft.foreignKeys ?? []).map((k) => [k.name, k]))
+  let foreignChangedCount = 0
+  for (const [name, key] of draftForeign) {
+    if (!originalForeign.has(name) || JSON.stringify(originalForeign.get(name)) !== JSON.stringify(key)) {
+      foreignChangedCount += 1
+    }
+  }
+  for (const name of originalForeign.keys()) {
+    if (!draftForeign.has(name)) foreignChangedCount += 1
+  }
+
+  const originalUnique = new Map((original.uniqueKeys ?? []).map((k) => [k.name, k]))
+  const draftUnique = new Map((draft.uniqueKeys ?? []).map((k) => [k.name, k]))
+  let uniqueChangedCount = 0
+  for (const [name, key] of draftUnique) {
+    if (!originalUnique.has(name) || JSON.stringify(originalUnique.get(name)) !== JSON.stringify(key)) {
+      uniqueChangedCount += 1
+    }
+  }
+  for (const name of originalUnique.keys()) {
+    if (!draftUnique.has(name)) uniqueChangedCount += 1
+  }
+
+  const originalIndexes = new Map((original.indexes ?? []).map((k) => [k.name, k]))
+  const draftIndexes = new Map((draft.indexes ?? []).map((k) => [k.name, k]))
+  let indexChangedCount = 0
+  for (const [name, key] of draftIndexes) {
+    if (!originalIndexes.has(name) || JSON.stringify(originalIndexes.get(name)) !== JSON.stringify(key)) {
+      indexChangedCount += 1
+    }
+  }
+  for (const name of originalIndexes.keys()) {
+    if (!draftIndexes.has(name)) indexChangedCount += 1
+  }
+
+  const recreationNeeded = checkRequiresRecreation(original, draft)
+  const changeCount =
+    (tableRenamed ? 1 : 0) +
+    addedCount +
+    droppedCount +
+    alteredCount +
+    renamedCount +
+    primaryChanged +
+    foreignChangedCount +
+    uniqueChangedCount +
+    indexChangedCount +
+    (recreationNeeded && addedCount === 0 && droppedCount === 0 && alteredCount === 0 && renamedCount === 0 ? 1 : 0)
+
+  if (changeCount === 0) {
+    return { isDirty: false, changeCount: 0, sql: '' }
+  }
+
+  const statements: string[] = []
+  if (tableRenamed) {
+    if (driverType === 'mysql') {
+      // MySQL driver: ALTER TABLE ... RENAME TO is required for renaming tables in MySQL
+      statements.push(
+        `ALTER TABLE ${quoteIdentifier(original.schema || 'dbo', driverType)}.${quoteIdentifier(original.table, driverType)} RENAME TO ${quoteIdentifier(draft.table, driverType)};`,
+      )
+    } else {
+      // SQL Server driver: sp_rename stored procedure is required for renaming tables in SQL Server
+      statements.push(
+        `EXEC sp_rename N'${quoteIdentifier(original.schema || 'dbo', driverType)}.${quoteIdentifier(original.table, driverType)}', N'${draft.table.replace(/'/g, "''")}', 'OBJECT';`,
+      )
+    }
+  }
+  try {
+    let alterSql = ''
+    if (recreationNeeded) {
+      alterSql = generateRecreateTable(original, draft, driverType)
+    } else {
+      alterSql = generateAlterTable(original, draft, driverType)
+    }
+    if (alterSql && alterSql !== '-- No changes') {
+      statements.push(alterSql)
+    }
+  } catch {
+  }
+
+  return { isDirty: true, changeCount, sql: statements.join('\n\n') }
+}
+
+export function isDesignDirty(
+  tab?: {
+    kind?: string
+    design?: TableDesign | null
+    designDraft?: TableDesign | null
+    target?: any
+    loading?: boolean
+    error?: string | null
+  } | null,
+  driverType?: string | null,
+): boolean {
+  if (!tab || tab.kind !== 'design' || tab.loading || tab.error) return false
+  const mode = (tab.target?.mode === 'new' ? 'new' : 'edit') as 'new' | 'edit'
+  const draft = tab.designDraft ?? (mode === 'new' ? tab.design : null)
+  return getDesignDiff(tab.design, draft, mode, driverType).isDirty
+}
+
+export function getDesignChangeCount(
+  tab?: {
+    kind?: string
+    design?: TableDesign | null
+    designDraft?: TableDesign | null
+    target?: any
+    loading?: boolean
+    error?: string | null
+  } | null,
+  driverType?: string | null,
+): number {
+  if (!tab || tab.kind !== 'design' || tab.loading || tab.error) return 0
+  const mode = (tab.target?.mode === 'new' ? 'new' : 'edit') as 'new' | 'edit'
+  const draft = tab.designDraft ?? (mode === 'new' ? tab.design : null)
+  return getDesignDiff(tab.design, draft, mode, driverType).changeCount
+}
+
+export function getDesignSql(
+  tab?: {
+    kind?: string
+    design?: TableDesign | null
+    designDraft?: TableDesign | null
+    target?: any
+    loading?: boolean
+    error?: string | null
+  } | null,
+  driverType?: string | null,
+): string {
+  if (!tab || tab.kind !== 'design' || tab.loading || tab.error) return ''
+  const mode = (tab.target?.mode === 'new' ? 'new' : 'edit') as 'new' | 'edit'
+  const draft = tab.designDraft ?? (mode === 'new' ? tab.design : null)
+  return getDesignDiff(tab.design, draft, mode, driverType).sql
 }

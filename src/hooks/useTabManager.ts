@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { SessionTab, SessionData, createTab, nextQueryTitle, queryTitle } from '@/utils/sessionHelpers'
 import { EditSource } from '@/edits'
 import { SavedQueryItem } from '@/api'
+import { isDesignDirty } from '@/designSql'
 
 export interface UseTabManagerProps {
   activeSession: () => SessionData | null
@@ -57,21 +58,28 @@ export function useTabManager({
   )
 
   const handleCloseTab = useCallback(
-    (tabId: string) => {
+    (tabId: string, force = false) => {
       const current = activeSession()
       if (!current) return
       const index = current.tabs.findIndex((tab) => tab.id === tabId)
       if (index === -1) return
       const tab = current.tabs[index]
-      if (tab && Object.keys(tab.edits || {}).length > 0) {
-        setEditConfirmTarget({ type: 'close-tab', tabId })
-        setEditConfirmOpen(true)
-        return
-      }
-      if (tab && tab.deletingRows && tab.deletingRows.length > 0) {
-        setDeleteConfirmTarget({ type: 'close-tab', tabId })
-        setDeleteConfirmOpen(true)
-        return
+      if (!force) {
+        if (tab && Object.keys(tab.edits || {}).length > 0) {
+          setEditConfirmTarget({ type: 'close-tab', tabId })
+          setEditConfirmOpen(true)
+          return
+        }
+        if (tab && tab.deletingRows && tab.deletingRows.length > 0) {
+          setDeleteConfirmTarget({ type: 'close-tab', tabId })
+          setDeleteConfirmOpen(true)
+          return
+        }
+        if (tab && tab.kind === 'design' && isDesignDirty(tab, current.connection?.driverType)) {
+          setEditConfirmTarget({ type: 'close-tab', tabId })
+          setEditConfirmOpen(true)
+          return
+        }
       }
 
       const remaining = current.tabs.filter((tab) => tab.id !== tabId)

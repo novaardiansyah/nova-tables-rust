@@ -69,21 +69,39 @@ export function useKeyboardShortcuts({
         return
       }
 
-      if (isFormField || hasDialog) return
+      if (hasDialog) return
 
-      if (event.key.toLowerCase() === 's' && !event.shiftKey) {
+      const key = event.key.toLowerCase()
+
+      if (key === 's' && !event.shiftKey) {
         event.preventDefault()
         handleSaveQuery()
         return
       }
 
-      if (event.key.toLowerCase() === 'n' && !event.shiftKey) {
+      if (screen === 'workspace') {
+        if (key === 'w') {
+          event.preventDefault()
+          handleCloseActiveTab()
+          return
+        }
+
+        if (key === 'r') {
+          event.preventDefault()
+          handleReRun()
+          return
+        }
+      }
+
+      if (isFormField) return
+
+      if (key === 'n' && !event.shiftKey) {
         event.preventDefault()
         setDialog({ mode: 'create' })
         return
       }
 
-      if (event.key.toLowerCase() === 'o' && !event.shiftKey) {
+      if (key === 'o' && !event.shiftKey) {
         event.preventDefault()
         openConnectionScreen()
         return
@@ -97,23 +115,9 @@ export function useKeyboardShortcuts({
 
       if (screen !== 'workspace') return
 
-      const key = event.key.toLowerCase()
-
-      if (key === 'w') {
-        event.preventDefault()
-        handleCloseActiveTab()
-        return
-      }
-
       if (key === 't') {
         event.preventDefault()
         handleNewTab()
-        return
-      }
-
-      if (key === 'r') {
-        event.preventDefault()
-        handleReRun()
         return
       }
 
