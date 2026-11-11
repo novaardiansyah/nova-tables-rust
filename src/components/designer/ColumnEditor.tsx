@@ -1,6 +1,100 @@
+import React, { useEffect, useState } from 'react'
 import Icon from '@/components/common/Icon'
 import Select from '@/components/common/Select'
 import { DesignerColumn, TYPE_BY_NAME, TYPE_OPTIONS } from '@/components/designer/designerConstants'
+
+interface LengthInputProps {
+  value?: number | null
+  onChange: (value: number) => void
+  allowMax?: boolean
+}
+
+function LengthInput({ value, onChange, allowMax = false }: LengthInputProps) {
+  const isMax = value === -1
+  const [text, setText] = useState<string>(isMax ? 'MAX' : (value === null || value === undefined ? '' : String(value)))
+
+  useEffect(() => {
+    setText(value === -1 ? 'MAX' : (value === null || value === undefined ? '' : String(value)))
+  }, [value])
+
+  const commitValue = (inputStr: string) => {
+    const trimmed = inputStr.trim().toUpperCase()
+    if (allowMax && (trimmed === 'MAX' || trimmed === '-1' || trimmed === 'M' || trimmed === 'MA')) {
+      onChange(-1)
+      setText('MAX')
+      return
+    }
+    const num = parseInt(trimmed, 10)
+    if (!Number.isNaN(num) && num > 0) {
+      onChange(num)
+      setText(String(num))
+    } else {
+      const fallback = value === -1 ? 'MAX' : (value ? String(value) : '50')
+      setText(fallback)
+      if (value !== -1 && !value) {
+        onChange(50)
+      }
+    }
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value
+    setText(raw)
+    const trimmed = raw.trim().toUpperCase()
+    if (allowMax && (trimmed === 'MAX' || trimmed === '-1')) {
+      onChange(-1)
+    } else {
+      const num = parseInt(trimmed, 10)
+      if (!Number.isNaN(num) && num > 0 && String(num) === trimmed) {
+        onChange(num)
+      }
+    }
+  }
+
+  const handleToggleMax = () => {
+    if (isMax) {
+      onChange(50)
+      setText('50')
+    } else {
+      onChange(-1)
+      setText('MAX')
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        className="field w-16"
+        value={text}
+        onChange={handleChange}
+        onBlur={() => commitValue(text)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            commitValue(text)
+          }
+        }}
+        placeholder="50"
+        spellCheck={false}
+      />
+      {allowMax ? (
+        <button
+          type="button"
+          onClick={handleToggleMax}
+          className={`h-9 shrink-0 rounded-md px-2 text-[length:var(--app-text-11)] font-semibold border transition-colors ${
+            isMax
+              ? 'border-accent bg-accent/15 text-accent'
+              : 'border-line-strong bg-base text-text-muted hover:text-text hover:border-accent/70'
+          }`}
+          title={isMax ? 'Switch to fixed length' : 'Set length to MAX'}
+        >
+          MAX
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+const MAX_LENGTH_TYPES = new Set(['varchar', 'nvarchar', 'varbinary'])
 
 export interface DragOverState {
   index: number
@@ -13,6 +107,7 @@ export interface ColumnEditorProps {
   updateColumn: (index: number, patch: Partial<DesignerColumn>) => void
   togglePrimaryColumn: (columnName: string) => void
   insertColumnAt: (index: number) => void
+  duplicateColumn: (index: number) => void
   removeColumn: (index: number) => void
   addColumn: () => void
   handleDropColumn: (targetIndex: number, position: 'before' | 'after') => void
@@ -28,6 +123,7 @@ export default function ColumnEditor({
   updateColumn,
   togglePrimaryColumn,
   insertColumnAt,
+  duplicateColumn,
   removeColumn,
   addColumn,
   handleDropColumn,
@@ -163,16 +259,10 @@ export default function ColumnEditor({
                         placeholder="7"
                       />
                     ) : type?.length ? (
-                      <input
-                        className="field w-20"
-                        value={column.maxLength === -1 ? 'MAX' : column.maxLength ?? ''}
-                        onChange={(event) => {
-                          const raw = event.target.value.trim().toUpperCase()
-                          if (raw === 'MAX') updateColumn(index, { maxLength: -1 })
-                          else updateColumn(index, { maxLength: Number(event.target.value) || 0 })
-                        }}
-                        placeholder="50"
-                        spellCheck={false}
+                      <LengthInput
+                        value={column.maxLength}
+                        allowMax={MAX_LENGTH_TYPES.has(column.typeName)}
+                        onChange={(value) => updateColumn(index, { maxLength: value })}
                       />
                     ) : (
                       <span className="text-text-faint">—</span>
@@ -219,6 +309,14 @@ export default function ColumnEditor({
                         title="Insert column above"
                       >
                         <Icon name="plus" size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn h-6 w-6 hover:text-accent"
+                        onClick={() => duplicateColumn(index)}
+                        title="Duplicate column"
+                      >
+                        <Icon name="replicate" size={12} />
                       </button>
                       <button
                         type="button"

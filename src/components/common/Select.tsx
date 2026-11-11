@@ -266,7 +266,7 @@ export default function Select({
           if (!open) updateCoords()
           setOpen((prev) => !prev)
         }}
-        className={`flex h-8 items-center gap-2 rounded-md border border-line-strong bg-elevated px-2.5 text-[length:var(--app-text-12)] text-text transition-colors hover:border-accent/50 disabled:pointer-events-none disabled:opacity-50 ${buttonWidthClass}`}
+        className={`flex h-9 items-center gap-2 rounded-md border border-line-strong bg-base px-2.5 text-[length:var(--app-text-13)] text-text transition-colors hover:border-accent/70 disabled:pointer-events-none disabled:opacity-50 ${buttonWidthClass}`}
       >
         <Icon name={icon} size={13} className="shrink-0 text-text-muted" />
         <span className="min-w-0 flex-1 truncate text-left">{current?.label ?? value ?? placeholder}</span>

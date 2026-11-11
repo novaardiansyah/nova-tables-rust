@@ -63,15 +63,23 @@ export interface TableDesign {
   [key: string]: unknown
 }
 
-function typeSql(typeName: string, column: DesignColumn): string {
+function typeSql(typeName: string, column: DesignColumn, driverType?: string | null): string {
   const t = String(typeName).toLowerCase()
   if (t === 'decimal' || t === 'numeric') {
     return `${typeName}(${column.precision ?? 10}, ${column.scale ?? 0})`
   }
   if (['char', 'varchar', 'binary', 'varbinary'].includes(t)) {
+    // Targeted for MySQL vs SQL Server: MySQL does not support VARCHAR(MAX) or VARBINARY(MAX); map to LONGTEXT / LONGBLOB.
+    if (driverType === 'mysql' && column.maxLength === -1) {
+      return ['binary', 'varbinary'].includes(t) ? 'LONGBLOB' : 'LONGTEXT'
+    }
     return `${typeName}(${column.maxLength === -1 ? 'MAX' : column.maxLength ?? 1})`
   }
   if (['nchar', 'nvarchar'].includes(t)) {
+    // Targeted for MySQL vs SQL Server: MySQL does not support NVARCHAR(MAX); map to LONGTEXT.
+    if (driverType === 'mysql' && column.maxLength === -1) {
+      return 'LONGTEXT'
+    }
     return `${typeName}(${column.maxLength === -1 ? 'MAX' : (column.maxLength ?? 2) / 2})`
   }
   if (['datetime2', 'datetimeoffset', 'time'].includes(t)) {
@@ -86,13 +94,13 @@ function collationSql(column: DesignColumn): string {
 }
 
 function columnBody(column: DesignColumn, driverType: string = 'mssql'): string {
-  return `${quoteIdentifier(column.name, driverType)} ${typeSql(column.typeName, column)}${collationSql(column)}${
+  return `${quoteIdentifier(column.name, driverType)} ${typeSql(column.typeName, column, driverType)}${collationSql(column)}${
     column.isNullable ? '' : ' NOT NULL'
   }`
 }
 
 function columnAdd(column: DesignColumn, driverType: string = 'mssql'): string {
-  const parts: string[] = [quoteIdentifier(column.name, driverType), typeSql(column.typeName, column)]
+  const parts: string[] = [quoteIdentifier(column.name, driverType), typeSql(column.typeName, column, driverType)]
   const collation = collationSql(column)
   if (collation) parts.push(collation.trim())
   if (!column.isNullable) parts.push('NOT NULL')

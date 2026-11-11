@@ -211,6 +211,28 @@ export default function TableDesigner({
       return { ...prev, columns: next }
     })
 
+  const duplicateColumn = (index: number) =>
+    setDraft((prev) => {
+      const source = prev.columns[index]
+      if (!source) return prev
+      const names = prev.columns.map((c) => c.name)
+      const baseName = source.name ? `(copy) ${source.name}` : `(copy) column_${names.length + 1}`
+      let nextName = baseName
+      let counter = 1
+      while (names.includes(nextName)) {
+        nextName = `${baseName} ${counter}`
+        counter += 1
+      }
+      const next = [...prev.columns]
+      next.splice(index + 1, 0, {
+        ...source,
+        name: nextName,
+        originalName: undefined,
+        isIdentity: false,
+      })
+      return { ...prev, columns: next }
+    })
+
   const handleDropColumn = (targetIndex: number, position: 'before' | 'after') => {
     if (dragIndex === null || dragIndex === targetIndex) return
     setDraft((prev) => {
@@ -460,19 +482,23 @@ export default function TableDesigner({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line bg-panel px-3.5">
-        <Icon name="table" size={14} className="shrink-0 text-text-muted" />
-        <span className="text-[length:var(--app-text-12)] text-text-muted">{draft.schema}</span>
-        <button
-          type="button"
-          onClick={() => {}}
-          title={mode === 'new' ? 'New table' : 'Click to load the name into the picker below'}
-          className="text-[length:var(--app-text-13)] font-medium text-text"
-        >
-          {draft.table || '(untitled)'}
-        </button>
-        <span className="rounded border border-line-strong bg-tint/[0.03] px-2 py-0.5 text-[length:var(--app-text-10)] font-semibold uppercase tracking-wider text-text-muted">
-          {mode === 'new' ? 'new' : 'design'}
-        </span>
+        {mode === 'new' ? (
+          <>
+            <Icon name="table" size={14} className="shrink-0 text-text-muted" />
+            <span className="text-[length:var(--app-text-12)] text-text-muted">{draft.schema}</span>
+            <button
+              type="button"
+              onClick={() => {}}
+              title={mode === 'new' ? 'New table' : 'Click to load the name into the picker below'}
+              className="text-[length:var(--app-text-13)] font-medium text-text"
+            >
+              {draft.table || '(untitled)'}
+            </button>
+            <span className="rounded border border-line-strong bg-tint/[0.03] px-2 py-0.5 text-[length:var(--app-text-10)] font-semibold uppercase tracking-wider text-text-muted">
+              new
+            </span>
+          </>
+        ) : null}
 
         <div className="ml-auto flex items-center gap-2">
           {mode === 'edit' ? (
@@ -521,9 +547,22 @@ export default function TableDesigner({
       ) : null}
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 pb-40">
-        <div className="grid grid-cols-2 gap-3">
-          <Editor label="Table name" value={draft.table} onChange={(value) => update({ table: value })} placeholder="my_table" />
-          <Editor label="Schema" value={draft.schema} onChange={(value) => update({ schema: value })} disabled={mode === 'edit'} placeholder="dbo" />
+        <div className="flex items-start gap-3 w-[50%]">
+          <Editor
+            className="min-w-0 flex-1"
+            label="Table name"
+            value={draft.table}
+            onChange={(value) => update({ table: value })}
+            placeholder="my_table"
+          />
+          <Editor
+            className="w-44 shrink-0"
+            label="Schema"
+            value={draft.schema}
+            onChange={(value) => update({ schema: value })}
+            disabled={mode === 'edit'}
+            placeholder="dbo"
+          />
         </div>
 
         <ColumnEditor
@@ -532,6 +571,7 @@ export default function TableDesigner({
           updateColumn={updateColumn}
           togglePrimaryColumn={togglePrimaryColumn}
           insertColumnAt={insertColumnAt}
+          duplicateColumn={duplicateColumn}
           removeColumn={removeColumn}
           addColumn={addColumn}
           handleDropColumn={handleDropColumn}

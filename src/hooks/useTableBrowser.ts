@@ -380,6 +380,7 @@ export function useTableBrowser({
         loading: false,
         error: null,
         title: `Design ${table}`,
+        state: { status: 'success', result: null, error: null },
         target: { mode: 'edit', schema, table },
         design: {
           schema: structure?.schema || schema,
@@ -423,7 +424,11 @@ export function useTableBrowser({
       try {
         await reloadDesign(tabId, schema, tableName)
       } catch (error: any) {
-        updateTab(current.connectionId, tabId, { loading: false, error: error.message })
+        updateTab(current.connectionId, tabId, {
+          loading: false,
+          error: error.message,
+          state: { status: 'error', result: null, error: error.message },
+        })
       }
     },
     [activeSession, openDesignTab, reloadDesign, showBanner, updateTab],
@@ -451,6 +456,7 @@ export function useTableBrowser({
 
       updateTab(current.connectionId, tabId, {
         loading: false,
+        state: { status: 'success', result: null, error: null },
         design: {
           schema,
           table: '',
