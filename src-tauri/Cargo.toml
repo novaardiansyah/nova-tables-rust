@@ -1,6 +1,6 @@
 [package]
 name = "nova-tables"
-version = "2.2.7"
+version = "2.2.8"
 description = "A modern desktop SQL client for Microsoft SQL Server"
 edition = "2021"
 
