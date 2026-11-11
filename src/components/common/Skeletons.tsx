@@ -185,3 +185,50 @@ export function TableDesignerSkeleton() {
     </div>
   )
 }
+
+export function ResultGridSkeleton() {
+  const columns = [
+    { width: 'w-32', alignRight: false },
+    { width: 'w-28', alignRight: false },
+    { width: 'w-24', alignRight: true },
+    { width: 'w-36', alignRight: false },
+    { width: 'w-20', alignRight: true },
+    { width: 'w-40', alignRight: false },
+  ]
+
+  return (
+    <div className="h-full min-h-0 flex flex-col overflow-hidden select-none bg-surface">
+      {/* Header row */}
+      <div className="flex h-9 shrink-0 items-center gap-1 border-b border-line bg-panel px-2">
+        <div className="flex h-full items-center px-2 py-1.5">
+          <div className="skeleton-shimmer h-3.5 w-5 shrink-0 rounded" />
+        </div>
+        {columns.map((col, idx) => (
+          <div key={idx} className={`flex h-full shrink-0 items-center px-3 py-1.5 ${col.width}`}>
+            <div className="skeleton-shimmer h-3.5 w-full rounded" />
+          </div>
+        ))}
+      </div>
+
+      {/* Body rows */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
+        <table className="min-w-full border-separate border-spacing-0 text-[12px]">
+          <tbody>
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((rowIdx) => (
+              <tr key={rowIdx} className="group hover:bg-row-hover">
+                <td className="sticky left-0 z-10 border-b border-r border-line px-2 py-[5px] text-right font-mono text-[length:calc(var(--grid-font-size)-2px)] text-text-faint">
+                  <div className="skeleton-shimmer h-4 w-5 shrink-0 rounded" />
+                </td>
+                {columns.map((col, colIdx) => (
+                  <td key={colIdx} className={`border-b border-line px-2 py-[5px] font-mono text-[length:calc(var(--grid-font-size)-1px)] ${col.alignRight ? 'text-right' : 'text-left'}`}>
+                    <div className={`skeleton-shimmer h-3.5 ${col.width} rounded`} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}

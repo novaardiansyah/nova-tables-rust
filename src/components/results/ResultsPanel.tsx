@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/api'
 import Icon, { Spinner } from '@/components/common/Icon'
+import { ResultGridSkeleton } from '@/components/common/Skeletons'
 import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu'
 import FilterDialog from '@/components/results/FilterDialog'
 import ResultGrid, { GridSelection, ResultColumn, ResultRelation } from '@/components/results/ResultGrid'
@@ -492,7 +493,7 @@ export default function ResultsPanel({
         {status === 'running' ? (
           <div className="flex items-center justify-between w-full px-2" >
             <span className="flex items-center gap-1.5 text-[length:var(--app-text-11)] text-text-soft">
-              <Spinner size={12} />
+              <div className="skeleton-shimmer h-3 w-3 shrink-0 rounded-full" />
               Running query…
             </span>
             {onCancel ? (
@@ -706,13 +707,8 @@ export default function ResultsPanel({
         ) : null}
         {view !== 'plan' && status === 'idle' ? <IdleState /> : null}
         {view !== 'plan' && status === 'running' ? (
-          <div className="flex h-full items-center justify-center">
-            <div className="flex items-center gap-2 text-[length:var(--app-text-12)] text-text-muted">
-              <Spinner size={14} />
-              {/* Targeted for SQL Server & MySQL: show the active database driver during query execution. */}
-              {`Executing against ${driverType === 'mysql' ? 'MySQL' : 'SQL Server'}…`}
-            </div>
-          </div>
+          /* Targeted for SQL Server & MySQL: show the active database driver during query execution. */
+          <ResultGridSkeleton />
         ) : null}
         {view !== 'plan' && status === 'error' ? <ErrorState error={error} /> : null}
         {view !== 'plan' && status === 'success' && result ? (
