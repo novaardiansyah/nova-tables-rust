@@ -397,31 +397,31 @@
 
 @keyframes skeleton-shimmer {
   0% {
-    background-position: 200% 0;
+    background-position: 100% 50%;
   }
   100% {
-    background-position: -200% 0;
+    background-position: -100% 50%;
   }
 }
 
 .skeleton-shimmer {
   background: linear-gradient(
     90deg,
-    rgb(var(--color-tint) / 0.08) 20%,
-    rgb(var(--color-tint) / 0.20) 50%,
-    rgb(var(--color-tint) / 0.08) 80%
+    rgb(var(--color-tint) / 0.045) 0%,
+    rgb(var(--color-tint) / 0.085) 50%,
+    rgb(var(--color-tint) / 0.045) 100%
   );
   background-size: 200% 100%;
-  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+  animation: skeleton-shimmer 2.2s ease-in-out infinite;
 }
 
 .skeleton-shimmer-subtle {
   background: linear-gradient(
     90deg,
-    rgb(var(--color-tint) / 0.05) 20%,
-    rgb(var(--color-tint) / 0.14) 50%,
-    rgb(var(--color-tint) / 0.05) 80%
+    rgb(var(--color-tint) / 0.025) 0%,
+    rgb(var(--color-tint) / 0.055) 50%,
+    rgb(var(--color-tint) / 0.025) 100%
   );
   background-size: 200% 100%;
-  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+  animation: skeleton-shimmer 2.2s ease-in-out infinite;
 }

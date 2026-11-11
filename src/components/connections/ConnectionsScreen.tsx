@@ -133,6 +133,12 @@ export default function ConnectionsScreen({
     if (lastConnectedId && connections.some((c) => c.id === lastConnectedId)) {
       return lastConnectedId
     }
+    const withTimestamp = connections
+      .filter((c) => Boolean(c.lastConnectedAt))
+      .sort((a, b) => new Date(b.lastConnectedAt!).getTime() - new Date(a.lastConnectedAt!).getTime())
+    if (withTimestamp.length > 0) {
+      return withTimestamp[0].id
+    }
     return null
   }, [connections, lastConnectedId])
 

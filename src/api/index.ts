@@ -399,8 +399,15 @@ export const api = {
   },
 
   listConnections: async (): Promise<ConnectionModel[]> => {
-    const res = await apiRequest<{ ok: boolean; connections?: ConnectionModel[] }>('/api/member/connections')
+    const res = await apiRequest<{ ok: boolean; connections?: ConnectionModel[]; lastConnectedId?: string | null }>('/api/member/connections')
     if (!res?.ok || !res?.connections) return []
+
+    if (res.lastConnectedId) {
+      try {
+        localStorage.setItem('nova_tables_last_connected_id', res.lastConnectedId)
+      } catch {
+      }
+    }
 
     const localList: ConnectionModel[] = res.connections.map((conn) => {
       const explicitDb =
@@ -447,16 +454,35 @@ export const api = {
       }).catch(() => null)
       const value = res?.value
       if (typeof value === 'string' && value) return value
+      if (value && typeof value === 'object' && 'value' in (value as any)) {
+        const inner = (value as any).value
+        if (typeof inner === 'string' && inner) return inner
+      }
+    } catch {
+    }
+    try {
+      const cached = localStorage.getItem('nova_tables_last_connected_id')
+      if (cached) return cached
     } catch {
     }
     return null
   },
 
   setLastConnectedId: async (id: string | null): Promise<void> => {
-    await apiRequest('/api/member/meta/last_connected_id', {
-      method: 'POST',
-      body: JSON.stringify(id),
-    }).catch(() => null)
+    if (!id) return
+    try {
+      localStorage.setItem('nova_tables_last_connected_id', id)
+    } catch {
+    }
+    await Promise.allSettled([
+      apiRequest('/api/member/meta/last_connected_id', {
+        method: 'POST',
+        body: JSON.stringify({ value: id }),
+      }),
+      apiRequest(`/api/member/connections/${id}/touch`, {
+        method: 'POST',
+      }),
+    ])
   },
 
   getPinnedTables: async (connectionId: string): Promise<string[]> => {

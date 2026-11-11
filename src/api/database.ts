@@ -104,8 +104,8 @@ export function createDatabaseOps(ctx: DatabaseOpsContext) {
       }
 
       const res = await callCommand<any>('connect', { input: target })
-      if (res?.database && target?.id) {
-        ctx.updateLastDatabase(target.id, res.database).catch(() => {})
+      if (target?.id) {
+        ctx.updateLastDatabase(target.id, res?.database || target.database || '').catch(() => {})
       }
 
       try {
