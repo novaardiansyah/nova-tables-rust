@@ -1,5 +1,6 @@
 import React, { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Icon, { Spinner } from '@/components/common/Icon'
+import { TableDesignerSkeleton } from '@/components/common/Skeletons'
 import ColumnEditor, { DragOverState } from '@/components/designer/ColumnEditor'
 import IndexConstraintEditor from '@/components/designer/IndexConstraintEditor'
 import { Editor } from '@/components/designer/DesignerControls'
@@ -184,12 +185,7 @@ export default function TableDesigner({
   }
 
   if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center gap-2 text-[length:var(--app-text-12)] text-text-muted">
-        <Spinner size={14} />
-        Reading table definition…
-      </div>
-    )
+    return <TableDesignerSkeleton />
   }
 
   if (error) {

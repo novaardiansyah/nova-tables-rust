@@ -1,13 +1,26 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/api'
 import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu'
-import Icon, { Spinner } from '@/components/common/Icon'
+import Icon from '@/components/common/Icon'
+import { ErdSkeleton } from '@/components/common/Skeletons'
 import ErdTableNode from './ErdTableNode'
 import ErdRelationLine from './ErdRelationLine'
 import { exportDiagramToPng } from './erdExport'
 import ErdTableManager from './ErdTableManager'
 import { ErdTable, ErdRelation, computeInitialPositions, erdRelationKey } from './erdTypes'
 import type { MouseEvent as ReactMouseEvent } from 'react'
+
+export interface ErdViewerProps {
+  connectionId: string
+  database: string
+  initialTables?: string[]
+  depth?: number
+  includeRelated?: boolean
+  sourceSql?: string
+  driverType?: string | null
+  onOpenTable?: (schema: string, name: string) => void
+  onOpenStructure?: (table: { schema: string; name: string }) => void
+}
 
 export interface ErdViewerProps {
   connectionId: string
@@ -578,12 +591,7 @@ export default function ErdViewer({
         onWheel={handleWheel}
         className="relative flex-1 cursor-grab overflow-hidden active:cursor-grabbing"
       >
-        {loading ? (
-          <div className="flex h-full items-center justify-center gap-2 text-[length:var(--app-text-12)] text-text-muted">
-            <Spinner size={16} className="text-accent" />
-            <span>Generating Entity Relationship Diagram…</span>
-          </div>
-        ) : error ? (
+        {loading ? <ErdSkeleton /> : error ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
             <p className="text-[length:var(--app-text-12)] text-danger">{error}</p>
             <button
