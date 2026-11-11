@@ -554,14 +554,13 @@ export default function ResultsPanel({
           </button>
         ) : null}
 
-        {status === 'success' && activeResultSet?.rows && activeResultSet.rows.length > 0 && resultSets.length === 1 && editSource?.tables?.length === 1 && onOpenStructure ? (
+        {status === 'success' && resultSets.length === 1 && editSource?.tables?.length === 1 && onOpenStructure && activeResultSet ? (
           <button
             type="button"
             onClick={() => {
               const source = editSource.tables[0]
               onOpenStructure({ schema: source.schema, name: source.table })
             }}
-            title="Open table structure"
             className="flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[length:var(--app-text-11)] text-text-muted transition-colors hover:bg-tint/[0.03] hover:text-text"
           >
             <Icon name="table" size={12} />
@@ -588,7 +587,6 @@ export default function ResultsPanel({
           <button
             type="button"
             onClick={onGenerateErd}
-            title="Generate Entity Relationship Diagram for query tables"
             className="flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[length:var(--app-text-11)] text-text-muted transition-colors hover:bg-tint/[0.03] hover:text-text"
           >
             <Icon name="er-diagram" size={12} />
@@ -603,7 +601,6 @@ export default function ResultsPanel({
               const rect = event.currentTarget.getBoundingClientRect()
               setExportMenu({ x: rect.left, y: rect.bottom + 4 })
             }}
-            title="Export query results to file"
             className="flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[length:var(--app-text-11)] text-text-muted transition-colors hover:bg-tint/[0.03] hover:text-text"
           >
             <Icon name="download" size={11} />
