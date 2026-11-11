@@ -69,13 +69,15 @@ export function useQueryHistory({ activeSession, showBanner, openTab }: UseQuery
   const handleClearHistory = useCallback(async () => {
     const current = activeSession()
     if (!current?.activeDatabase) return
+    const itemsToClear = history.items.slice(0, 30)
+    if (itemsToClear.length === 0) return
     try {
-      await api.clearQueryHistory(current.connectionId, current.activeDatabase)
-      setHistory((prev) => ({ ...prev, items: [] }))
+      await api.clearQueryHistory(current.connectionId, current.activeDatabase, itemsToClear.map((item) => item.id))
+      await loadHistory(current.connectionId, current.activeDatabase)
     } catch (error: any) {
       showBanner('error', error.message)
     }
-  }, [activeSession, showBanner])
+  }, [activeSession, history.items, loadHistory, showBanner])
 
   const handleCloseHistory = useCallback(() => {
     setHistory((prev) => ({ ...prev, open: false }))

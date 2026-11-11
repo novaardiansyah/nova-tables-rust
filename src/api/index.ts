@@ -766,16 +766,16 @@ export const api = {
     database: string,
     limit?: number
   ): Promise<QueryHistoryItem[]> => {
-    const res = await apiRequest<{ ok: boolean; history?: QueryHistoryItem[] }>(`/api/member/query-history?limit=${limit || 500}`, {
+    const res = await apiRequest<{ ok: boolean; history?: QueryHistoryItem[] }>(`/api/member/query-history?limit=${limit || 30}&connectionId=${encodeURIComponent(connectionId)}&database=${encodeURIComponent(database)}`, {
       method: 'GET',
     }).catch(() => null)
     return res?.history || []
   },
 
-  clearQueryHistory: async (connectionId: string, database: string): Promise<unknown> => {
+  clearQueryHistory: async (connectionId: string, database: string, ids?: string[]): Promise<unknown> => {
     await apiRequest('/api/member/query-history/clear', {
       method: 'DELETE',
-      body: JSON.stringify({ connectionId, database }),
+      body: JSON.stringify({ connectionId, database, ids, limit: 30 }),
     }).catch(() => null)
     return { ok: true }
   },

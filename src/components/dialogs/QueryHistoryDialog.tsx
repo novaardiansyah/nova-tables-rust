@@ -88,9 +88,6 @@ export default function QueryHistoryDialog({
               <span className="truncate font-medium text-text-soft">{connectionName}</span>
               <span className="text-text-faint">/</span>
               <span className="truncate">{database}</span>
-              <span className="ml-1 shrink-0 rounded border border-line bg-tint/[0.04] px-1.5 py-0.5 text-[length:var(--app-text-9)] uppercase tracking-wide text-text-faint">
-                scoped
-              </span>
             </p>
           </div>
           <button type="button" className="icon-btn h-6 w-6" onClick={onClose} title="Close">
