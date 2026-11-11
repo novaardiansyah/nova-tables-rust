@@ -66,7 +66,6 @@ export interface SidebarProps {
   onTruncateTable: (table: SidebarTable) => void
   onDropTable: (table: SidebarTable) => void
   onTogglePin: (table: SidebarTable) => void
-  onOpenConnections: () => void
   selectedTable?: string | null
   onSelectTable: (key: string) => void
   selectedModule?: string | null
@@ -114,7 +113,6 @@ export default function Sidebar({
   onTruncateTable,
   onDropTable,
   onTogglePin,
-  onOpenConnections,
   selectedTable,
   onSelectTable,
   selectedModule,
@@ -225,7 +223,6 @@ export default function Sidebar({
           className={`flex min-w-0 flex-1 items-center truncate text-left ${
             selectedTable === key ? 'text-accent' : ''
           }`}
-          title={`${table.schema}.${table.name}`}
         >
           {showSchema ? <span className="text-text-faint">{table.schema}.</span> : null}
           <span className="truncate">{table.name}</span>
@@ -265,7 +262,6 @@ export default function Sidebar({
           className={`flex min-w-0 flex-1 items-center truncate text-left ${
             selectedModule === key ? 'text-accent' : ''
           }`}
-          title={`${module.schema}.${module.name}`}
         >
           {showSchema ? <span className="text-text-faint">{module.schema}.</span> : null}
           <span className="truncate">{module.name}</span>
@@ -311,7 +307,6 @@ export default function Sidebar({
             })
           }}
           className="tree-row"
-          title={isOpen ? 'Collapse' : 'Expand'}
         >
           <Icon
             name="chevron-right"
@@ -467,27 +462,29 @@ export default function Sidebar({
         {isActive ? (
           expanded ? (
             <div className="mt-0.5 space-y-px pl-3">
-              <div className="mb-1 flex items-center gap-1.5 rounded-md border border-line bg-base px-2 py-[5px] focus-within:border-accent/70 focus-within:ring-2 focus-within:ring-accent/20">
-                <Icon name="search" size={12} className="shrink-0 text-text-faint" />
-                <input
-                  type="text"
-                  value={filter}
-                  onChange={(event) => setFilter(event.target.value)}
-                  placeholder="Search here.."
-                  aria-label="Search here.."
-                  className="w-full min-w-0 bg-transparent text-[length:var(--app-text-12)] text-text placeholder:text-text-muted"
-                />
-                {filter ? (
-                  <button
-                    type="button"
-                    className="icon-btn h-4 w-4 text-text-faint hover:text-text"
-                    title="Clear Filter"
-                    aria-label="Clear Filter"
-                    onClick={() => setFilter('')}
-                  >
-                    <Icon name="x" size={11} />
-                  </button>
-                ) : null}
+              <div className="sticky top-0 z-10 -ml-3 -mr-2 bg-panel pl-3 pr-2 pt-1 pb-1">
+                <div className="flex items-center gap-1.5 rounded-md border border-line bg-base px-2 py-[5px] focus-within:border-accent/70 focus-within:ring-2 focus-within:ring-accent/20">
+                  <Icon name="search" size={12} className="shrink-0 text-text-faint" />
+                  <input
+                    type="text"
+                    value={filter}
+                    onChange={(event) => setFilter(event.target.value)}
+                    placeholder="Search here.."
+                    aria-label="Search here.."
+                    className="w-full min-w-0 bg-transparent text-[length:var(--app-text-12)] text-text placeholder:text-text-muted"
+                  />
+                  {filter ? (
+                    <button
+                      type="button"
+                      className="icon-btn h-4 w-4 text-text-faint hover:text-text"
+                      title="Clear Filter"
+                      aria-label="Clear Filter"
+                      onClick={() => setFilter('')}
+                    >
+                      <Icon name="x" size={11} />
+                    </button>
+                  ) : null}
+                </div>
               </div>
               {renderGroup(item, 'tables')}
               {renderGroup(item, 'modules')}
@@ -515,13 +512,6 @@ export default function Sidebar({
           onClick={toggleAction.onClick}
         >
           <Icon name={toggleAction.icon} size={13} />
-        </button>
-      </div>
-
-      <div className="space-y-1.5 p-3">
-        <button type="button" className="btn-soft w-full" onClick={onOpenConnections}>
-          <Icon name="server" size={14} />
-          Add Connection
         </button>
       </div>
 

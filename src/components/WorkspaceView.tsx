@@ -125,7 +125,6 @@ export default function WorkspaceView({
   const {
     activateSession,
     closeSession,
-    openConnectionScreen,
     handleSelectDatabase,
     handleRefreshDatabases,
     handleOpenCreateDatabase,
@@ -239,7 +238,6 @@ export default function WorkspaceView({
         onTruncateTable={handleTruncateTable}
         onDropTable={handleDropTable}
         onTogglePin={handleTogglePin}
-        onOpenConnections={openConnectionScreen}
         selectedTable={session.selectedTable}
         onSelectTable={handleSelectTable}
         selectedModule={session.selectedModule}

@@ -357,8 +357,8 @@ export default function App() {
           onSelect: () => sessionManager.setDialog({ mode: 'new' }),
         },
         {
-          id: 'connections',
-          label: 'Connections',
+          id: 'add-connection',
+          label: 'Add Connection',
           shortcut: 'Ctrl+O',
           onSelect: sessionManager.openConnectionScreen,
         },
