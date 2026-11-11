@@ -53,6 +53,7 @@ export default function ErdViewer({
   const [cardDimensions, setCardDimensions] = useState<Record<string, { width: number; height: number }>>({})
   const [relationOffsets, setRelationOffsets] = useState<Record<string, { x: number; y: number }>>({})
   const [viewOnly, setViewOnly] = useState(false)
+  const firstLoadRef = useRef(true)
 
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const isDraggingCanvasRef = useRef(false)
@@ -78,10 +79,21 @@ export default function ErdViewer({
         currentDepth,
       )
       if (res && res.ok) {
-        setTables(res.tables || [])
-        setRelations(res.relations || [])
-        const initialPos = computeInitialPositions(res.tables || [], res.relations || [])
+        const nextTables = res.tables || []
+        const nextRelations = res.relations || []
+        setTables(nextTables)
+        setRelations(nextRelations)
+        const initialPos = computeInitialPositions(nextTables, nextRelations)
         setPositions(initialPos)
+        if (firstLoadRef.current) {
+          firstLoadRef.current = false
+          if (nextTables.length > 5) {
+            const hiddenKeys = new Set(
+              nextTables.slice(5).map((table) => `${table.schema}.${table.name}`),
+            )
+            setHiddenTableKeys(hiddenKeys)
+          }
+        }
       } else {
         setError('Failed to load ERD metadata.')
       }

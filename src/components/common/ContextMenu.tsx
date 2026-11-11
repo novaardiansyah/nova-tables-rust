@@ -28,8 +28,8 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
     if (!menu) return
     const { width, height } = menu.getBoundingClientRect()
     setPosition({
-      left: Math.min(x, window.innerWidth - width - EDGE),
-      top: Math.min(y, window.innerHeight - height - EDGE),
+      left: Math.min(x, document.documentElement.clientWidth - width - EDGE),
+      top: Math.min(y, document.documentElement.clientHeight - height - EDGE),
     })
   }, [x, y])
 
@@ -74,12 +74,29 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
 function MenuItem({ item, onClose }: { item: ContextMenuItemData; onClose: () => void }) {
   const [open, setOpen] = useState(false)
   const [flip, setFlip] = useState(false)
+  const [subStyle, setSubStyle] = useState<React.CSSProperties>({})
+  const itemRef = useRef<HTMLDivElement>(null)
   const subRef = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
-    if (!open || !subRef.current) return
-    const { right } = subRef.current.getBoundingClientRect()
-    setFlip(right > window.innerWidth - EDGE)
+    if (!open || !itemRef.current) return
+    const itemRect = itemRef.current.getBoundingClientRect()
+    const clientW = document.documentElement.clientWidth
+    const clientH = document.documentElement.clientHeight
+    const subW = subRef.current?.offsetWidth ?? 176
+    const subH = subRef.current?.offsetHeight ?? 100
+
+    const spaceOnRight = clientW - itemRect.right
+    const spaceOnLeft = itemRect.left
+    const shouldFlip = spaceOnRight < subW + EDGE || (spaceOnLeft > spaceOnRight && spaceOnRight < 200)
+    setFlip(shouldFlip)
+
+    const overflowBottom = itemRect.top + subH - (clientH - EDGE)
+    if (overflowBottom > 0) {
+      setSubStyle({ top: -Math.min(overflowBottom, Math.max(0, itemRect.top - EDGE)) })
+    } else {
+      setSubStyle({})
+    }
   }, [open])
 
   const children = item.children ?? []
@@ -108,6 +125,7 @@ function MenuItem({ item, onClose }: { item: ContextMenuItemData; onClose: () =>
 
   return (
     <div
+      ref={itemRef}
       className="relative"
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
@@ -124,8 +142,9 @@ function MenuItem({ item, onClose }: { item: ContextMenuItemData; onClose: () =>
       {open ? (
         <div
           ref={subRef}
-          className={`absolute top-0 min-w-[176px] rounded-lg border border-line-strong bg-elevated py-1 shadow-xl shadow-black/50 ${
-            flip ? 'right-full mr-1' : 'left-full ml-1'
+          style={subStyle}
+          className={`absolute top-0 min-w-[176px] rounded-lg border border-line-strong bg-elevated py-1 shadow-xl shadow-black/50 before:absolute before:top-0 before:bottom-0 before:w-2 before:content-[''] ${
+            flip ? 'right-full mr-1 before:-right-2' : 'left-full ml-1 before:-left-2'
           }`}
         >
           {children.map((child) => (
