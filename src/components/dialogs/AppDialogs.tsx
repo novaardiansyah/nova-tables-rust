@@ -160,7 +160,7 @@ export default function AppDialogs({
       return getDesignSql(targetTab, session?.connection?.driverType)
     }
     try {
-      return `${editSqlHeader(targetTab.editSource)}${buildUpdateStatements(targetTab.editSource, tabResultSet(targetTab), targetTab.edits || {}).join('\n\n')}`
+      return `${editSqlHeader(targetTab.editSource)}${buildUpdateStatements(targetTab.editSource, tabResultSet(targetTab), targetTab.edits || {}, targetTab.creatingRows || []).join('\n\n')}`
     } catch {
       return ''
     }
@@ -174,7 +174,9 @@ export default function AppDialogs({
     if (targetTab.kind === 'design') {
       return getDesignChangeCount(targetTab, session?.connection?.driverType)
     }
-    return Object.keys(targetTab.edits || {}).length
+    const editCount = Object.keys(targetTab.edits || {}).length
+    const creatingCount = (targetTab.creatingRows || []).length
+    return editCount > 0 ? editCount : creatingCount
   }, [editConfirmTarget, session, activeTab])
 
   const confirmDeleteSql = useMemo(() => {

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import Icon from '@/components/common/Icon'
 import CellEditor, { CellEditorController } from '@/components/results/ResultGridCell'
 import { formatDateTime, isDateTimeString } from '@/resultFormats'
+import { EditSource, isAutoIncrementPrimaryKey } from '@/edits'
 
 const RENDER_LIMIT = 2000
 const DATE_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/
@@ -131,6 +132,8 @@ export interface ResultGridProps {
   onInspectCell?: (columnIndex: number, origIndex: number) => void
   deleteMode?: boolean
   deletingRows?: number[]
+  creatingRows?: number[]
+  editSource?: EditSource | null
   onDeleteRows?: (rowsOrStart: number[] | number, maybeEnd?: number) => void
 }
 
@@ -153,6 +156,8 @@ export default function ResultGrid({
   onInspectCell,
   deleteMode = false,
   deletingRows = [],
+  creatingRows = [],
+  editSource = null,
   onDeleteRows,
   driverType,
 }: ResultGridProps) {
@@ -249,12 +254,33 @@ export default function ResultGrid({
     [columns, relationMap],
   )
 
-  const columnEditable = (columnIndex: number) => {
+  const columnEditable = (columnIndex: number, origIndex?: number) => {
     if (!editable) return false
-    if (!editableColumns) return true
     const column = columns[columnIndex]
-    return Boolean(column && editableColumns.has(column.name))
+    if (!column) return false
+    if (typeof origIndex === 'number' && creatingRows.includes(origIndex)) {
+      if (isAutoIncrementPrimaryKey(column.name, editSource, columns)) {
+        return false
+      }
+    }
+    if (!editableColumns) return true
+    return editableColumns.has(column.name)
   }
+
+  const prevCreatingRowsLengthRef = useRef(creatingRows.length)
+  useEffect(() => {
+    if (creatingRows.length > prevCreatingRowsLengthRef.current) {
+      const firstCol = columns.findIndex((_, idx) => columnEditable(idx, 0))
+      if (firstCol !== -1) {
+        onStartEdit?.()
+        setActive({ row: 0, col: firstCol })
+        if (onSelectionChange) {
+          onSelectionChange({ anchor: { row: 0, col: firstCol }, focus: { row: 0, col: firstCol } })
+        }
+      }
+    }
+    prevCreatingRowsLengthRef.current = creatingRows.length
+  }, [creatingRows.length, columns, onSelectionChange, onStartEdit])
 
   const numericColumns = useMemo(
     () =>
@@ -297,7 +323,7 @@ export default function ResultGrid({
 
   const handleCellDoubleClick = (event: React.MouseEvent, origIndex: number, columnIndex: number) => {
     if (draggedRef.current || event.shiftKey) return
-    if (!onCellChange || !columnEditable(columnIndex)) return
+    if (!onCellChange || !columnEditable(columnIndex, origIndex)) return
     const captured = preClickBoundsRef.current
     preClickBoundsRef.current = null
     const block =
@@ -501,7 +527,15 @@ export default function ResultGrid({
   }
 
   return (
-    <div className="h-full select-none overflow-auto">
+    <div
+      className="h-full select-none overflow-auto"
+      onContextMenu={(event) => {
+        if (visibleRows.length === 0) {
+          event.preventDefault()
+          onCellContextMenu?.(event.clientX, event.clientY, 0, 0)
+        }
+      }}
+    >
       <div className="relative min-w-full">
         <table
           ref={tableRef}
@@ -559,6 +593,10 @@ export default function ResultGrid({
                 <td
                   colSpan={(columns.length || 1) + 1}
                   className="px-4 py-16 text-center text-[length:var(--app-text-12)] text-text-muted"
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    onCellContextMenu?.(event.clientX, event.clientY, 0, 0)
+                  }}
                 >
                   <div className="flex flex-col items-center justify-center gap-2">
                     <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-line-strong bg-elevated text-text-faint">
@@ -572,84 +610,97 @@ export default function ResultGrid({
                 </td>
               </tr>
             ) : (
-              visibleRows.map(({ row, origIndex }, visibleIdx) => (
-                <tr
-                  key={origIndex}
-                className={`group ${rowSelected(origIndex) ? 'bg-tint/[0.04]' : ''} ${
-                  deleteMode && deletingRows.includes(origIndex) ? 'bg-danger/[0.08]' : ''
-                }`}
-              >
-                <td
-                  onMouseDown={(event) => handleRowHeaderMouseDown(event, origIndex)}
-                  onMouseEnter={() => handleRowHeaderMouseEnter(origIndex)}
-                  className={`sticky left-0 z-10 cursor-pointer border-b border-r border-line px-2 py-[5px] text-right font-mono text-[length:calc(var(--grid-font-size)-2px)] text-text-faint group-hover:bg-row-hover ${
-                    deleteMode && deletingRows.includes(origIndex)
-                      ? 'bg-danger/30'
-                      : rowSelected(origIndex)
-                        ? 'bg-elevated'
-                        : 'bg-surface'
-                  }`}
-                >
-                  {visibleIdx + 1}
-                </td>
-                {columns.map((column, colIndex) => {
-                  const cellKey = `${origIndex}:${column.name}`
-                  const dirty = cellKey in edits
-                  const display = dirty ? edits[cellKey].value : row[colIndex]
-                  return (
+              visibleRows.map(({ row, origIndex }, visibleIdx) => {
+                const isCreating = creatingRows.includes(origIndex)
+                return (
+                  <tr
+                    key={origIndex}
+                    className={`group ${rowSelected(origIndex) ? 'bg-tint/[0.04]' : ''} ${
+                      deleteMode && deletingRows.includes(origIndex)
+                        ? 'bg-danger/[0.08]'
+                        : isCreating
+                          ? 'bg-success/[0.04]'
+                          : ''
+                    }`}
+                  >
                     <td
-                      key={column.name}
-                      data-cell={`${origIndex}:${colIndex}`}
-                      onDoubleClick={(event) => handleCellDoubleClick(event, origIndex, colIndex)}
-                      onMouseDown={(event) => handleCellMouseDown(event, origIndex, colIndex)}
-                      onMouseEnter={() => handleCellMouseEnter(origIndex, colIndex)}
-                      onContextMenu={(event) => handleCellContextMenu(event, origIndex, colIndex)}
-                      title={dirty ? 'Pending update' : undefined}
-                      className={`relative whitespace-nowrap border-b border-line/70 px-3 py-[5px] group-hover:bg-row-hover ${
-                        numericColumns[colIndex] ? 'text-right tabular-nums' : ''
-                      } ${
+                      onMouseDown={(event) => handleRowHeaderMouseDown(event, origIndex)}
+                      onMouseEnter={() => handleRowHeaderMouseEnter(origIndex)}
+                      className={`sticky left-0 z-10 cursor-pointer border-b border-r border-line px-2 py-[5px] text-right font-mono text-[length:calc(var(--grid-font-size)-2px)] text-text-faint group-hover:bg-row-hover ${
                         deleteMode && deletingRows.includes(origIndex)
-                          ? 'bg-danger/[0.06]'
-                          : inSelection(origIndex, colIndex)
-                            ? 'bg-accent/[0.12]'
-                            : dirty
-                              ? 'bg-warning/[0.08]'
-                              : ''
-                      } ${
-                        editable && columnEditable(colIndex) ? 'cursor-text' : ''
+                          ? 'bg-danger/30'
+                          : isCreating
+                            ? 'bg-success/20 text-success font-semibold'
+                            : rowSelected(origIndex)
+                              ? 'bg-elevated'
+                              : 'bg-surface'
                       }`}
                     >
-                      {active?.row === origIndex && active?.col === colIndex ? (
-                        <CellEditor
-                          value={isDateTimeString(display) ? formatDateTime(display, timezone) : display}
-                          onCommit={commitEdit}
-                          onCancel={cancelEdit}
-                          controllerRef={editorRef}
-                          driverType={driverType}
-                        />
-                      ) : columnRelations[colIndex] && display !== null && display !== undefined ? (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            if (onRelationClick && columnRelations[colIndex]) {
-                              onRelationClick(columnRelations[colIndex]!, display)
-                            }
-                          }}
-                          title={`Navigate to ${columnRelations[colIndex]?.referencedTable} (${columnRelations[colIndex]?.referencedColumn} = ${String(display)})`}
-                          className="cursor-pointer border-b border-dashed border-text-muted/50 hover:border-text-soft"
-                        >
-                          {isDateTimeString(display) ? formatDateTime(display, timezone) : String(display)}
-                        </button>
-                      ) : (
-                        <Cell value={display} timezone={timezone} />
-                      )}
+                      {isCreating ? '+' : visibleIdx + 1}
                     </td>
-                  )
-                })}
-              </tr>
-            ))
-          )}
+                    {columns.map((column, colIndex) => {
+                      const cellKey = `${origIndex}:${column.name}`
+                      const dirty = cellKey in edits
+                      const isAutoIncPk = isCreating && isAutoIncrementPrimaryKey(column.name, editSource, columns)
+                      const display = isAutoIncPk ? '' : dirty ? edits[cellKey].value : row[colIndex]
+                      const isColEditable = columnEditable(colIndex, origIndex)
+                      return (
+                        <td
+                          key={column.name}
+                          data-cell={`${origIndex}:${colIndex}`}
+                          onDoubleClick={(event) => handleCellDoubleClick(event, origIndex, colIndex)}
+                          onMouseDown={(event) => handleCellMouseDown(event, origIndex, colIndex)}
+                          onMouseEnter={() => handleCellMouseEnter(origIndex, colIndex)}
+                          onContextMenu={(event) => handleCellContextMenu(event, origIndex, colIndex)}
+                          title={isAutoIncPk ? 'Auto-increment' : dirty ? (isCreating ? 'Pending insert' : 'Pending update') : undefined}
+                          className={`relative whitespace-nowrap border-b border-line/70 px-3 py-[5px] group-hover:bg-row-hover ${
+                            numericColumns[colIndex] ? 'text-right tabular-nums' : ''
+                          } ${
+                            deleteMode && deletingRows.includes(origIndex)
+                              ? 'bg-danger/[0.06]'
+                              : inSelection(origIndex, colIndex)
+                                ? 'bg-accent/[0.12]'
+                                : dirty
+                                  ? 'bg-warning/[0.08]'
+                                  : isCreating
+                                    ? 'bg-success/[0.02]'
+                                    : ''
+                          } ${
+                            editable && isColEditable ? 'cursor-text' : ''
+                          }`}
+                        >
+                          {active?.row === origIndex && active?.col === colIndex && !isAutoIncPk ? (
+                            <CellEditor
+                              value={isDateTimeString(display) ? formatDateTime(display, timezone) : display}
+                              onCommit={commitEdit}
+                              onCancel={cancelEdit}
+                              controllerRef={editorRef}
+                              driverType={driverType}
+                            />
+                          ) : columnRelations[colIndex] && display !== null && display !== undefined && display !== '' ? (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                if (onRelationClick && columnRelations[colIndex]) {
+                                  onRelationClick(columnRelations[colIndex]!, display)
+                                }
+                              }}
+                              title={`Navigate to ${columnRelations[colIndex]?.referencedTable} (${columnRelations[colIndex]?.referencedColumn} = ${String(display)})`}
+                              className="cursor-pointer border-b border-dashed border-text-muted/50 hover:border-text-soft"
+                            >
+                              {isDateTimeString(display) ? formatDateTime(display, timezone) : String(display)}
+                            </button>
+                          ) : (
+                            <Cell value={display} timezone={timezone} />
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })
+            )}
           </tbody>
         </table>
 
@@ -681,6 +732,10 @@ export default function ResultGrid({
 }
 
 function Cell({ value, timezone }: { value: unknown; timezone?: string }) {
+  if (value === '') {
+    return <span className="font-mono text-[length:calc(var(--grid-font-size)-1px)] italic text-text-faint"></span>
+  }
+
   if (value && typeof value === 'object' && 'special' in value) {
     return <span className="font-mono text-[length:calc(var(--grid-font-size)-1px)] text-warning">{String((value as { special: unknown }).special)}</span>
   }

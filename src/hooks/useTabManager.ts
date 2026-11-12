@@ -65,7 +65,7 @@ export function useTabManager({
       if (index === -1) return
       const tab = current.tabs[index]
       if (!force) {
-        if (tab && Object.keys(tab.edits || {}).length > 0) {
+        if (tab && (Object.keys(tab.edits || {}).length > 0 || (tab.creatingRows && tab.creatingRows.length > 0))) {
           setEditConfirmTarget({ type: 'close-tab', tabId })
           setEditConfirmOpen(true)
           return
@@ -126,7 +126,7 @@ export function useTabManager({
       const next = current.tabs.find((tab) => tab.id === tabId)
       if (!next) return
       const active = current.tabs.find((tab) => tab.id === current.activeTabId)
-      if (active && Object.keys(active.edits || {}).length > 0) {
+      if (active && (Object.keys(active.edits || {}).length > 0 || (active.creatingRows && active.creatingRows.length > 0))) {
         setEditConfirmTarget({ type: 'switch-tab', tabId })
         setEditConfirmOpen(true)
         return

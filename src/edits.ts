@@ -7,6 +7,7 @@ export interface EditTableTarget {
   keyColumns: (string | null)[]
   columns: Record<string, string>
   editable: string[] | null
+  identityColumns?: string[] | null
 }
 
 export interface EditSource {
@@ -21,6 +22,7 @@ export interface SourceTable {
   schema: string
   name: string
   primaryKey?: string[] | null
+  identityColumns?: string[] | null
 }
 
 export interface QueryColumnMeta {
@@ -82,6 +84,7 @@ export function buildEditSource(
   driverType?: string | null,
 ): EditSource {
   const primaryKey = table.primaryKey ?? []
+  const identityColumns = table.identityColumns ?? []
   return {
     sql,
     joined: false,
@@ -95,6 +98,7 @@ export function buildEditSource(
         keyColumns: primaryKey,
         columns: {},
         editable: null,
+        identityColumns,
       },
     ],
   }
@@ -191,6 +195,7 @@ export function buildQueryEditSource({
       keyColumns,
       columns: mapping,
       editable,
+      identityColumns: table.identityColumns ?? [],
     })
   }
 
@@ -253,12 +258,113 @@ function keyPositions(target: EditTableTarget, indexes: Map<string, number>): nu
   return positions
 }
 
+export function isAutoIncrementPrimaryKey(
+  columnName: string,
+  editSource?: EditSource | null,
+  columns?: ResultSetColumn[] | null,
+): boolean {
+  if (!columnName) return false
+  const lower = columnName.toLowerCase()
+
+  if (editSource?.tables) {
+    for (const table of editSource.tables) {
+      const isPk =
+        (table.primaryKey || []).some((k) => k.toLowerCase() === lower) ||
+        (table.keyColumns || []).some((k) => k && k.toLowerCase() === lower)
+      const isIdentity = (table.identityColumns || []).some((k) => k.toLowerCase() === lower)
+      if (isPk && isIdentity) return true
+    }
+  }
+
+  if (columns) {
+    const col = columns.find((c) => c.name.toLowerCase() === lower)
+    if (col && (col as any).isIdentity && (col as any).isPrimaryKey) return true
+  }
+
+  return false
+}
+
+export function buildInsertStatements(
+  editSource: EditSource | null | undefined,
+  resultSet: ResultSet | null | undefined,
+  edits: Record<string, CellEdit>,
+  creatingRows: number[] = [],
+): string[] {
+  if (!editSource || !resultSet || !creatingRows.length) return []
+  const target = editSource.tables[0]
+  if (!target) return []
+
+  const driverType = editSource.driverType ?? null
+  const statements: string[] = []
+
+  for (const rowIndex of creatingRows) {
+    const row = resultSet.rows[rowIndex]
+    const assignments: [string, unknown][] = []
+
+    for (let colIdx = 0; colIdx < resultSet.columns.length; colIdx += 1) {
+      const col = resultSet.columns[colIdx]
+      if (!col) continue
+      const colName = col.name
+
+      if (isAutoIncrementPrimaryKey(colName, editSource, resultSet.columns)) {
+        continue
+      }
+
+      const editKey = `${rowIndex}:${colName}`
+      if (editKey in edits) {
+        const val = edits[editKey].value
+        const targetCol = target.columns[colName] ?? colName
+        assignments.push([targetCol, val])
+      } else if (row && row[colIdx] !== null && row[colIdx] !== undefined) {
+        const targetCol = target.columns[colName] ?? colName
+        assignments.push([targetCol, row[colIdx]])
+      }
+    }
+
+    const tableIdent =
+      driverType === 'mysql'
+        ? // Targeted for MySQL: backtick quoting for schema and table name.
+          `\`${target.schema.replace(/`/g, '``')}\`.\`${target.table.replace(/`/g, '``')}\``
+        : // Targeted for SQL Server: bracket quoting for schema and table name.
+          `[${target.schema.replace(/]/g, ']]')}].[${target.table.replace(/]/g, ']]')}]`
+
+    if (assignments.length === 0) {
+      if (driverType === 'mysql') {
+        // Targeted for MySQL: insert default values with empty column and value list.
+        statements.push(`INSERT INTO ${tableIdent} () VALUES ();`)
+      } else {
+        // Targeted for SQL Server: insert default values using DEFAULT VALUES syntax.
+        statements.push(`INSERT INTO ${tableIdent} DEFAULT VALUES;`)
+      }
+    } else {
+      const colList = assignments.map(([c]) => quoteIdentifier(c, driverType)).join(', ')
+      const valList = assignments.map(([, v]) => sqlLiteral(v, driverType)).join(', ')
+      statements.push(`INSERT INTO ${tableIdent} (${colList})\nVALUES (${valList});`)
+    }
+  }
+
+  return statements
+}
+
 export function buildUpdateStatements(
   editSource: EditSource | null | undefined,
   resultSet: ResultSet | null | undefined,
-  edits: Record<string, CellEdit>
+  edits: Record<string, CellEdit>,
+  creatingRows: number[] = [],
 ): string[] {
   if (!editSource || !resultSet) return []
+
+  const insertStatements = buildInsertStatements(editSource, resultSet, edits, creatingRows)
+
+  const creatingSet = new Set(creatingRows)
+  const updateEdits: Record<string, CellEdit> = {}
+  for (const [key, edit] of Object.entries(edits)) {
+    const [rowKey] = key.split(':')
+    if (!creatingSet.has(Number(rowKey))) {
+      updateEdits[key] = edit
+    }
+  }
+
   const indexes = columnIndexes(resultSet)
   const groups = new Map<
     string,
@@ -269,7 +375,7 @@ export function buildUpdateStatements(
     }
   >()
 
-  for (const [key, edit] of Object.entries(edits)) {
+  for (const [key, edit] of Object.entries(updateEdits)) {
     const [rowKey, columnName] = key.split(':')
     const rowIndex = Number(rowKey)
     const target = editTarget(editSource, columnName)
@@ -305,7 +411,7 @@ export function buildUpdateStatements(
       )
     }
   }
-  return statements
+  return [...insertStatements, ...statements]
 }
 
 export function buildDeleteStatementsForRows(

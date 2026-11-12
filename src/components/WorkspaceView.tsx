@@ -379,8 +379,10 @@ export default function WorkspaceView({
               editSource={activeTab?.editSource ?? null}
               edits={activeTab?.edits ?? {}}
               deletingRows={activeTab?.deletingRows ?? []}
+              creatingRows={activeTab?.creatingRows ?? []}
               onCellChange={handleCellChange}
               onSetCellValue={handleSetCellValue}
+              onNewRow={queryExecution.handleNewRow}
               onConfirmOpen={() => {
                 setEditConfirmTarget(null)
                 setEditConfirmOpen(true)

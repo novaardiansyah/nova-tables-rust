@@ -88,9 +88,11 @@ export interface ResultsPanelProps {
   editSource?: EditSource | null
   edits?: Record<string, { value: unknown; original?: unknown }>
   deletingRows?: number[]
+  creatingRows?: number[]
   onCellChange?: (row: number, columnName: string, nextValue: unknown, prevValue: unknown) => void
   onSetCellValue?: (row: number, columnName: string, value: unknown) => void
   onDeleteRows?: (rowsOrStart: number[] | number, maybeEnd?: number) => void
+  onNewRow?: () => void
   onConfirmOpen?: () => void
   onDeleteConfirmOpen?: () => void
   onApplyFilter?: (conditions: FilterCondition[]) => void
@@ -118,9 +120,11 @@ export default function ResultsPanel({
   editSource,
   edits = {},
   deletingRows = [],
+  creatingRows = [],
   onCellChange,
   onSetCellValue,
   onDeleteRows,
+  onNewRow,
   onConfirmOpen,
   onDeleteConfirmOpen,
   onApplyFilter,
@@ -199,7 +203,7 @@ export default function ResultsPanel({
     )
   const editable = keyInResult && Boolean(activeResultSet) && resultSets.length === 1
   const deletable = editable && editSource?.tables.length === 1
-  const changeCount = Object.keys(edits).length
+  const changeCount = Object.keys(edits).length > 0 ? Object.keys(edits).length : (creatingRows?.length ?? 0)
   const previousChangeCountRef = useRef(changeCount)
 
   useEffect(() => {
@@ -456,15 +460,28 @@ export default function ResultsPanel({
       ],
     })
 
+    if (editable && onNewRow) {
+      items.push({
+        id: 'new-row',
+        label: 'New Row',
+        onSelect: () => {
+          setEditMode(true)
+          onNewRow()
+        },
+      })
+    }
+
     items.sort((a, b) => a.label.localeCompare(b.label))
 
     return items
   }, [
     copy,
     deletable,
+    editable,
     menu,
     onDeleteRows,
     onExport,
+    onNewRow,
     selectionBounds,
     selectionColumnNames,
     selectionLabel,
@@ -746,6 +763,8 @@ export default function ResultsPanel({
                   driverType={driverType}
                   deleteMode={deletingRows.length > 0}
                   deletingRows={deletingRows}
+                  creatingRows={creatingRows}
+                  editSource={editSource}
                   onDeleteRows={deletable ? onDeleteRows : undefined}
                 />
               </div>

@@ -66,6 +66,7 @@ export interface SessionTab {
   editSource?: EditSource | null
   edits: Record<string, { value: unknown; original?: unknown }>
   deletingRows: number[]
+  creatingRows?: number[]
   lastExecutedSql?: string | null
   baseSql?: string
   filterConditions?: FilterCondition[]
@@ -113,6 +114,7 @@ export function createTab(id: string, title: string, sql: string, editSource: Ed
     editSource,
     edits: {},
     deletingRows: [],
+    creatingRows: [],
     lastExecutedSql: null,
   }
 }
@@ -138,6 +140,7 @@ export function createErdTab(id: string, title: string, target: ErdTarget): Sess
     activeSet: 0,
     edits: {},
     deletingRows: [],
+    creatingRows: [],
     relations: [],
   }
 }
@@ -158,6 +161,7 @@ export function createDesignTab(id: string, title: string, target: any): Session
     activeSet: 0,
     edits: {},
     deletingRows: [],
+    creatingRows: [],
     relations: [],
   }
 }

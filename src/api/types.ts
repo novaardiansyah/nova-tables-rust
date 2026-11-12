@@ -94,6 +94,7 @@ export interface TableSummary {
   type?: string
   rowCount?: number | null
   primaryKey?: string[] | null
+  identityColumns?: string[] | null
 }
 
 export interface TableColumnsSummary {

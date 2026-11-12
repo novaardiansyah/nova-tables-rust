@@ -301,11 +301,13 @@ pub async fn list_tables(
         }
     }
 
+    // Targeted for SQL Server: retrieves primary key columns and identity attribute from sys.tables, sys.indexes, and sys.columns.
     let stream = client
         .query(
             "SELECT s.name AS schemaName,
               t.name AS tableName,
-              c.name AS columnName
+              c.name AS columnName,
+              CAST(c.is_identity AS INT) AS isIdentity
          FROM sys.tables t
          JOIN sys.schemas s ON s.schema_id = t.schema_id
          LEFT JOIN sys.indexes i ON i.object_id = t.object_id AND i.is_primary_key = 1
@@ -321,34 +323,40 @@ pub async fn list_tables(
         .into_first_result()
         .await
         .map_err(|e| e.to_string())?;
-    let mut map: HashMap<(String, String), Vec<String>> = HashMap::new();
+    let mut map: HashMap<(String, String), (Vec<String>, Vec<String>)> = HashMap::new();
     let mut order: Vec<(String, String)> = Vec::new();
 
     for row in rows {
         let schema: &str = row.get(0).unwrap_or("");
         let name: &str = row.get(1).unwrap_or("");
         let col: Option<&str> = row.get(2);
+        let is_identity_num: Option<i32> = row.get(3);
+        let is_identity = is_identity_num.unwrap_or(0) == 1;
         let key = (schema.to_string(), name.to_string());
         if !map.contains_key(&key) {
             order.push(key.clone());
-            map.insert(key.clone(), Vec::new());
+            map.insert(key.clone(), (Vec::new(), Vec::new()));
         }
         if let Some(c) = col {
-            if let Some(pks) = map.get_mut(&key) {
+            if let Some((pks, id_cols)) = map.get_mut(&key) {
                 pks.push(c.to_string());
+                if is_identity {
+                    id_cols.push(c.to_string());
+                }
             }
         }
     }
 
     let mut tables = Vec::new();
     for (schema, name) in order {
-        let primary_key = map
+        let (primary_key, identity_columns) = map
             .remove(&(schema.clone(), name.clone()))
             .unwrap_or_default();
         tables.push(json!({
           "schema": schema,
           "name": name,
-          "primaryKey": primary_key
+          "primaryKey": primary_key,
+          "identityColumns": identity_columns
         }));
     }
 

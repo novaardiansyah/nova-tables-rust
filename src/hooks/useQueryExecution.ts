@@ -113,6 +113,7 @@ export function useQueryExecution({
         activeSet: 0,
         edits: {},
         deletingRows: [],
+        creatingRows: [],
         lastExecutedSql: sql,
       }
       const source = tab?.editSource && tab.editSource.sql === sql ? tab.editSource : null
@@ -425,6 +426,50 @@ export function useQueryExecution({
     [activeQueryTab, updateTab, tabResultSet],
   )
 
+  const handleNewRow = useCallback(() => {
+    const target = activeQueryTab()
+    if (!target) return
+    const { connectionId, tab } = target
+    const current = activeSession()
+    if (!current) return
+    const resultSet = tabResultSet(tab)
+    if (!resultSet || !tab.editSource) return
+
+    const emptyRow = new Array(resultSet.columns.length).fill(null)
+    const nextRows = [emptyRow, ...resultSet.rows]
+    const nextResultSet = {
+      ...resultSet,
+      rows: nextRows,
+      rowCount: nextRows.length,
+    }
+    const nextResultSets = [...(tab.state.result?.resultSets || [])]
+    nextResultSets[tab.activeSet ?? 0] = nextResultSet
+
+    const shiftedEdits: Record<string, { value: unknown; original?: unknown }> = {}
+    for (const [key, edit] of Object.entries(tab.edits || {})) {
+      const [rStr, colName] = key.split(':')
+      const r = Number(rStr)
+      shiftedEdits[`${r + 1}:${colName}`] = edit
+    }
+
+    const shiftedDeletingRows = (tab.deletingRows || []).map((r) => r + 1)
+    const existingCreating = (tab.creatingRows || []).map((r) => r + 1)
+    const nextCreatingRows = [0, ...existingCreating]
+
+    updateTab(connectionId, tab.id, {
+      state: {
+        ...tab.state,
+        result: {
+          ...tab.state.result!,
+          resultSets: nextResultSets,
+        },
+      },
+      edits: shiftedEdits,
+      deletingRows: shiftedDeletingRows,
+      creatingRows: nextCreatingRows,
+    })
+  }, [activeQueryTab, activeSession, tabResultSet, updateTab])
+
   const handleRunUpdate = useCallback(
     async (sql: string) => {
       if (!sql || !sql.trim()) return false
@@ -438,7 +483,12 @@ export function useQueryExecution({
           recordHistory: true,
         })
         const tab = current.tabs.find((item) => item.id === current.activeTabId)
-        if (tab) updateTab(current.connectionId, tab.id, { edits: {}, deletingRows: [] })
+        if (tab) {
+          updateTab(current.connectionId, tab.id, { edits: {}, deletingRows: [], creatingRows: [] })
+          if (tab.lastExecutedSql) {
+            execute(tab.lastExecutedSql, tab.id)
+          }
+        }
         showBanner('success', 'Changes applied to the database.')
         return true
       } catch (error: any) {
@@ -446,7 +496,7 @@ export function useQueryExecution({
         return false
       }
     },
-    [activeSession, showBanner, updateTab],
+    [activeSession, execute, showBanner, updateTab],
   )
 
   const handleApplyFilter = useCallback(
@@ -537,7 +587,7 @@ export function useQueryExecution({
 
     let sql = ''
     try {
-      sql = `${editSqlHeader(tab.editSource)}${buildUpdateStatements(tab.editSource, tabResultSet(tab), tab.edits || {}).join('\n\n')}`
+      sql = `${editSqlHeader(tab.editSource)}${buildUpdateStatements(tab.editSource, tabResultSet(tab), tab.edits || {}, tab.creatingRows || []).join('\n\n')}`
     } catch {
       sql = ''
     }
@@ -591,7 +641,30 @@ export function useQueryExecution({
       }
       return
     }
-    if (tab) updateTab(current.connectionId, tab.id, { edits: {} })
+    if (tab) {
+      let nextResultSets = tab.state?.result?.resultSets
+      if (tab.creatingRows && tab.creatingRows.length > 0 && nextResultSets) {
+        const activeIdx = tab.activeSet ?? 0
+        const activeSet = nextResultSets[activeIdx]
+        if (activeSet) {
+          const creatingSet = new Set(tab.creatingRows)
+          const cleanedRows = activeSet.rows.filter((_, idx) => !creatingSet.has(idx))
+          nextResultSets = [...nextResultSets]
+          nextResultSets[activeIdx] = {
+            ...activeSet,
+            rows: cleanedRows,
+            rowCount: cleanedRows.length,
+          }
+        }
+      }
+      updateTab(current.connectionId, tab.id, {
+        state: nextResultSets
+          ? { ...tab.state, result: { ...tab.state.result!, resultSets: nextResultSets } }
+          : tab.state,
+        edits: {},
+        creatingRows: [],
+      })
+    }
     setEditConfirmOpen(false)
     setEditConfirmTarget(null)
     if (target?.type === 'close-tab' && target.tabId) {
@@ -619,13 +692,14 @@ export function useQueryExecution({
     }
     let sql = ''
     try {
-      sql = `${editSqlHeader(tab.editSource)}${buildUpdateStatements(tab.editSource, tabResultSet(tab), tab.edits || {}).join('\n\n')}`
+      sql = `${editSqlHeader(tab.editSource)}${buildUpdateStatements(tab.editSource, tabResultSet(tab), tab.edits || {}, tab.creatingRows || []).join('\n\n')}`
     } catch {
       sql = ''
     }
     try {
       await api.copyText(sql)
-      showBanner('success', 'Copied UPDATE query to clipboard.')
+      const hasInsert = (tab.creatingRows?.length ?? 0) > 0
+      showBanner('success', hasInsert ? 'Copied query to clipboard.' : 'Copied UPDATE query to clipboard.')
     } catch (error: any) {
       showBanner('error', error.message)
     }
@@ -756,6 +830,7 @@ export function useQueryExecution({
     handleCellChange,
     handleSetCellValue,
     handleDeleteRows,
+    handleNewRow,
     handleRunUpdate,
     handleApplyFilter,
     handleResetFilter,

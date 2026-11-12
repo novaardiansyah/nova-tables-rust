@@ -193,26 +193,36 @@ pub async fn list_tables(conn: &mut Conn, database: Option<&str>) -> Result<Valu
     } else {
         format!(" AND t.TABLE_SCHEMA = '{db}'")
     };
+    // Targeted for MySQL: retrieves primary key columns and auto_increment attribute from information_schema.TABLES, KEY_COLUMN_USAGE, and COLUMNS.
     let query = format!(
-        "SELECT t.TABLE_SCHEMA AS table_schema, t.TABLE_NAME AS table_name, k.COLUMN_NAME AS pk_column
+        "SELECT t.TABLE_SCHEMA AS table_schema,
+                t.TABLE_NAME AS table_name,
+                k.COLUMN_NAME AS pk_column,
+                CASE WHEN c.EXTRA LIKE '%auto_increment%' THEN 1 ELSE 0 END AS is_auto_inc
          FROM information_schema.TABLES t
          LEFT JOIN information_schema.KEY_COLUMN_USAGE k
            ON k.TABLE_SCHEMA = t.TABLE_SCHEMA
             AND k.TABLE_NAME = t.TABLE_NAME
             AND k.CONSTRAINT_NAME = 'PRIMARY'
+         LEFT JOIN information_schema.COLUMNS c
+           ON c.TABLE_SCHEMA = k.TABLE_SCHEMA
+            AND c.TABLE_NAME = k.TABLE_NAME
+            AND c.COLUMN_NAME = k.COLUMN_NAME
          WHERE t.TABLE_TYPE = 'BASE TABLE'{}
          ORDER BY t.TABLE_SCHEMA, t.TABLE_NAME, k.ORDINAL_POSITION",
         schema_filter
     );
 
     let rows: Vec<Row> = conn.query(query).await.map_err(|e| e.to_string())?;
-    let mut map: HashMap<(String, String), Vec<String>> = HashMap::new();
+    let mut map: HashMap<(String, String), (Vec<String>, Vec<String>)> = HashMap::new();
     let mut order: Vec<(String, String)> = Vec::new();
 
     for row in rows {
         let schema = opt_string(&row, 0);
         let name = opt_string(&row, 1);
         let pk = opt_string(&row, 2);
+        let is_auto_inc: Option<i64> = row.get(3);
+        let is_identity = is_auto_inc.unwrap_or(0) == 1;
         let (s, n) = (schema.unwrap_or_default(), name.unwrap_or_default());
         if s.is_empty() || n.is_empty() {
             continue;
@@ -221,12 +231,15 @@ pub async fn list_tables(conn: &mut Conn, database: Option<&str>) -> Result<Valu
 
         if !map.contains_key(&key) {
             order.push(key.clone());
-            map.insert(key.clone(), Vec::new());
+            map.insert(key.clone(), (Vec::new(), Vec::new()));
         }
         if let Some(pk_col) = pk {
             if !pk_col.is_empty() {
-                if let Some(pks) = map.get_mut(&key) {
-                    pks.push(pk_col);
+                if let Some((pks, id_cols)) = map.get_mut(&key) {
+                    pks.push(pk_col.clone());
+                    if is_identity {
+                        id_cols.push(pk_col);
+                    }
                 }
             }
         }
@@ -235,13 +248,14 @@ pub async fn list_tables(conn: &mut Conn, database: Option<&str>) -> Result<Valu
     let tables: Vec<Value> = order
         .into_iter()
         .map(|(schema, name)| {
-            let pk = map
+            let (pk, id_cols) = map
                 .remove(&(schema.clone(), name.clone()))
                 .unwrap_or_default();
             json!({
               "schema": schema,
               "name": name,
-              "primaryKey": pk
+              "primaryKey": pk,
+              "identityColumns": id_cols
             })
         })
         .collect();
