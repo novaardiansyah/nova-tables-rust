@@ -660,6 +660,17 @@ struct FkGroup {
     referenced_schema: String,
     referenced_table: String,
     columns: Vec<FkItem>,
+    on_delete: String,
+    on_update: String,
+}
+
+struct ReferencingFkGroup {
+    name: String,
+    schema: String,
+    table: String,
+    columns: Vec<FkItem>,
+    on_delete: String,
+    on_update: String,
 }
 
 pub async fn table_relations(
@@ -914,7 +925,9 @@ pub async fn table_structure(
           pc.name AS parentColumn,
           rs.name AS referencedSchema,
           rt.name AS referencedTable,
-          rc.name AS referencedColumn
+          rc.name AS referencedColumn,
+          fk.delete_referential_action_desc AS deleteAction,
+          fk.update_referential_action_desc AS updateAction
      FROM sys.foreign_keys fk
      JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
      JOIN sys.columns pc ON pc.object_id = fkc.parent_object_id AND pc.column_id = fkc.parent_column_id
@@ -937,6 +950,8 @@ pub async fn table_structure(
                 let ref_schema: &str = row.get(2).unwrap_or("");
                 let ref_table: &str = row.get(3).unwrap_or("");
                 let ref_col: &str = row.get(4).unwrap_or("");
+                let delete_action: &str = row.get(5).unwrap_or("");
+                let update_action: &str = row.get(6).unwrap_or("");
 
                 if !fk_map.contains_key(fk_name) {
                     fk_order.push(fk_name.to_string());
@@ -947,6 +962,8 @@ pub async fn table_structure(
                             referenced_schema: ref_schema.to_string(),
                             referenced_table: ref_table.to_string(),
                             columns: Vec::new(),
+                            on_delete: delete_action.replace('_', " "),
+                            on_update: update_action.replace('_', " "),
                         },
                     );
                 }
@@ -968,7 +985,72 @@ pub async fn table_structure(
         }
     }
 
-    // 5. Build DDL Statement
+    // 5. Referencing foreign keys (constraints from other tables pointing to this table)
+    let referencing_query = "SELECT fk.name AS foreignKeyName,
+          ps.name AS parentSchema,
+          pt.name AS parentTable,
+          pc.name AS parentColumn,
+          rc.name AS referencedColumn,
+          fk.delete_referential_action_desc AS deleteAction,
+          fk.update_referential_action_desc AS updateAction
+     FROM sys.foreign_keys fk
+     JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+     JOIN sys.tables pt ON pt.object_id = fkc.parent_object_id
+     JOIN sys.schemas ps ON ps.schema_id = pt.schema_id
+     JOIN sys.columns pc ON pc.object_id = fkc.parent_object_id AND pc.column_id = fkc.parent_column_id
+     JOIN sys.columns rc ON rc.object_id = fkc.referenced_object_id AND rc.column_id = fkc.referenced_column_id
+     JOIN sys.tables rt ON rt.object_id = fkc.referenced_object_id
+     JOIN sys.schemas rs ON rs.schema_id = rt.schema_id
+    WHERE rs.name = @P1 AND rt.name = @P2 AND pt.object_id <> rt.object_id
+    ORDER BY fk.name, fkc.constraint_column_id";
+
+    let mut referencing_order: Vec<String> = Vec::new();
+    let mut referencing_map: HashMap<String, ReferencingFkGroup> = HashMap::new();
+
+    if let Ok(stream) = client.query(referencing_query, &[&schema, &table]).await {
+        if let Ok(rows) = stream.into_first_result().await {
+            for row in rows {
+                let fk_name: &str = row.get(0).unwrap_or("");
+                let parent_schema: &str = row.get(1).unwrap_or("");
+                let parent_table: &str = row.get(2).unwrap_or("");
+                let parent_col: &str = row.get(3).unwrap_or("");
+                let ref_col: &str = row.get(4).unwrap_or("");
+                let delete_action: &str = row.get(5).unwrap_or("");
+                let update_action: &str = row.get(6).unwrap_or("");
+
+                if !referencing_map.contains_key(fk_name) {
+                    referencing_order.push(fk_name.to_string());
+                    referencing_map.insert(
+                        fk_name.to_string(),
+                        ReferencingFkGroup {
+                            name: fk_name.to_string(),
+                            schema: parent_schema.to_string(),
+                            table: parent_table.to_string(),
+                            columns: Vec::new(),
+                            on_delete: delete_action.replace('_', " "),
+                            on_update: update_action.replace('_', " "),
+                        },
+                    );
+                }
+
+                if let Some(entry) = referencing_map.get_mut(fk_name) {
+                    entry.columns.push(FkItem {
+                        column: parent_col.to_string(),
+                        referenced_column: ref_col.to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    let mut referencing_foreign_keys: Vec<ReferencingFkGroup> = Vec::new();
+    for fk_name in referencing_order {
+        if let Some(entry) = referencing_map.remove(&fk_name) {
+            referencing_foreign_keys.push(entry);
+        }
+    }
+
+    // 6. Build DDL Statement
     let mut lines = Vec::new();
     for col in &columns {
         let mut def = build_column_definition(col);
@@ -1029,7 +1111,7 @@ pub async fn table_structure(
         body
     );
 
-    // 6. Format JSON responses
+    // 7. Format JSON responses
     let json_columns: Vec<Value> = columns
         .iter()
         .map(|col| {
@@ -1103,6 +1185,25 @@ pub async fn table_structure(
                 "column": c.column,
                 "referencedColumn": c.referenced_column,
               })).collect::<Vec<_>>(),
+              "onDelete": fk.on_delete,
+              "onUpdate": fk.on_update,
+            })
+        })
+        .collect();
+
+    let json_referencing_foreign_keys: Vec<Value> = referencing_foreign_keys
+        .iter()
+        .map(|fk| {
+            json!({
+              "name": fk.name,
+              "schema": fk.schema,
+              "table": fk.table,
+              "columns": fk.columns.iter().map(|c| json!({
+                "column": c.column,
+                "referencedColumn": c.referenced_column,
+              })).collect::<Vec<_>>(),
+              "onDelete": fk.on_delete,
+              "onUpdate": fk.on_update,
             })
         })
         .collect();
@@ -1115,6 +1216,7 @@ pub async fn table_structure(
       "statement": statement,
       "columns": json_columns,
       "foreignKeys": json_foreign_keys,
+      "referencingForeignKeys": json_referencing_foreign_keys,
       "primaryKey": json_primary_key,
       "uniqueKeys": json_unique_keys,
       "indexes": json_indexes,

@@ -435,6 +435,9 @@ export function useTableBrowser({
       const primaryKeyList = Array.isArray(structure?.primaryKey) ? structure.primaryKey : []
       const uniqueKeysList = Array.isArray(structure?.uniqueKeys) ? structure.uniqueKeys : []
       const foreignKeysList = Array.isArray(structure?.foreignKeys) ? structure.foreignKeys : []
+      const referencingForeignKeysList = Array.isArray(structure?.referencingForeignKeys)
+        ? structure.referencingForeignKeys
+        : []
       const indexesList = Array.isArray(structure?.indexes) ? structure.indexes : []
       const columnsList = Array.isArray(structure?.columns) ? structure.columns : []
 
@@ -452,6 +455,7 @@ export function useTableBrowser({
           primaryKeyName: primaryKeyList[0]?.name ?? null,
           uniqueKeys: uniqueKeysList,
           foreignKeys: foreignKeysList,
+          referencingForeignKeys: referencingForeignKeysList,
           indexes: indexesList,
           statement: structure?.statement || '',
         },

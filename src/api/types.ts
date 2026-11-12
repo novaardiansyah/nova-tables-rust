@@ -128,6 +128,7 @@ export interface TableStructureResult {
   primaryKey: any[]
   uniqueKeys: any[]
   foreignKeys: any[]
+  referencingForeignKeys: any[]
   indexes: any[]
   [key: string]: unknown
 }

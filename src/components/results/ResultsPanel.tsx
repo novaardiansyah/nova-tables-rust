@@ -600,7 +600,7 @@ export default function ResultsPanel({
           </button>
         ) : null}
 
-        {status === 'success' && resultSets.length === 1 && editSource?.tables?.length === 1 && onOpenStructure && activeResultSet ? (
+        {status === 'success' && resultSets.length <= 1 && editSource?.tables?.length === 1 && onOpenStructure ? (
           <button
             type="button"
             onClick={() => {

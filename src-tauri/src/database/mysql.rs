@@ -1051,17 +1051,22 @@ pub async fn table_structure(
         }
     }
 
-    // 4. Foreign keys via KEY_COLUMN_USAGE
+    // 4. Foreign keys via KEY_COLUMN_USAGE + REFERENTIAL_CONSTRAINTS
     let fk_query = format!(
-        "SELECT CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_SCHEMA, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
-         FROM information_schema.KEY_COLUMN_USAGE
-         WHERE TABLE_SCHEMA = '{db}' AND TABLE_NAME = '{table}'
-           AND REFERENCED_TABLE_NAME IS NOT NULL
-         ORDER BY CONSTRAINT_NAME, ORDINAL_POSITION"
+        "SELECT k.CONSTRAINT_NAME, k.COLUMN_NAME, k.REFERENCED_TABLE_SCHEMA, k.REFERENCED_TABLE_NAME, k.REFERENCED_COLUMN_NAME,
+                rc.DELETE_RULE, rc.UPDATE_RULE
+         FROM information_schema.KEY_COLUMN_USAGE k
+         JOIN information_schema.REFERENTIAL_CONSTRAINTS rc
+           ON rc.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA
+          AND rc.CONSTRAINT_NAME = k.CONSTRAINT_NAME
+          AND rc.TABLE_NAME = k.TABLE_NAME
+         WHERE k.TABLE_SCHEMA = '{db}' AND k.TABLE_NAME = '{table}'
+           AND k.REFERENCED_TABLE_NAME IS NOT NULL
+         ORDER BY k.CONSTRAINT_NAME, k.ORDINAL_POSITION"
     );
     let fk_rows: Vec<Row> = conn.query(&fk_query).await.map_err(|e| e.to_string())?;
 
-    let mut fk_map: HashMap<String, (String, String, Vec<(String, String)>)> = HashMap::new();
+    let mut fk_map: HashMap<String, (String, String, Vec<(String, String)>, String, String)> = HashMap::new();
     let mut fk_order: Vec<String> = Vec::new();
 
     for row in fk_rows {
@@ -1070,6 +1075,8 @@ pub async fn table_structure(
         let ref_schema = opt_string(&row, 2);
         let ref_table = opt_string(&row, 3);
         let ref_column = opt_string(&row, 4);
+        let delete_rule = opt_string(&row, 5).unwrap_or_default();
+        let update_rule = opt_string(&row, 6).unwrap_or_default();
 
         let name = constraint_name.unwrap_or_default();
         if name.is_empty() {
@@ -1083,11 +1090,13 @@ pub async fn table_structure(
                     ref_schema.unwrap_or_default(),
                     ref_table.unwrap_or_default(),
                     Vec::new(),
+                    delete_rule,
+                    update_rule,
                 ),
             );
         }
         if let (Some(col), Some(ref_col)) = (column_name, ref_column) {
-            if let Some((_, _, cols)) = fk_map.get_mut(&name) {
+            if let Some((_, _, cols, _, _)) = fk_map.get_mut(&name) {
                 cols.push((col, ref_col));
             }
         }
@@ -1096,7 +1105,8 @@ pub async fn table_structure(
     let foreign_keys: Vec<Value> = fk_order
         .into_iter()
         .map(|name| {
-            let (ref_schema, ref_table, cols) = fk_map.remove(&name).unwrap_or_default();
+            let (ref_schema, ref_table, cols, delete_rule, update_rule) =
+                fk_map.remove(&name).unwrap_or_default();
             json!({
               "name": name,
               "referencedSchema": ref_schema,
@@ -1107,12 +1117,87 @@ pub async fn table_structure(
                   "column": c,
                   "referencedColumn": rc
                 }))
-                .collect::<Vec<Value>>()
+                .collect::<Vec<Value>>(),
+              "onDelete": delete_rule,
+              "onUpdate": update_rule
             })
         })
         .collect();
 
-    // 5. DDL statement via SHOW CREATE TABLE
+    // 5. Referencing foreign keys from other tables
+    let ref_fk_query = format!(
+        "SELECT k.CONSTRAINT_NAME, k.TABLE_SCHEMA, k.TABLE_NAME, k.COLUMN_NAME, k.REFERENCED_COLUMN_NAME,
+                rc.DELETE_RULE, rc.UPDATE_RULE
+         FROM information_schema.KEY_COLUMN_USAGE k
+         JOIN information_schema.REFERENTIAL_CONSTRAINTS rc
+           ON rc.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA
+          AND rc.CONSTRAINT_NAME = k.CONSTRAINT_NAME
+          AND rc.TABLE_NAME = k.TABLE_NAME
+         WHERE k.REFERENCED_TABLE_SCHEMA = '{db}' AND k.REFERENCED_TABLE_NAME = '{table}'
+           AND NOT (k.TABLE_SCHEMA = '{db}' AND k.TABLE_NAME = '{table}')
+         ORDER BY k.CONSTRAINT_NAME, k.ORDINAL_POSITION"
+    );
+    let ref_fk_rows: Vec<Row> = conn.query(&ref_fk_query).await.map_err(|e| e.to_string())?;
+
+    let mut ref_fk_map: HashMap<String, (String, String, Vec<(String, String)>, String, String)> = HashMap::new();
+    let mut ref_fk_order: Vec<String> = Vec::new();
+
+    for row in ref_fk_rows {
+        let constraint_name = opt_string(&row, 0);
+        let parent_schema = opt_string(&row, 1);
+        let parent_table = opt_string(&row, 2);
+        let parent_column = opt_string(&row, 3);
+        let ref_column = opt_string(&row, 4);
+        let delete_rule = opt_string(&row, 5).unwrap_or_default();
+        let update_rule = opt_string(&row, 6).unwrap_or_default();
+
+        let name = constraint_name.unwrap_or_default();
+        if name.is_empty() {
+            continue;
+        }
+        if !ref_fk_map.contains_key(&name) {
+            ref_fk_order.push(name.clone());
+            ref_fk_map.insert(
+                name.clone(),
+                (
+                    parent_schema.unwrap_or_default(),
+                    parent_table.unwrap_or_default(),
+                    Vec::new(),
+                    delete_rule,
+                    update_rule,
+                ),
+            );
+        }
+        if let (Some(col), Some(ref_col)) = (parent_column, ref_column) {
+            if let Some((_, _, cols, _, _)) = ref_fk_map.get_mut(&name) {
+                cols.push((col, ref_col));
+            }
+        }
+    }
+
+    let referencing_foreign_keys: Vec<Value> = ref_fk_order
+        .into_iter()
+        .map(|name| {
+            let (parent_schema, parent_table, cols, delete_rule, update_rule) =
+                ref_fk_map.remove(&name).unwrap_or_default();
+            json!({
+              "name": name,
+              "schema": parent_schema,
+              "table": parent_table,
+              "columns": cols
+                .iter()
+                .map(|(c, rc)| json!({
+                  "column": c,
+                  "referencedColumn": rc
+                }))
+                .collect::<Vec<Value>>(),
+              "onDelete": delete_rule,
+              "onUpdate": update_rule
+            })
+        })
+        .collect();
+
+    // 6. DDL statement via SHOW CREATE TABLE
     let create_query = format!("SHOW CREATE TABLE `{schema}`.`{table}`");
     let stmt_rows: Vec<Row> = conn.query(&create_query).await.map_err(|e| e.to_string())?;
     let statement: String = stmt_rows
@@ -1128,6 +1213,7 @@ pub async fn table_structure(
       "statement": statement,
       "columns": columns,
       "foreignKeys": foreign_keys,
+      "referencingForeignKeys": referencing_foreign_keys,
       "primaryKey": primary_key,
       "uniqueKeys": unique_keys,
       "indexes": indexes,

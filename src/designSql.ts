@@ -40,6 +40,17 @@ export interface DesignForeignKey {
   referencedSchema: string
   referencedTable: string
   columns: DesignForeignKeyColumn[]
+  onDelete?: string | null
+  onUpdate?: string | null
+}
+
+export interface DesignReferencingForeignKey {
+  name: string
+  schema: string
+  table: string
+  columns: DesignForeignKeyColumn[]
+  onDelete?: string | null
+  onUpdate?: string | null
 }
 
 export interface DesignIndex {
@@ -58,6 +69,7 @@ export interface TableDesign {
   primaryKeyName?: string | null
   uniqueKeys?: DesignUniqueKey[] | null
   foreignKeys?: DesignForeignKey[] | null
+  referencingForeignKeys?: DesignReferencingForeignKey[] | null
   indexes?: DesignIndex[] | null
   statement?: string
   [key: string]: unknown
@@ -117,13 +129,37 @@ function uniqueSql(key: DesignUniqueKey, driverType: string = 'mssql'): string {
   } (${key.columns.map((c) => quoteIdentifier(c, driverType)).join(', ')})`
 }
 
+function referentialActionSql(foreign: { onDelete?: string | null; onUpdate?: string | null }): string {
+  const parts: string[] = []
+  if (foreign.onDelete && foreign.onDelete !== 'NO ACTION' && foreign.onDelete !== 'RESTRICT') {
+    parts.push(`ON DELETE ${foreign.onDelete}`)
+  }
+  if (foreign.onUpdate && foreign.onUpdate !== 'NO ACTION' && foreign.onUpdate !== 'RESTRICT') {
+    parts.push(`ON UPDATE ${foreign.onUpdate}`)
+  }
+  return parts.length ? ` ${parts.join(' ')}` : ''
+}
+
 function foreignSql(_table: TableDesign, foreign: DesignForeignKey, driverType: string = 'mssql'): string {
   const columns = foreign.columns.map((item) => quoteIdentifier(item.column, driverType)).join(', ')
   const referenced = foreign.columns.map((item) => quoteIdentifier(item.referencedColumn, driverType)).join(', ')
   return `CONSTRAINT ${quoteIdentifier(foreign.name, driverType)} FOREIGN KEY (${columns}) REFERENCES ${quoteIdentifier(
     foreign.referencedSchema,
     driverType,
-  )}.${quoteIdentifier(foreign.referencedTable, driverType)} (${referenced})`
+  )}.${quoteIdentifier(foreign.referencedTable, driverType)} (${referenced})${referentialActionSql(foreign)}`
+}
+
+function referencingForeignSql(
+  design: TableDesign,
+  foreign: DesignReferencingForeignKey,
+  driverType: string = 'mssql',
+): string {
+  const columns = foreign.columns.map((item) => quoteIdentifier(item.column, driverType)).join(', ')
+  const referenced = foreign.columns.map((item) => quoteIdentifier(item.referencedColumn, driverType)).join(', ')
+  return `ALTER TABLE ${quoteIdentifier(foreign.schema, driverType)}.${quoteIdentifier(foreign.table, driverType)} ADD CONSTRAINT ${quoteIdentifier(
+    foreign.name,
+    driverType,
+  )} FOREIGN KEY (${columns}) REFERENCES ${tableName(design, driverType)} (${referenced})${referentialActionSql(foreign)};`
 }
 
 function indexSql(table: TableDesign, index: DesignIndex, driverType: string = 'mssql'): string {
@@ -362,6 +398,8 @@ export function generateRecreateTable(
   const tmpDesign: TableDesign = {
     ...design,
     table: tmpName,
+    foreignKeys: [],
+    uniqueKeys: [],
   }
   const fullOriginalTable = tableName(design, driver)
   const fullTmpTable = `${quoteIdentifier(design.schema, driver)}.${quoteIdentifier(tmpName, driver)}`
@@ -378,8 +416,15 @@ export function generateRecreateTable(
     }
   }
 
+  const referencingForeignKeys = original.referencingForeignKeys ?? []
   const hasIdentity = (design.columns ?? []).some((c) => c.isIdentity)
   const statements = ['BEGIN TRANSACTION;']
+
+  for (const foreign of referencingForeignKeys) {
+    statements.push(
+      `ALTER TABLE ${quoteIdentifier(foreign.schema, driver)}.${quoteIdentifier(foreign.table, driver)} DROP CONSTRAINT ${quoteIdentifier(foreign.name, driver)};`,
+    )
+  }
 
   statements.push(createTmpSql)
 
@@ -406,6 +451,18 @@ export function generateRecreateTable(
     statements.push(
       `EXEC sp_rename N'${design.schema.replace(/'/g, "''")}.${tmpName.replace(/'/g, "''")}', N'${design.table.replace(/'/g, "''")}', 'OBJECT';`,
     )
+  }
+
+  for (const key of design.uniqueKeys ?? []) {
+    statements.push(`ALTER TABLE ${fullOriginalTable} ADD ${uniqueSql(key, driver)};`)
+  }
+  for (const foreign of design.foreignKeys ?? []) {
+    if (foreign.referencedTable) {
+      statements.push(`ALTER TABLE ${fullOriginalTable} ADD ${foreignSql(design, foreign, driver)};`)
+    }
+  }
+  for (const foreign of referencingForeignKeys) {
+    statements.push(referencingForeignSql(design, foreign, driver))
   }
   statements.push('COMMIT TRANSACTION;')
 
