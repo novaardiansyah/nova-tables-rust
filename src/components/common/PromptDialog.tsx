@@ -1,5 +1,5 @@
 import { useEffect, useState, FormEvent } from 'react'
-import Icon from '@/components/common/Icon'
+import Icon, { Spinner } from '@/components/common/Icon'
 
 export interface PromptDialogProps {
   open: boolean
@@ -120,6 +120,7 @@ export default function PromptDialog({
             Cancel
           </button>
           <button type="submit" className="btn-primary" disabled={!value || busy}>
+            {busy ? <Spinner size={13} /> : null}
             {confirmLabel}
           </button>
         </div>

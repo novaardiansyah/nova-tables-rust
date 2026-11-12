@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { monaco } from '@/monaco'
-import Icon from '@/components/common/Icon'
+import Icon, { Spinner } from '@/components/common/Icon'
 
 export interface DeleteConfirmDialogProps {
   open: boolean
   changeCount: number
   sql?: string | null
-  onApply?: () => void
+  onApply?: () => void | Promise<void>
   onCopyQuery?: () => void
   onClose?: () => void
   onCancel?: () => void
@@ -24,15 +24,36 @@ export default function DeleteConfirmDialog({
   onDiscard,
 }: DeleteConfirmDialogProps) {
   const handleClose = onClose || onCancel || (() => {})
+  const busyRef = useRef(false)
+  const [internalBusy, setInternalBusy] = useState(false)
+
+  useEffect(() => {
+    if (!open) {
+      busyRef.current = false
+      setInternalBusy(false)
+    }
+  }, [open])
+
+  const handleApply = async () => {
+    if (busyRef.current) return
+    busyRef.current = true
+    setInternalBusy(true)
+    try {
+      await onApply?.()
+    } finally {
+      busyRef.current = false
+      setInternalBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (!open) return
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') handleClose()
+      if (event.key === 'Escape' && !internalBusy) handleClose()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, handleClose])
+  }, [open, handleClose, internalBusy])
 
   const [highlighted, setHighlighted] = useState<{ text: string; html: string | null }>({ text: '', html: null })
 
@@ -61,7 +82,7 @@ export default function DeleteConfirmDialog({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]"
       onClick={(event) => {
-        if (event.target === event.currentTarget) handleClose()
+        if (event.target === event.currentTarget && !internalBusy) handleClose()
       }}
     >
       <div
@@ -98,6 +119,7 @@ export default function DeleteConfirmDialog({
             type="button"
             className="btn-soft"
             onClick={handleClose}
+            disabled={internalBusy}
           >
             <Icon name="x" size={12} />
             Close
@@ -106,6 +128,7 @@ export default function DeleteConfirmDialog({
             type="button"
             className="btn-soft"
             onClick={onDiscard}
+            disabled={internalBusy}
           >
             <Icon name="trash" size={12} />
             Discard
@@ -114,6 +137,7 @@ export default function DeleteConfirmDialog({
             type="button"
             className="btn-soft"
             onClick={onCopyQuery}
+            disabled={internalBusy}
           >
             <Icon name="copy" size={12} />
             Copy
@@ -121,9 +145,10 @@ export default function DeleteConfirmDialog({
           <button
             type="button"
             className="btn-danger"
-            onClick={onApply}
+            onClick={handleApply}
+            disabled={internalBusy}
           >
-            <Icon name="trash" size={12} />
+            {internalBusy ? <Spinner size={12} /> : <Icon name="trash" size={12} />}
             Delete
           </button>
         </div>

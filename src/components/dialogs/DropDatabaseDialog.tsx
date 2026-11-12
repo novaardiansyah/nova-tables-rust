@@ -1,5 +1,5 @@
 import { useEffect, useState, FormEvent } from 'react'
-import Icon from '@/components/common/Icon'
+import Icon, { Spinner } from '@/components/common/Icon'
 import ConfirmDialog from '@/components/common/ConfirmDialog'
 
 export interface DropDatabaseDialogProps {
@@ -70,9 +70,12 @@ export default function DropDatabaseDialog({
         danger
         busy={busy}
         onCancel={() => setConfirmFinalOpen(false)}
-        onConfirm={() => {
-          setConfirmFinalOpen(false)
-          onConfirm(typed.trim())
+        onConfirm={async () => {
+          try {
+            await onConfirm(typed.trim())
+          } finally {
+            setConfirmFinalOpen(false)
+          }
         }}
       />
     )

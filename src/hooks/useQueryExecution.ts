@@ -325,11 +325,14 @@ export function useQueryExecution({
     }
   }, [activeQueryTab, activeSession, showBanner, updateTab, selectionRef, sqlRef])
 
-  const handleGuardConfirm = useCallback(() => {
+  const handleGuardConfirm = useCallback(async () => {
     const pending = runGuard
-    setRunGuard(null)
     if (!pending) return
-    execute(pending.sql, pending.tabId)
+    try {
+      await execute(pending.sql, pending.tabId)
+    } finally {
+      setRunGuard(null)
+    }
   }, [execute, runGuard])
 
   const handleChangeExecutionMode = useCallback(

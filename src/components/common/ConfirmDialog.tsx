@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import Icon from '@/components/common/Icon'
+import { useEffect, useRef, useState } from 'react'
+import Icon, { Spinner } from '@/components/common/Icon'
 
 export interface ConfirmDialogProps {
   open: boolean
@@ -12,7 +12,7 @@ export interface ConfirmDialogProps {
   busy?: boolean
   onCancel?: () => void
   onClose?: () => void
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
 }
 
 export default function ConfirmDialog({
@@ -29,15 +29,37 @@ export default function ConfirmDialog({
   onConfirm,
 }: ConfirmDialogProps) {
   const handleCancel = onCancel || onClose || (() => {})
+  const busyRef = useRef(false)
+  const [internalBusy, setInternalBusy] = useState(false)
+  const isBusy = Boolean(busy || internalBusy)
+
+  useEffect(() => {
+    if (!open) {
+      busyRef.current = false
+      setInternalBusy(false)
+    }
+  }, [open])
+
+  const handleConfirm = async () => {
+    if (isBusy || busyRef.current) return
+    busyRef.current = true
+    setInternalBusy(true)
+    try {
+      await onConfirm()
+    } finally {
+      busyRef.current = false
+      setInternalBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (!open) return
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') handleCancel()
+      if (event.key === 'Escape' && !isBusy) handleCancel()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, handleCancel])
+  }, [open, isBusy, handleCancel])
 
   if (!open) return null
 
@@ -45,7 +67,7 @@ export default function ConfirmDialog({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]"
       onClick={(event) => {
-        if (event.target === event.currentTarget && !busy) handleCancel()
+        if (event.target === event.currentTarget && !isBusy) handleCancel()
       }}
     >
       <div
@@ -82,15 +104,16 @@ export default function ConfirmDialog({
         </div>
 
         <div className="flex justify-end gap-2 border-t border-line px-5 py-3.5">
-          <button type="button" className="btn-soft" onClick={handleCancel} disabled={busy}>
+          <button type="button" className="btn-soft" onClick={handleCancel} disabled={isBusy}>
             Cancel
           </button>
           <button
             type="button"
             className={danger ? 'btn-danger' : 'btn-primary'}
-            onClick={onConfirm}
-            disabled={busy}
+            onClick={handleConfirm}
+            disabled={isBusy}
           >
+            {isBusy ? <Spinner size={12} /> : null}
             {confirmLabel}
           </button>
         </div>

@@ -5,11 +5,12 @@ import ConfirmDialog from '@/components/common/ConfirmDialog'
 export interface QueryGuardDialogProps {
   open: boolean
   sql?: string | null
+  busy?: boolean
   onCancel: () => void
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
 }
 
-export default function QueryGuardDialog({ open, sql, onCancel, onConfirm }: QueryGuardDialogProps) {
+export default function QueryGuardDialog({ open, sql, busy, onCancel, onConfirm }: QueryGuardDialogProps) {
   const text = String(sql || '').trim()
   const [highlighted, setHighlighted] = useState<{ text: string; html: string | null }>({ text: '', html: null })
 
@@ -40,6 +41,7 @@ export default function QueryGuardDialog({ open, sql, onCancel, onConfirm }: Que
       detail={text}
       detailHtml={highlighted.text === text ? highlighted.html : null}
       confirmLabel="Send"
+      busy={busy}
       onCancel={onCancel}
       onConfirm={onConfirm}
     />
