@@ -112,10 +112,13 @@ export default function TabBar({
                 setDragIndex(null)
                 setDragOverState(null)
               }}
-              className={`group relative flex min-w-0 max-w-[220px] shrink-0 items-center border-r border-line ${
-                isActive ? 'bg-base' : 'hover:bg-tint/[0.03]'
+              className={`group relative flex min-w-0 max-w-[220px] shrink-0 items-center border-r border-line bg-panel ${
+                isActive ? '' : 'hover:bg-elevated'
               } ${isDragging ? 'opacity-40' : ''}`}
             >
+              {isActive ? (
+                <span className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[2px] bg-accent" />
+              ) : null}
               {isOver && overPos === 'before' ? (
                 <div className="pointer-events-none absolute bottom-0 left-0 top-0 z-10 w-[2px] bg-accent" />
               ) : null}

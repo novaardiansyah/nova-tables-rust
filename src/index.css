@@ -348,13 +348,12 @@
   background: transparent;
 }
 
-.tab-strip::-webkit-scrollbar {
-  height: 4px;
+.tab-strip {
+  scrollbar-width: none;
 }
 
-.tab-strip::-webkit-scrollbar-thumb {
-  border: 0;
-  background-clip: border-box;
+.tab-strip::-webkit-scrollbar {
+  display: none;
 }
 
 .progress-track {
