@@ -36,6 +36,8 @@ export interface QueryColumnMeta {
 
 export interface ResultSetColumn {
   name: string
+  isIdentity?: boolean
+  isPrimaryKey?: boolean
 }
 
 export interface ResultSet {
@@ -278,7 +280,7 @@ export function isAutoIncrementPrimaryKey(
 
   if (columns) {
     const col = columns.find((c) => c.name.toLowerCase() === lower)
-    if (col && (col as any).isIdentity && (col as any).isPrimaryKey) return true
+    if (col && col.isIdentity && col.isPrimaryKey) return true
   }
 
   return false

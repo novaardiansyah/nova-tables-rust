@@ -383,6 +383,7 @@ export default function WorkspaceView({
               onCellChange={handleCellChange}
               onSetCellValue={handleSetCellValue}
               onNewRow={queryExecution.handleNewRow}
+              onDuplicateRow={queryExecution.handleDuplicateRow}
               onConfirmOpen={() => {
                 setEditConfirmTarget(null)
                 setEditConfirmOpen(true)

@@ -93,6 +93,7 @@ export interface ResultsPanelProps {
   onSetCellValue?: (row: number, columnName: string, value: unknown) => void
   onDeleteRows?: (rowsOrStart: number[] | number, maybeEnd?: number) => void
   onNewRow?: () => void
+  onDuplicateRow?: (rowIndex: number) => void
   onConfirmOpen?: () => void
   onDeleteConfirmOpen?: () => void
   onApplyFilter?: (conditions: FilterCondition[]) => void
@@ -125,6 +126,7 @@ export default function ResultsPanel({
   onSetCellValue,
   onDeleteRows,
   onNewRow,
+  onDuplicateRow,
   onConfirmOpen,
   onDeleteConfirmOpen,
   onApplyFilter,
@@ -460,6 +462,25 @@ export default function ResultsPanel({
       ],
     })
 
+    if (editable && onDuplicateRow && activeResultSet?.rows && activeResultSet.rows.length > 0) {
+      const targetRow =
+        menu.row !== undefined && menu.row !== null && menu.row >= 0 && menu.row < activeResultSet.rows.length
+          ? menu.row
+          : selectionBounds && selectionBounds.rowStart >= 0 && selectionBounds.rowStart < activeResultSet.rows.length
+            ? selectionBounds.rowStart
+            : null
+      if (targetRow !== null) {
+        items.push({
+          id: 'duplicate-row',
+          label: 'Duplicate Row',
+          onSelect: () => {
+            setEditMode(true)
+            onDuplicateRow(targetRow)
+          },
+        })
+      }
+    }
+
     if (editable && onNewRow) {
       items.push({
         id: 'new-row',
@@ -480,6 +501,7 @@ export default function ResultsPanel({
     editable,
     menu,
     onDeleteRows,
+    onDuplicateRow,
     onExport,
     onNewRow,
     selectionBounds,

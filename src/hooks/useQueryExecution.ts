@@ -12,6 +12,7 @@ import {
   editAllows,
   editSqlHeader,
   editTableFromSql,
+  isAutoIncrementPrimaryKey,
 } from '@/edits'
 import { isDesignDirty, getDesignSql } from '@/designSql'
 import { csvRecords, jsonRecords } from '@/resultFormats'
@@ -470,6 +471,66 @@ export function useQueryExecution({
     })
   }, [activeQueryTab, activeSession, tabResultSet, updateTab])
 
+  const handleDuplicateRow = useCallback(
+    (sourceRowIndex: number) => {
+      const target = activeQueryTab()
+      if (!target) return
+      const { connectionId, tab } = target
+      const current = activeSession()
+      if (!current) return
+      const resultSet = tabResultSet(tab)
+      if (!resultSet || !tab.editSource) return
+      const sourceRow = resultSet.rows[sourceRowIndex]
+      if (!sourceRow) return
+
+      const duplicatedRow = resultSet.columns.map((col, colIdx) => {
+        if (isAutoIncrementPrimaryKey(col.name, tab.editSource, resultSet.columns)) {
+          return null
+        }
+        const editKey = `${sourceRowIndex}:${col.name}`
+        if (tab.edits && editKey in tab.edits) {
+          return tab.edits[editKey].value
+        }
+        const val = sourceRow[colIdx]
+        return val !== undefined ? val : null
+      })
+
+      const nextRows = [duplicatedRow, ...resultSet.rows]
+      const nextResultSet = {
+        ...resultSet,
+        rows: nextRows,
+        rowCount: nextRows.length,
+      }
+      const nextResultSets = [...(tab.state.result?.resultSets || [])]
+      nextResultSets[tab.activeSet ?? 0] = nextResultSet
+
+      const shiftedEdits: Record<string, { value: unknown; original?: unknown }> = {}
+      for (const [key, edit] of Object.entries(tab.edits || {})) {
+        const [rStr, colName] = key.split(':')
+        const r = Number(rStr)
+        shiftedEdits[`${r + 1}:${colName}`] = edit
+      }
+
+      const shiftedDeletingRows = (tab.deletingRows || []).map((r) => r + 1)
+      const existingCreating = (tab.creatingRows || []).map((r) => r + 1)
+      const nextCreatingRows = [0, ...existingCreating]
+
+      updateTab(connectionId, tab.id, {
+        state: {
+          ...tab.state,
+          result: {
+            ...tab.state.result!,
+            resultSets: nextResultSets,
+          },
+        },
+        edits: shiftedEdits,
+        deletingRows: shiftedDeletingRows,
+        creatingRows: nextCreatingRows,
+      })
+    },
+    [activeQueryTab, activeSession, tabResultSet, updateTab],
+  )
+
   const handleRunUpdate = useCallback(
     async (sql: string) => {
       if (!sql || !sql.trim()) return false
@@ -831,6 +892,7 @@ export function useQueryExecution({
     handleSetCellValue,
     handleDeleteRows,
     handleNewRow,
+    handleDuplicateRow,
     handleRunUpdate,
     handleApplyFilter,
     handleResetFilter,
