@@ -135,6 +135,8 @@ export interface ResultGridProps {
   creatingRows?: number[]
   editSource?: EditSource | null
   onDeleteRows?: (rowsOrStart: number[] | number, maybeEnd?: number) => void
+  onNewRow?: () => void
+  onDuplicateRow?: (rowIndex: number) => void
 }
 
 export default function ResultGrid({
@@ -159,6 +161,8 @@ export default function ResultGrid({
   creatingRows = [],
   editSource = null,
   onDeleteRows,
+  onNewRow,
+  onDuplicateRow,
   driverType,
 }: ResultGridProps) {
   const [sort, setSort] = useState<{ index: number; direction: 'asc' | 'desc' } | null>(null)
@@ -448,9 +452,7 @@ export default function ResultGrid({
   }, [endFrameDrag, frameDragging, handleFrameMove])
 
   useEffect(() => {
-    if (!bounds || active || !onDeleteRows) return
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Delete') return
       const target = event.target as HTMLElement | null
       if (
         target?.tagName === 'INPUT' ||
@@ -461,16 +463,38 @@ export default function ResultGrid({
       ) {
         return
       }
-      event.preventDefault()
-      const rowIndexes: number[] = []
-      for (let r = bounds.rowStart; r <= bounds.rowEnd; r += 1) {
-        rowIndexes.push(r)
+
+      if (event.key === 'Delete') {
+        if (!bounds || active || !onDeleteRows) return
+        event.preventDefault()
+        const rowIndexes: number[] = []
+        for (let r = bounds.rowStart; r <= bounds.rowEnd; r += 1) {
+          rowIndexes.push(r)
+        }
+        onDeleteRows(rowIndexes)
+        return
       }
-      onDeleteRows(rowIndexes)
+
+      if (!bounds || !(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return
+
+      const key = event.key.toLowerCase()
+      if (key === 'n' && onNewRow) {
+        event.preventDefault()
+        event.stopPropagation()
+        onStartEdit?.()
+        onNewRow()
+        return
+      }
+      if (key === 'd' && onDuplicateRow && bounds.rowStart < rows.length) {
+        event.preventDefault()
+        event.stopPropagation()
+        onStartEdit?.()
+        onDuplicateRow(bounds.rowStart)
+      }
     }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [active, bounds, onDeleteRows])
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [active, bounds, onDeleteRows, onDuplicateRow, onNewRow, onStartEdit, rows.length])
 
   const commitEdit = (value: unknown) => {
     if (!active || !onCellChange) return

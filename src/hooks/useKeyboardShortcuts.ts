@@ -36,6 +36,8 @@ export function useKeyboardShortcuts({
 }: UseKeyboardShortcutsProps) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return
+
       if (event.key === 'F1') {
         event.preventDefault()
         setShortcutsOpen((value) => !value)

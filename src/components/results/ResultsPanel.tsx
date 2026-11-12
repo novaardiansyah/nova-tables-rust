@@ -833,6 +833,8 @@ export default function ResultsPanel({
                   creatingRows={creatingRows}
                   editSource={editSource}
                   onDeleteRows={deletable ? onDeleteRows : undefined}
+                  onNewRow={editable ? onNewRow : undefined}
+                  onDuplicateRow={editable ? onDuplicateRow : undefined}
                 />
               </div>
             </div>
