@@ -114,8 +114,8 @@ export default function ShortcutPanel({ open, onClose, session }: ShortcutPanelP
 
           <div className="mt-1 space-y-2 border-t border-line pt-3">
             {session ? (
-              <p className="flex items-start gap-1.5 text-[length:var(--app-text-11)] text-text-faint">
-                <Icon name="server" size={10} className="mt-0.5 shrink-0" />
+              <p className="flex items-center gap-1.5 text-[length:var(--app-text-11)] text-text-faint">
+                <Icon name="server" size={10} className="shrink-0" />
                 <span className="truncate">
                   {[
                     session.serverName,
