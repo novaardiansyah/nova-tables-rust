@@ -52,6 +52,7 @@ export interface SidebarProps {
   onActivateSession: (connectionId: string) => void
   onCloseSession: (connectionId: string) => void
   onBrowseTable: (table: SidebarTable) => void
+  onNewRecord: (table: SidebarTable) => void
   onCopyObjectName: (object: { schema: string; name: string }) => void
   onScriptTable: (table: SidebarTable) => void
   onGenerateErd?: (table: SidebarTable) => void
@@ -91,6 +92,10 @@ type MenuState =
   | { x: number; y: number; kind: 'modules-header'; item: SidebarSessionItem }
   | null
 
+function sortMenuItems(items: ContextMenuItem[]): ContextMenuItem[] {
+  return [...items].sort((a, b) => a.label.localeCompare(b.label))
+}
+
 export default function Sidebar({
   sessions,
   activeConnectionId,
@@ -99,6 +104,7 @@ export default function Sidebar({
   onActivateSession,
   onCloseSession,
   onBrowseTable,
+  onNewRecord,
   onCopyObjectName,
   onScriptTable,
   onRefreshDatabases,
@@ -558,7 +564,7 @@ export default function Sidebar({
     <ContextMenu
       x={menu.x}
       y={menu.y}
-      items={
+      items={sortMenuItems(
         menu.kind === 'connection'
           ? ([
               {
@@ -643,6 +649,11 @@ export default function Sidebar({
                 onSelect: () => onBrowseTable(menu.table),
               },
               {
+                id: 'new-record',
+                label: 'New Record',
+                onSelect: () => onNewRecord(menu.table),
+              },
+              {
                 id: 'copy-object-name',
                 label: 'Copy Object Name',
                 onSelect: () => onCopyObjectName(menu.table),
@@ -695,7 +706,7 @@ export default function Sidebar({
                 onSelect: () => onDropTable(menu.table),
               },
             ] as ContextMenuItem[])
-      }
+      )}
       onClose={() => setMenu(null)}
     />
   ) : null

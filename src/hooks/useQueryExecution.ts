@@ -427,49 +427,52 @@ export function useQueryExecution({
     [activeQueryTab, updateTab, tabResultSet],
   )
 
-  const handleNewRow = useCallback(() => {
-    const target = activeQueryTab()
-    if (!target) return
-    const { connectionId, tab } = target
-    const current = activeSession()
-    if (!current) return
-    const resultSet = tabResultSet(tab)
-    if (!resultSet || !tab.editSource) return
+  const handleNewRow = useCallback(
+    (tabId?: string) => {
+      const current = activeSession()
+      if (!current) return
+      updateTab(current.connectionId, tabId ?? current.activeTabId, (tab) => {
+        const result = tab.state.result
+        const resultSet = tabResultSet(tab)
+        if (!result || !resultSet || !tab.editSource) return {}
 
-    const emptyRow = new Array(resultSet.columns.length).fill(null)
-    const nextRows = [emptyRow, ...resultSet.rows]
-    const nextResultSet = {
-      ...resultSet,
-      rows: nextRows,
-      rowCount: nextRows.length,
-    }
-    const nextResultSets = [...(tab.state.result?.resultSets || [])]
-    nextResultSets[tab.activeSet ?? 0] = nextResultSet
+        const emptyRow = new Array(resultSet.columns.length).fill(null)
+        const nextRows = [emptyRow, ...resultSet.rows]
+        const nextResultSet = {
+          ...resultSet,
+          rows: nextRows,
+          rowCount: nextRows.length,
+        }
+        const nextResultSets = [...(result.resultSets || [])]
+        nextResultSets[tab.activeSet ?? 0] = nextResultSet
 
-    const shiftedEdits: Record<string, { value: unknown; original?: unknown }> = {}
-    for (const [key, edit] of Object.entries(tab.edits || {})) {
-      const [rStr, colName] = key.split(':')
-      const r = Number(rStr)
-      shiftedEdits[`${r + 1}:${colName}`] = edit
-    }
+        const shiftedEdits: Record<string, { value: unknown; original?: unknown }> = {}
+        for (const [key, edit] of Object.entries(tab.edits || {})) {
+          const [rStr, colName] = key.split(':')
+          const r = Number(rStr)
+          shiftedEdits[`${r + 1}:${colName}`] = edit
+        }
 
-    const shiftedDeletingRows = (tab.deletingRows || []).map((r) => r + 1)
-    const existingCreating = (tab.creatingRows || []).map((r) => r + 1)
-    const nextCreatingRows = [0, ...existingCreating]
+        const shiftedDeletingRows = (tab.deletingRows || []).map((r) => r + 1)
+        const existingCreating = (tab.creatingRows || []).map((r) => r + 1)
+        const nextCreatingRows = [0, ...existingCreating]
 
-    updateTab(connectionId, tab.id, {
-      state: {
-        ...tab.state,
-        result: {
-          ...tab.state.result!,
-          resultSets: nextResultSets,
-        },
-      },
-      edits: shiftedEdits,
-      deletingRows: shiftedDeletingRows,
-      creatingRows: nextCreatingRows,
-    })
-  }, [activeQueryTab, activeSession, tabResultSet, updateTab])
+        return {
+          state: {
+            ...tab.state,
+            result: {
+              ...result,
+              resultSets: nextResultSets,
+            },
+          },
+          edits: shiftedEdits,
+          deletingRows: shiftedDeletingRows,
+          creatingRows: nextCreatingRows,
+        }
+      })
+    },
+    [activeSession, tabResultSet, updateTab],
+  )
 
   const handleDuplicateRow = useCallback(
     (sourceRowIndex: number) => {
@@ -532,7 +535,7 @@ export function useQueryExecution({
   )
 
   const handleRunUpdate = useCallback(
-    async (sql: string) => {
+    async (sql: string, options?: { refresh?: boolean }) => {
       if (!sql || !sql.trim()) return false
       const current = activeSession()
       if (!current || !current.activeDatabase) return false
@@ -545,8 +548,21 @@ export function useQueryExecution({
         })
         const tab = current.tabs.find((item) => item.id === current.activeTabId)
         if (tab) {
-          updateTab(current.connectionId, tab.id, { edits: {}, deletingRows: [], creatingRows: [] })
-          if (tab.lastExecutedSql) {
+          const patch: Partial<SessionTab> = { edits: {}, deletingRows: [], creatingRows: [] }
+          const creatingRows = tab.creatingRows || []
+          const resultSets = tab.state.result?.resultSets
+          if (options?.refresh === false && creatingRows.length > 0 && resultSets) {
+            const activeSet = resultSets[tab.activeSet ?? 0]
+            if (activeSet) {
+              const creatingSet = new Set(creatingRows)
+              const rows = activeSet.rows.filter((_, index) => !creatingSet.has(index))
+              const nextResultSets = [...resultSets]
+              nextResultSets[tab.activeSet ?? 0] = { ...activeSet, rows, rowCount: rows.length }
+              patch.state = { ...tab.state, result: { ...tab.state.result!, resultSets: nextResultSets } }
+            }
+          }
+          updateTab(current.connectionId, tab.id, patch)
+          if (options?.refresh !== false && tab.lastExecutedSql) {
             execute(tab.lastExecutedSql, tab.id)
           }
         }
@@ -652,12 +668,13 @@ export function useQueryExecution({
     } catch {
       sql = ''
     }
-    const ok = await handleRunUpdate(sql)
+    const ok = await handleRunUpdate(sql, { refresh: false })
     if (!ok) return
     setEditConfirmOpen(false)
     setEditConfirmTarget(null)
     if (target?.type === 'switch-tab' && target.tabId) {
       const next = current.tabs.find((item) => item.id === target.tabId)
+      if (tab.lastExecutedSql) execute(tab.lastExecutedSql, tab.id)
       if (next) {
         patchSession(current.connectionId, { activeTabId: target.tabId })
         seedEditor(next.sql)
@@ -667,6 +684,8 @@ export function useQueryExecution({
     } else if (target?.type === 'run') {
       const runSql = target.sql ?? ''
       if (runSql.trim()) runWithGuard(runSql, current.activeTabId)
+    } else if (tab.lastExecutedSql) {
+      execute(tab.lastExecutedSql, tab.id)
     }
   }, [
     activeSession,
@@ -678,6 +697,7 @@ export function useQueryExecution({
     runWithGuard,
     tabResultSet,
     updateTab,
+    execute,
     loadTables,
     loadColumns,
     reloadDesign,

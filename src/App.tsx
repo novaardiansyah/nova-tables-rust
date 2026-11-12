@@ -233,6 +233,7 @@ export default function App() {
     selectionRef,
     setSessions,
     tabIdRef,
+    onNewRow: queryExecution.handleNewRow,
   })
 
   reloadDesignRef.current = tableBrowser.reloadDesign

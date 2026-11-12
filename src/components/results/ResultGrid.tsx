@@ -267,7 +267,7 @@ export default function ResultGrid({
     return editableColumns.has(column.name)
   }
 
-  const prevCreatingRowsLengthRef = useRef(creatingRows.length)
+  const prevCreatingRowsLengthRef = useRef(0)
   useEffect(() => {
     if (creatingRows.length > prevCreatingRowsLengthRef.current) {
       const firstCol = columns.findIndex((_, idx) => columnEditable(idx, 0))
@@ -561,7 +561,6 @@ export default function ResultGrid({
                   <button
                     type="button"
                     onClick={() => handleSort(index)}
-                    title={`Sort by ${column.name}`}
                     className={`group/sort flex w-full items-center gap-1.5 px-3 py-1.5 hover:text-text ${
                       numericColumns[index] ? 'justify-end' : ''
                     }`}

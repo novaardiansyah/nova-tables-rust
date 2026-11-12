@@ -97,6 +97,7 @@ export default function WorkspaceView({
     handleSelectModule,
     handleOpenRelation,
     handleBrowseTable,
+    handleNewRecord,
     handleCopyObjectName,
     handleScriptTable,
     handleOpenModule,
@@ -225,6 +226,7 @@ export default function WorkspaceView({
         onCloseSession={closeSession}
         onReorderSessions={handleReorderSessions}
         onBrowseTable={handleBrowseTable}
+        onNewRecord={handleNewRecord}
         onCopyObjectName={handleCopyObjectName}
         onScriptTable={handleScriptTable}
         onGenerateErd={handleGenerateErd}

@@ -21,6 +21,7 @@ export interface UseTableBrowserProps {
   selectionRef: React.MutableRefObject<string>
   setSessions: React.Dispatch<React.SetStateAction<Record<string, SessionData>>>
   tabIdRef: React.MutableRefObject<number>
+  onNewRow: (tabId?: string) => void
 }
 
 export function useTableBrowser({
@@ -36,6 +37,7 @@ export function useTableBrowser({
   selectionRef,
   setSessions,
   tabIdRef,
+  onNewRow,
 }: UseTableBrowserProps) {
   const handleSelectTable = useCallback(
     (key: string) => {
@@ -110,6 +112,66 @@ export function useTableBrowser({
       loadRelations(tabId, table)
     },
     [activeSession, execute, loadRelations, openTab, patchSession],
+  )
+
+  const handleNewRecord = useCallback(
+    async (table: SidebarTable) => {
+      const current = activeSession()
+      if (!current) return
+      if (!current.activeDatabase) {
+        showBanner('warn', 'Select a database before creating a new record.')
+        return
+      }
+      const primaryKey = table.primaryKey
+      if (!Array.isArray(primaryKey) || primaryKey.length === 0) {
+        showBanner('warn', `${table.schema}.${table.name} has no primary key, so new records cannot be edited here.`)
+        return
+      }
+      try {
+        const summaries = await api.listColumns(current.connectionId, current.activeDatabase)
+        const summary = summaries.find(
+          (item) => item.schema === table.schema && item.name === table.name,
+        )
+        if (!summary || summary.columns.length === 0) {
+          showBanner('warn', `No columns found for ${table.schema}.${table.name}.`)
+          return
+        }
+        const driverType = current.connection?.driverType ?? null
+        const sql = browseSql(table, driverType)
+        const editSource = buildEditSource(table, sql, driverType)
+        const tabId = openTab(current.connectionId, table.name, sql, editSource)
+        patchSession(current.connectionId, { selectedTable: `${table.schema}.${table.name}` })
+        updateTab(current.connectionId, tabId, {
+          state: {
+            status: 'success',
+            result: {
+              ok: true,
+              resultSets: [
+                {
+                  columns: summary.columns.map((name) => ({ name })),
+                  rows: [],
+                  rowCount: 0,
+                },
+              ],
+              messages: [],
+              rowsAffected: [],
+              elapsedMs: 0,
+            },
+            error: null,
+          },
+          activeSet: 0,
+          relations: [],
+          edits: {},
+          deletingRows: [],
+          creatingRows: [],
+          lastExecutedSql: sql,
+        })
+        onNewRow(tabId)
+      } catch (error: any) {
+        showBanner('error', error.message)
+      }
+    },
+    [activeSession, onNewRow, openTab, patchSession, showBanner, updateTab],
   )
 
   const handleCopyObjectName = useCallback(
@@ -575,6 +637,7 @@ export function useTableBrowser({
     loadRelations,
     handleOpenRelation,
     handleBrowseTable,
+    handleNewRecord,
     handleCopyObjectName,
     handleScriptTable,
     handleOpenModule,

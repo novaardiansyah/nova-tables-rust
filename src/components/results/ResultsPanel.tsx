@@ -147,7 +147,7 @@ export default function ResultsPanel({
   const activeResultSet = resultSets[activeIndex]
   const rowsAffected = (result?.rowsAffected ?? []).reduce((total, count) => total + count, 0)
   const [selection, setSelection] = useState<GridSelection | null>(null)
-  const [editMode, setEditMode] = useState(false)
+  const [editMode, setEditMode] = useState(creatingRows.length > 0)
   const [view, setView] = useState<'results' | 'messages' | 'plan'>('results')
   const [menu, setMenu] = useState<{ x: number; y: number; column: ResultColumn | null; columnIndex: number; row: number } | null>(null)
   const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number; column: ResultColumn } | null>(null)
@@ -228,9 +228,15 @@ export default function ResultsPanel({
     if (executionPlan) setView('plan')
   }, [executionPlan])
 
+  const initialResultRef = useRef(result)
+  const initialEditSourceRef = useRef(editSource)
   useEffect(() => {
+    if (initialResultRef.current === result && initialEditSourceRef.current === editSource) return
+    initialResultRef.current = result
+    initialEditSourceRef.current = editSource
+    if (creatingRows.length > 0) return
     setEditMode(false)
-  }, [result, editSource])
+  }, [result, editSource, creatingRows.length])
 
   const selectionBounds = useMemo(() => {
     if (!selection || !activeResultSet) return null
