@@ -153,7 +153,7 @@ export default function ResultsPanel({
   const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number; column: ResultColumn } | null>(null)
   const [filterDialogOpen, setFilterDialogOpen] = useState(false)
   const [savedConditions, setSavedConditions] = useState<FilterCondition[] | null>(null)
-  const [exportMenu, setExportMenu] = useState<{ x: number; y: number } | null>(null)
+  const [actionsMenu, setActionsMenu] = useState<{ x: number; y: number } | null>(null)
   const [inspectTarget, setInspectTarget] = useState<InspectorTarget | null>(null)
 
   const columnNames = useMemo(
@@ -305,7 +305,7 @@ export default function ResultsPanel({
   const handleExportAll = useCallback(
     (format: 'csv' | 'json') => {
       if (!activeResultSet || !onExport) return
-      setExportMenu(null)
+      setActionsMenu(null)
       onExport({
         format,
         filename: tabTitle || 'query_results',
@@ -519,6 +519,80 @@ export default function ResultsPanel({
     timezone,
   ])
 
+  const actionMenuItems = useMemo<ContextMenuItem[]>(() => {
+    const items: ContextMenuItem[] = []
+
+    const canExport =
+      status === 'success' &&
+      Boolean(activeResultSet?.rows && activeResultSet.rows.length > 0) &&
+      view !== 'messages'
+    if (canExport) {
+      items.push({
+        id: 'export',
+        label: 'Export',
+        children: [
+          {
+            id: 'export-csv',
+            label: 'Export CSV (.csv)',
+            onSelect: () => handleExportAll('csv'),
+          },
+          {
+            id: 'export-json',
+            label: 'Export JSON (.json)',
+            onSelect: () => handleExportAll('json'),
+          },
+        ],
+      })
+    }
+
+    if (canFilter) {
+      items.push({
+        id: 'filter',
+        label: 'Filter',
+        onSelect: () => setFilterDialogOpen(true),
+      })
+    }
+
+    if (onGenerateErd) {
+      items.push({
+        id: 'generate-erd',
+        label: 'Generate ERD',
+        onSelect: onGenerateErd,
+      })
+    }
+
+    const canStructure =
+      status === 'success' &&
+      resultSets.length <= 1 &&
+      editSource?.tables?.length === 1 &&
+      Boolean(onOpenStructure)
+    if (canStructure) {
+      items.push({
+        id: 'structure',
+        label: 'Open Structure',
+        onSelect: () => {
+          const source = editSource?.tables[0]
+          if (source && onOpenStructure) {
+            onOpenStructure({ schema: source.schema, name: source.table })
+          }
+        },
+      })
+    }
+
+    items.sort((a, b) => a.label.localeCompare(b.label))
+    return items
+  }, [
+    activeResultSet?.rows,
+    canFilter,
+    editSource?.tables,
+    handleExportAll,
+    onGenerateErd,
+    onOpenStructure,
+    resultSets.length,
+    status,
+    view,
+  ])
+
   return (
     <section className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto_minmax(0,1fr)] bg-surface">
       {status === 'running' ? (
@@ -600,20 +674,6 @@ export default function ResultsPanel({
           </button>
         ) : null}
 
-        {status === 'success' && resultSets.length <= 1 && editSource?.tables?.length === 1 && onOpenStructure ? (
-          <button
-            type="button"
-            onClick={() => {
-              const source = editSource.tables[0]
-              onOpenStructure({ schema: source.schema, name: source.table })
-            }}
-            className="flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[length:var(--app-text-11)] text-text-muted transition-colors hover:bg-tint/[0.03] hover:text-text"
-          >
-            <Icon name="table" size={12} />
-            Structure
-          </button>
-        ) : null}
-
         {executionPlan ? (
           <button
             type="button"
@@ -626,31 +686,6 @@ export default function ResultsPanel({
           >
             <Icon name="plan" size={12} className="text-accent" />
             Execution Plan
-          </button>
-        ) : null}
-
-        {onGenerateErd ? (
-          <button
-            type="button"
-            onClick={onGenerateErd}
-            className="flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[length:var(--app-text-11)] text-text-muted transition-colors hover:bg-tint/[0.03] hover:text-text"
-          >
-            <Icon name="er-diagram" size={12} />
-            Generate ERD
-          </button>
-        ) : null}
-
-        {status === 'success' && activeResultSet?.rows && activeResultSet.rows.length > 0 && view !== 'messages' ? (
-          <button
-            type="button"
-            onClick={(event) => {
-              const rect = event.currentTarget.getBoundingClientRect()
-              setExportMenu({ x: rect.left, y: rect.bottom + 4 })
-            }}
-            className="flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[length:var(--app-text-11)] text-text-muted transition-colors hover:bg-tint/[0.03] hover:text-text"
-          >
-            <Icon name="download" size={11} />
-            Export
           </button>
         ) : null}
 
@@ -707,20 +742,24 @@ export default function ResultsPanel({
           {status === 'error' && error?.code ? (
             <span className="font-mono text-[length:var(--app-text-10)] text-text-faint">{error.code}</span>
           ) : null}
-          {canFilter ? (
+          {actionMenuItems.length > 0 ? (
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => setFilterDialogOpen(true)}
-                title={hasActiveFilter ? `${activeFilterCount} active filter${activeFilterCount > 1 ? 's' : ''}` : 'Filter data'}
+                onClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect()
+                  setActionsMenu({ x: rect.right - 188, y: rect.bottom + 4 })
+                }}
                 className={`flex h-6 shrink-0 items-center gap-1.5 rounded px-2 text-[length:var(--app-text-11)] transition-colors ${
-                  hasActiveFilter
+                  actionsMenu
+                    ? 'bg-tint/[0.06] text-text-strong'
+                    : hasActiveFilter
                     ? 'bg-accent/15 font-medium text-accent hover:bg-accent/25'
                     : 'text-text-muted hover:bg-tint/[0.03] hover:text-text'
                 }`}
               >
-                <Icon name="filter" size={11} />
-                <span>Filter</span>
+                <Icon name="more-horizontal" size={11} />
+                <span>Actions</span>
                 {hasActiveFilter ? (
                   <span className="rounded-full bg-accent/20 px-1.5 text-[length:var(--app-text-9)] font-semibold text-accent">
                     {activeFilterCount}
@@ -805,23 +844,12 @@ export default function ResultsPanel({
         <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />
       ) : null}
 
-      {exportMenu ? (
+      {actionsMenu ? (
         <ContextMenu
-          x={exportMenu.x}
-          y={exportMenu.y}
-          items={[
-            {
-              id: 'export-csv',
-              label: 'Export CSV (.csv)',
-              onSelect: () => handleExportAll('csv'),
-            },
-            {
-              id: 'export-json',
-              label: 'Export JSON (.json)',
-              onSelect: () => handleExportAll('json'),
-            },
-          ]}
-          onClose={() => setExportMenu(null)}
+          x={actionsMenu.x}
+          y={actionsMenu.y}
+          items={actionMenuItems}
+          onClose={() => setActionsMenu(null)}
         />
       ) : null}
 

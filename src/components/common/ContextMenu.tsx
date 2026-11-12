@@ -28,8 +28,8 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
     if (!menu) return
     const { width, height } = menu.getBoundingClientRect()
     setPosition({
-      left: Math.min(x, document.documentElement.clientWidth - width - EDGE),
-      top: Math.min(y, document.documentElement.clientHeight - height - EDGE),
+      left: Math.max(EDGE, Math.min(x, document.documentElement.clientWidth - width - EDGE)),
+      top: Math.max(EDGE, Math.min(y, document.documentElement.clientHeight - height - EDGE)),
     })
   }, [x, y])
 
