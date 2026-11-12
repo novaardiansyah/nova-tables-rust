@@ -584,9 +584,9 @@ export default function ResultGrid({
                   onMouseEnter={() => handleRowHeaderMouseEnter(origIndex)}
                   className={`sticky left-0 z-10 cursor-pointer border-b border-r border-line px-2 py-[5px] text-right font-mono text-[length:calc(var(--grid-font-size)-2px)] text-text-faint group-hover:bg-row-hover ${
                     deleteMode && deletingRows.includes(origIndex)
-                      ? 'bg-danger/[0.10]'
+                      ? 'bg-danger/30'
                       : rowSelected(origIndex)
-                        ? 'bg-tint/[0.04]'
+                        ? 'bg-elevated'
                         : 'bg-surface'
                   }`}
                 >
