@@ -91,6 +91,12 @@ const ICONS: Record<string, React.ReactNode> = {
       <path d="M6 6l12 12" />
     </>
   ),
+  close: (
+    <>
+      <path d="M18 6L6 18" />
+      <path d="M6 6l12 12" />
+    </>
+  ),
   check: <path d="M4.5 12.5l5 5 10-11" />,
   'more-horizontal': (
     <>

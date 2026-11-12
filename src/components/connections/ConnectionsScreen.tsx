@@ -84,6 +84,7 @@ export interface ConnectionsScreenProps {
   currentUser?: AuthUser | null
   onLogout?: () => void
   loading?: boolean
+  onCancelConnection?: (connection: ConnectionItem) => void
 }
 
 export default function ConnectionsScreen({
@@ -110,6 +111,7 @@ export default function ConnectionsScreen({
   onReloadConnections,
   onNotify,
   onTestConnection,
+  onCancelConnection,
 }: ConnectionsScreenProps) {
   const [openFolders, setOpenFolders] = useState<Set<string>>(() => new Set())
   const [prompt, setPrompt] = useState<PromptState>(null)
@@ -677,7 +679,8 @@ export default function ConnectionsScreen({
       key={connection.id}
       connection={connection}
       depth={depth}
-      connectingId={connectingId || testingConnectionId}
+      connectingId={connectingId}
+      testingId={testingConnectionId}
       openIds={openIds}
       isLastConnected={connection.id === effectiveLastConnectedId}
       selectedConnectionIds={selectedConnectionIds}
@@ -693,6 +696,7 @@ export default function ConnectionsScreen({
       onDragEnd={handleDragEnd}
       onRowDragOver={handleRowDragOver}
       onRowDrop={handleRowDrop}
+      onCancelConnect={onCancelConnection}
     />
   )
 
@@ -878,26 +882,43 @@ export default function ConnectionsScreen({
                       </div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="btn-primary shrink-0"
-                    disabled={connectingId === lastConnection.id || testingConnectionId === lastConnection.id}
-                    onClick={() => onOpen(lastConnection)}
-                    title={
-                      openIds.includes(lastConnection.id)
-                        ? `Switch to ${lastConnection.name}`
-                        : `Quick connect to ${lastConnection.name}`
-                    }
-                  >
-                    {connectingId === lastConnection.id || testingConnectionId === lastConnection.id ? (
-                      <Spinner size={13} />
-                    ) : openIds.includes(lastConnection.id) ? (
-                      <Icon name="chevron-right" size={13} />
-                    ) : (
-                      <Icon name="play" size={13} />
-                    )}
-                    {openIds.includes(lastConnection.id) ? 'Open session' : 'Quick Connect'}
-                  </button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {connectingId === lastConnection.id ? (
+                      <button
+                        type="button"
+                        className="btn-soft text-danger hover:bg-danger/10 hover:text-danger"
+                        onClick={() => onCancelConnection?.(lastConnection)}
+                        title={`Cancel connection to ${lastConnection.name}`}
+                      >
+                        <Icon name="x" size={13} />
+                        Cancel
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      disabled={connectingId === lastConnection.id || testingConnectionId === lastConnection.id}
+                      onClick={() => onOpen(lastConnection)}
+                      title={
+                        openIds.includes(lastConnection.id)
+                          ? `Switch to ${lastConnection.name}`
+                          : `Quick connect to ${lastConnection.name}`
+                      }
+                    >
+                      {testingConnectionId === lastConnection.id || connectingId === lastConnection.id ? (
+                        <Spinner size={13} />
+                      ) : openIds.includes(lastConnection.id) ? (
+                        <Icon name="chevron-right" size={13} />
+                      ) : (
+                        <Icon name="play" size={13} />
+                      )}
+                      {connectingId === lastConnection.id
+                        ? 'Connecting…'
+                        : openIds.includes(lastConnection.id)
+                          ? 'Open session'
+                          : 'Quick Connect'}
+                    </button>
+                  </div>
                 </div>
               ) : null}
 

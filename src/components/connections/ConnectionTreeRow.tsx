@@ -55,6 +55,7 @@ export interface ConnectionRowProps {
   connection: ConnectionItem
   depth: number
   connectingId?: string | null
+  testingId?: string | null
   openIds: string[]
   isLastConnected?: boolean
   selectedConnectionIds: Set<string>
@@ -70,12 +71,14 @@ export interface ConnectionRowProps {
   onDragEnd: (event: DragEvent<HTMLElement>) => void
   onRowDragOver: (event: DragEvent<HTMLDivElement>, kind: 'connection', item: ConnectionItem) => void
   onRowDrop: (event: DragEvent<HTMLDivElement>, kind: 'connection', item: ConnectionItem) => void
+  onCancelConnect?: (connection: ConnectionItem) => void
 }
 
 export function ConnectionRow({
   connection,
   depth,
   connectingId,
+  testingId,
   openIds,
   isLastConnected = false,
   selectedConnectionIds,
@@ -91,8 +94,10 @@ export function ConnectionRow({
   onDragEnd,
   onRowDragOver,
   onRowDrop,
+  onCancelConnect,
 }: ConnectionRowProps) {
   const isConnecting = connectingId === connection.id
+  const isTesting = testingId === connection.id
   const isOpen = openIds.includes(connection.id)
   const isSelected = selectedConnectionIds.has(connection.id)
   const isDragged = drag?.kind === 'connection' && (drag.ids?.includes(connection.id) || drag.id === connection.id)
@@ -129,7 +134,7 @@ export function ConnectionRow({
         />
         <button
           type="button"
-          disabled={isConnecting}
+          disabled={isConnecting || isTesting}
           onClick={(event) => {
             if (onModifierClick(event, 'connection', connection.id)) return
             onOpen(connection)
@@ -141,7 +146,7 @@ export function ConnectionRow({
               : `Connect to ${connection.name} (${connection.host}:${connection.port})`
           }
         >
-          {isConnecting ? (
+          {isConnecting || isTesting ? (
             <Spinner size={12} className="shrink-0 text-accent" />
           ) : (
             <span
@@ -199,19 +204,35 @@ export function ConnectionRow({
           </span>
         </button>
 
-        <button
-          type="button"
-          className={`icon-btn h-6 w-6 shrink-0 transition-opacity ${
-            menu?.kind === 'connection' && menu.item.id === connection.id
-              ? 'opacity-100'
-              : 'opacity-0 focus-visible:opacity-100 group-hover/row:opacity-100'
-          }`}
-          title="Connection actions"
-          aria-label={`Actions for ${connection.name}`}
-          onClick={(event) => onOpenRowMenu(event, 'connection', connection)}
-        >
-          <Icon name="more-horizontal" size={13} />
-        </button>
+        {isConnecting ? (
+          <button
+            type="button"
+            className="btn-soft text-danger hover:bg-danger/10 hover:text-danger h-6 px-2 text-[length:var(--app-text-11)] flex items-center gap-1 shrink-0"
+            title={`Cancel connection to ${connection.name}`}
+            aria-label={`Cancel connection to ${connection.name}`}
+            onClick={(event) => {
+              event.stopPropagation()
+              onCancelConnect?.(connection)
+            }}
+          >
+            <Icon name="x" size={11} />
+            <span>Cancel</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={`icon-btn h-6 w-6 shrink-0 transition-opacity ${
+              menu?.kind === 'connection' && menu.item.id === connection.id
+                ? 'opacity-100'
+                : 'opacity-0 focus-visible:opacity-100 group-hover/row:opacity-100'
+            }`}
+            title="Connection actions"
+            aria-label={`Actions for ${connection.name}`}
+            onClick={(event) => onOpenRowMenu(event, 'connection', connection)}
+          >
+            <Icon name="more-horizontal" size={13} />
+          </button>
+        )}
       </div>
       {isDropLine('after') ? <DropLine depth={depth} /> : null}
     </Fragment>

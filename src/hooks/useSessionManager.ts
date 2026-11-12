@@ -32,6 +32,8 @@ export function useSessionManager({
   const [lastConnectedId, setLastConnectedId] = useState<string | null>(null)
   const [screen, setScreen] = useState<'connections' | 'workspace'>('connections')
   const [connectingId, setConnectingId] = useState<string | null>(null)
+  const connectingIdRef = useRef<string | null>(null)
+  const cancelConnectionRef = useRef<Set<string>>(new Set())
   const [dialog, setDialog] = useState<{ mode: ConnectionDialogMode; connection?: ConnectionDialogConnection | null; notice?: string | null } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -260,6 +262,15 @@ export function useSessionManager({
     [seedSessionEditor],
   )
 
+  const handleCancelConnection = useCallback((connectionId?: string) => {
+    const targetId = connectionId || connectingIdRef.current
+    if (!targetId) return
+    if (connectingIdRef.current !== targetId) return
+    cancelConnectionRef.current.add(targetId)
+    connectingIdRef.current = null
+    setConnectingId(null)
+  }, [])
+
   const handleConnect = useCallback(
     async (connection: any) => {
       if (sessionsRef.current[connection.id]) {
@@ -267,9 +278,18 @@ export function useSessionManager({
         return
       }
 
+      cancelConnectionRef.current.delete(connection.id)
+      connectingIdRef.current = connection.id
       setConnectingId(connection.id)
       try {
         const result = await api.connect({ id: connection.id })
+        if (cancelConnectionRef.current.has(connection.id)) {
+          cancelConnectionRef.current.delete(connection.id)
+          try {
+            await api.disconnect(connection.id)
+          } catch {}
+          return
+        }
         const database = pickDatabase(result.databases, result.database)
         const detectedTz = result?.timezone || (connection as any)?.timezone
 
@@ -323,7 +343,12 @@ export function useSessionManager({
         await loadColumns(connection.id, database)
         await loadModules(connection.id, database)
       } catch (error: any) {
-        if (error.code === 'PASSWORD_MISSING') {
+        if (cancelConnectionRef.current.has(connection.id)) {
+          cancelConnectionRef.current.delete(connection.id)
+          try {
+            await api.disconnect(connection.id)
+          } catch {}
+        } else if (error.code === 'PASSWORD_MISSING') {
           setDialog({
             mode: 'edit',
             connection,
@@ -333,7 +358,11 @@ export function useSessionManager({
           showBanner('error', `Could not connect to “${connection.name}”. ${error.message}`)
         }
       } finally {
-        setConnectingId(null)
+        if (connectingIdRef.current === connection.id) {
+          connectingIdRef.current = null
+          setConnectingId(null)
+        }
+        cancelConnectionRef.current.delete(connection.id)
       }
     },
     [activateSession, getPersistedTabs, loadColumns, loadModules, loadTables, seedEditor, showBanner, settings],
@@ -771,5 +800,6 @@ export function useSessionManager({
     handleReorderTree,
     handleReloadConnections,
     handleNewConnectionInFolder,
+    handleCancelConnection,
   }
 }

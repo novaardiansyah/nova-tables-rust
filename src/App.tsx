@@ -579,6 +579,7 @@ export default function App() {
           onReloadConnections={sessionManager.handleReloadConnections}
           onNotify={showBanner}
           onTestConnection={api.testConnection}
+          onCancelConnection={(connection) => sessionManager.handleCancelConnection(connection.id)}
         />
       )}
 
