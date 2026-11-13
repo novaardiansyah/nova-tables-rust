@@ -503,24 +503,6 @@ export default function TableDesigner({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line bg-panel px-3.5">
-        {mode === 'new' ? (
-          <>
-            <Icon name="table" size={14} className="shrink-0 text-text-muted" />
-            <span className="text-[length:var(--app-text-12)] text-text-muted">{draft.schema}</span>
-            <button
-              type="button"
-              onClick={() => {}}
-              title={mode === 'new' ? 'New table' : 'Click to load the name into the picker below'}
-              className="text-[length:var(--app-text-13)] font-medium text-text"
-            >
-              {draft.table || '(untitled)'}
-            </button>
-            <span className="rounded border border-line-strong bg-tint/[0.03] px-2 py-0.5 text-[length:var(--app-text-10)] font-semibold uppercase tracking-wider text-text-muted">
-              new
-            </span>
-          </>
-        ) : null}
-
         <div className="ml-auto flex items-center gap-2">
           {mode === 'edit' ? (
             <button

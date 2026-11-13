@@ -292,6 +292,10 @@ export function generateAlterTable(original: TableDesign | null | undefined, des
   }
 
   for (const name of droppedColumns) {
+    const defaultName = driver === 'mysql' ? null : originalColumns.get(name)?.defaultName ?? null
+    if (defaultName) {
+      statements.push(`ALTER TABLE ${table} DROP CONSTRAINT ${quoteIdentifier(defaultName, driver)};`)
+    }
     statements.push(`ALTER TABLE ${table} DROP COLUMN ${quoteIdentifier(name, driver)};`)
   }
 
