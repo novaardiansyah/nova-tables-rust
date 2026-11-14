@@ -2,7 +2,7 @@ import React from 'react'
 
 const TOKEN_RE = /("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g
 
-function tokenize(text: string): React.ReactNode[] {
+export function tokenize(text: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = []
   let last = 0
   let key = 0

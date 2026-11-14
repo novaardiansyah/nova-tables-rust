@@ -3,6 +3,7 @@ import Icon from '@/components/common/Icon'
 import ContextMenu from '@/components/common/ContextMenu'
 import { formatDateTime, isDateTimeString } from '@/resultFormats'
 import { specialValuesForDriver, SpecialValueOption } from '@/components/results/ResultGridCell'
+import { tokenize } from '@/components/results/JsonView'
 
 export interface FormViewerProps {
   columns: string[]
@@ -21,12 +22,26 @@ function isSpecial(value: unknown): value is { special: unknown } {
   return Boolean(value && typeof value === 'object' && 'special' in value)
 }
 
+function prettyJsonText(raw: string): string | null {
+  const trimmed = raw.trim()
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (parsed === null || typeof parsed !== 'object') return null
+    return JSON.stringify(parsed, null, 2)
+  } catch {
+    return null
+  }
+}
+
 function toText(value: unknown, timezone?: string): string {
   if (value === null || value === undefined) return ''
   if (isSpecial(value)) return String(value.special)
   if (value instanceof Date) return formatDateTime(value, timezone)
   if (typeof value === 'object') return JSON.stringify(value, null, 2)
   const rawText = String(value)
+  const jsonText = prettyJsonText(rawText)
+  if (jsonText !== null) return jsonText
   const isDate = isDateTimeString(rawText) || DATE_RE.test(rawText)
   return isDate ? formatDateTime(rawText, timezone) : rawText
 }
@@ -102,11 +117,13 @@ function FormField({
   const focused = useRef(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const fieldRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
+  const highlightRef = useRef<HTMLPreElement>(null)
   const selectionRef = useRef<{ start: number; end: number } | null>(null)
   const userResizedRef = useRef(false)
   const prevHeightRef = useRef<number | null>(null)
 
   const useTextarea = isLongField(label, type, draft, value)
+  const highlightJson = useTextarea && prettyJsonText(draft) !== null
   const isNumeric = isNumericType(type) || typeof value === 'number'
 
   useEffect(() => {
@@ -239,35 +256,55 @@ function FormField({
         </div>
       </div>
       {useTextarea ? (
-        <textarea
-          {...commonProps}
-          ref={(el) => {
-            fieldRef.current = el
-            if (el && !userResizedRef.current) {
-              const prevScrollTop = el.scrollTop
-              el.style.height = 'auto'
-              const borderOffset = el.offsetHeight - el.clientHeight
-              const nextHeight = Math.max(el.scrollHeight + borderOffset, 32)
-              el.style.height = `${nextHeight}px`
-              el.scrollTop = prevScrollTop
-            }
-          }}
-          onMouseDown={() => {
-            const el = fieldRef.current
-            if (el) prevHeightRef.current = el.offsetHeight
-          }}
-          onMouseUp={() => {
-            const el = fieldRef.current
-            if (el && prevHeightRef.current !== null && Math.abs(el.offsetHeight - prevHeightRef.current) > 2) {
-              userResizedRef.current = true
-            }
-          }}
-          onDoubleClick={() => {
-            userResizedRef.current = false
-            adjustTextareaHeight()
-          }}
-          className="w-full min-h-[32px] resize-y overflow-y-auto rounded border border-line-strong bg-base px-2 py-1 font-mono text-[length:var(--app-text-12)] leading-relaxed text-text outline-none transition-colors select-text focus:border-accent/70"
-        />
+        <div className="relative">
+          {highlightJson ? (
+            <pre
+              ref={highlightRef}
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words rounded border border-transparent bg-base px-2 py-1 font-mono leading-relaxed text-text select-none"
+              style={{ fontSize: 'var(--json-font-size)' }}
+            >
+              {tokenize(draft)}
+            </pre>
+          ) : null}
+          <textarea
+            {...commonProps}
+            ref={(el) => {
+              fieldRef.current = el
+              if (el && !userResizedRef.current) {
+                const prevScrollTop = el.scrollTop
+                el.style.height = 'auto'
+                const borderOffset = el.offsetHeight - el.clientHeight
+                const nextHeight = Math.max(el.scrollHeight + borderOffset, 32)
+                el.style.height = `${nextHeight}px`
+                el.scrollTop = prevScrollTop
+              }
+            }}
+            onMouseDown={() => {
+              const el = fieldRef.current
+              if (el) prevHeightRef.current = el.offsetHeight
+            }}
+            onMouseUp={() => {
+              const el = fieldRef.current
+              if (el && prevHeightRef.current !== null && Math.abs(el.offsetHeight - prevHeightRef.current) > 2) {
+                userResizedRef.current = true
+              }
+            }}
+            onDoubleClick={() => {
+              userResizedRef.current = false
+              adjustTextareaHeight()
+            }}
+            onScroll={(event) => {
+              const highlight = highlightRef.current
+              if (!highlight) return
+              highlight.scrollTop = event.currentTarget.scrollTop
+              highlight.scrollLeft = event.currentTarget.scrollLeft
+            }}
+            className={`relative w-full min-h-[32px] resize-y overflow-y-auto whitespace-pre-wrap break-words rounded border border-line-strong px-2 py-1 font-mono text-[length:var(--app-text-12)] leading-relaxed outline-none transition-colors select-text focus:border-accent/70 ${
+              highlightJson ? 'bg-transparent text-transparent caret-accent' : 'bg-base text-text'
+            }`}
+          />
+        </div>
       ) : (
         <input
           {...commonProps}
