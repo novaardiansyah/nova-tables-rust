@@ -26,6 +26,7 @@ export interface Settings {
   contentFontFamily: string
   queryWordWrap: boolean
   queryExecutionMode: ExecutionModeId
+  estimateCountThreshold: number
 }
 
 export type SettingsListener = (settings: Settings) => void
@@ -60,6 +61,9 @@ export const FONT_FAMILIES: FontFamilyOption[] = [
 export const FONT_SIZE_MIN = 9
 export const FONT_SIZE_MAX = 32
 export const APP_FONT_SIZE_MAX = 20
+export const ESTIMATE_COUNT_MIN = 1000
+export const ESTIMATE_COUNT_MAX = 1000000000
+export const DEFAULT_ESTIMATE_COUNT_THRESHOLD = 1000000
 
 const APP_BASE_SIZE = 13
 const APP_LADDER = [9, 10, 11, 12, 13, 14, 15]
@@ -116,6 +120,7 @@ export const DEFAULT_SETTINGS: Settings = {
   contentFontFamily: 'hack',
   queryWordWrap: false,
   queryExecutionMode: 'silent',
+  estimateCountThreshold: DEFAULT_ESTIMATE_COUNT_THRESHOLD,
 }
 
 let activeSettings: Settings = { ...DEFAULT_SETTINGS }
@@ -142,6 +147,12 @@ function normalizeFontSize(value: unknown, fallback: number, max = FONT_SIZE_MAX
 
 function normalizeFontFamily(value: unknown, fallback: string): string {
   return FONT_FAMILIES.some((family) => family.id === value) ? (value as string) : fallback
+}
+
+function normalizeEstimateCountThreshold(value: unknown): number {
+  const threshold = Math.round(Number(value))
+  if (!Number.isFinite(threshold)) return DEFAULT_ESTIMATE_COUNT_THRESHOLD
+  return Math.min(Math.max(threshold, ESTIMATE_COUNT_MIN), ESTIMATE_COUNT_MAX)
 }
 
 function normalizeTimezone(value: unknown, fallback: string): string {
@@ -186,6 +197,7 @@ export function normalizeSettings(input: unknown): Settings {
     contentFontFamily: normalizeFontFamily(source.contentFontFamily ?? contentFontFamilyFallback, DEFAULT_SETTINGS.contentFontFamily),
     queryWordWrap: source.queryWordWrap === true,
     queryExecutionMode: validExecutionMode,
+    estimateCountThreshold: normalizeEstimateCountThreshold(source.estimateCountThreshold),
   }
 }
 

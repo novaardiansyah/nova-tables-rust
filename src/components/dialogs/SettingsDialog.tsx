@@ -1,9 +1,11 @@
-import React, { useEffect, useState, FormEvent } from 'react'
+import React, { useEffect, useRef, useState, FormEvent } from 'react'
 import Icon, { Spinner } from '@/components/common/Icon'
 import Select from '@/components/common/Select'
 import {
   APP_FONT_SIZE_MAX,
   DEFAULT_SETTINGS,
+  ESTIMATE_COUNT_MAX,
+  ESTIMATE_COUNT_MIN,
   FONT_FAMILIES,
   FONT_SIZE_MAX,
   FONT_SIZE_MIN,
@@ -44,49 +46,97 @@ interface SizeInputProps {
   value: number
   min: number
   max: number
+  suffix?: string
+  widthClass?: string
   onChange: (value: number) => void
 }
 
-function SizeInput({ label, value, min, max, onChange }: SizeInputProps) {
-  const [text, setText] = useState(String(value))
+function formatInputNumber(value: number): string {
+  return Number(value).toLocaleString()
+}
+
+function countDigits(value: string): number {
+  return value.replace(/[^\d]/g, '').length
+}
+
+function caretForDigits(value: string, digits: number): number {
+  if (digits <= 0) return 0
+  let seen = 0
+  for (let index = 0; index < value.length; index += 1) {
+    if (/\d/.test(value[index])) {
+      seen += 1
+      if (seen === digits) return index + 1
+    }
+  }
+  return value.length
+}
+
+function parseInputNumber(value: string): number | null {
+  const digits = value.replace(/[^\d]/g, '')
+  if (!digits) return null
+  const parsed = Number(digits)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function SizeInput({ label, value, min, max, suffix = 'px', widthClass = 'w-24', onChange }: SizeInputProps) {
+  const [text, setText] = useState(formatInputNumber(value))
+  const inputRef = useRef<HTMLInputElement>(null)
+  const caretRef = useRef<number | null>(null)
 
   useEffect(() => {
-    setText(String(value))
+    setText(formatInputNumber(value))
   }, [value])
 
+  useEffect(() => {
+    const caret = caretRef.current
+    if (caret === null) return
+    caretRef.current = null
+    inputRef.current?.setSelectionRange(caret, caret)
+  }, [text])
+
   const commit = (raw: string) => {
-    const trimmed = raw.trim()
-    if (!trimmed) return
-    const size = Math.round(Number(trimmed))
-    if (!Number.isFinite(size) || size < min || size > max) return
+    const size = parseInputNumber(raw)
+    if (size === null || size < min || size > max) return
     onChange(size)
   }
 
   const handleBlur = () => {
-    const trimmed = text.trim()
-    const size = Math.round(Number(trimmed))
-    const next = trimmed && Number.isFinite(size) ? Math.min(Math.max(size, min), max) : value
-    setText(String(next))
+    const size = parseInputNumber(text)
+    const next = size === null ? value : Math.min(Math.max(size, min), max)
+    setText(formatInputNumber(next))
     onChange(next)
   }
 
   return (
-    <div className="relative w-24 shrink-0">
+    <div className={`relative ${widthClass} shrink-0`}>
       <input
+        ref={inputRef}
         type="text"
         inputMode="numeric"
         autoComplete="off"
         aria-label={label}
         value={text}
         onChange={(event) => {
-          setText(event.target.value)
-          commit(event.target.value)
+          const rawValue = event.target.value
+          const caret = event.target.selectionStart ?? rawValue.length
+          const digits = countDigits(rawValue.slice(0, caret))
+          const parsed = parseInputNumber(rawValue)
+          const nextText = parsed === null ? '' : formatInputNumber(parsed)
+          if (nextText === text) {
+            event.target.value = nextText
+            const nextCaret = caretForDigits(nextText, digits)
+            event.target.setSelectionRange(nextCaret, nextCaret)
+            return
+          }
+          setText(nextText)
+          caretRef.current = caretForDigits(nextText, digits)
+          commit(nextText)
         }}
         onBlur={handleBlur}
-        className="field pr-7 text-right"
+        className={`field ${suffix.length > 2 ? 'pr-12' : 'pr-7'} text-right`}
       />
       <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[length:var(--app-text-10)] text-text-faint">
-        px
+        {suffix}
       </span>
     </div>
   )
@@ -303,6 +353,21 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
                 checked={draft.queryWordWrap}
                 label="Word wrap"
                 onChange={update('queryWordWrap')}
+              />
+            </Row>
+          </section>
+
+          <section className="border-t border-line pt-4">
+            <p className="field-label">Result Grid</p>
+            <Row label="Estimate count when table has more than">
+              <SizeInput
+                label="Estimate count threshold"
+                value={draft.estimateCountThreshold}
+                min={ESTIMATE_COUNT_MIN}
+                max={ESTIMATE_COUNT_MAX}
+                suffix="rows"
+                widthClass={CONTROL_WIDTH}
+                onChange={update('estimateCountThreshold')}
               />
             </Row>
           </section>

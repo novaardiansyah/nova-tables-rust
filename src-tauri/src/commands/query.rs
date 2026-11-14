@@ -204,6 +204,40 @@ pub async fn list_columns(
 }
 
 #[tauri::command]
+pub async fn count_table_rows(
+  connection_id: Option<String>,
+  database: Option<String>,
+  schema: Option<String>,
+  table: Option<String>,
+  estimate_threshold: Option<u64>,
+) -> Result<Value, String> {
+  let s = schema.unwrap_or_else(|| "dbo".to_string());
+  let t = table.unwrap_or_default();
+  let threshold = estimate_threshold.unwrap_or(1_000_000);
+  if t.is_empty() {
+    return Err("Missing table name.".to_string());
+  }
+
+  if let Some(id) = connection_id.as_deref() {
+    if connection_driver_type(id) == "mysql" {
+      // Targeted for MySQL: estimates or counts rows via information_schema.TABLES and COUNT(*).
+      let db_to_use = database
+        .as_deref()
+        .filter(|value| !value.is_empty())
+        .unwrap_or(&s);
+      let mut client = mysql_client_for_connection(id, Some(db_to_use)).await?;
+      return mysql::count_table_rows(&mut client, Some(db_to_use), &s, &t, threshold).await;
+    }
+
+    // Targeted for SQL Server: estimates or counts rows via sys.partitions and COUNT_BIG.
+    let mut client = mssql::get_client_for_connection(id, database.as_deref()).await?;
+    return mssql::count_table_rows(&mut client, database.as_deref(), &s, &t, threshold).await;
+  }
+
+  Err("Missing connection ID".to_string())
+}
+
+#[tauri::command]
 pub async fn table_structure(
   connection_id: Option<String>,
   database: Option<String>,

@@ -13,7 +13,7 @@ export interface UseTableBrowserProps {
   patchSession: (connectionId: string, patch: Partial<SessionData>) => void
   updateTab: (connectionId: string, tabId: string, patch: Partial<SessionTab> | ((tab: SessionTab) => Partial<SessionTab>)) => void
   openTab: (connectionId: string, title: string, sql: string, editSource?: any | null) => string
-  execute: (sql: string, tabId: string) => void
+  execute: (sql: string, tabId: string, browseTable?: { schema: string; name: string; primaryKey?: string[] } | null) => void
   loadTables: (connectionId: string, database: string) => Promise<void>
   loadColumns: (connectionId: string, database: string) => Promise<void>
   showBanner: (type: 'info' | 'warn' | 'error' | 'success', message: string) => void
@@ -108,7 +108,7 @@ export function useTableBrowser({
       const editSource = buildEditSource(table, sql, driverType)
       const tabId = openTab(current.connectionId, table.name, sql, editSource)
       patchSession(current.connectionId, { selectedTable: `${table.schema}.${table.name}` })
-      execute(sql, tabId)
+      execute(sql, tabId, table)
       loadRelations(tabId, table)
     },
     [activeSession, execute, loadRelations, openTab, patchSession],

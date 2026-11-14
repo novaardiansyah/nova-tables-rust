@@ -47,6 +47,7 @@ pub fn run() {
       commands::query::list_tables,
       commands::query::list_columns,
       commands::query::table_structure,
+      commands::query::count_table_rows,
       commands::query::table_relations,
       commands::erd::get_erd_data,
       commands::query::list_modules,

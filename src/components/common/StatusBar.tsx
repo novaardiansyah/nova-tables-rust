@@ -5,6 +5,8 @@ import { EditSource } from '@/edits'
 export interface StatusBarResult {
   rowCount?: number | null
   elapsedMs?: number | null
+  totalRowCount?: number | null
+  totalEstimated?: boolean | null
   resultSets?: unknown[]
   [key: string]: unknown
 }
@@ -18,6 +20,12 @@ export interface StatusBarProps {
 
 export default function StatusBar({ result, editSource, activeDatabase, queryStatus }: StatusBarProps) {
   const resultSets = result?.resultSets ?? []
+  const rowCount = Number(result?.rowCount ?? 0)
+  const totalRowCount = typeof result?.totalRowCount === 'number' ? result.totalRowCount : null
+  const showRowRange = totalRowCount !== null && totalRowCount > rowCount
+  const rowLabel = showRowRange
+    ? `${formatNumber(rowCount > 0 ? 1 : 0)}-${formatNumber(rowCount)} of ${result?.totalEstimated ? '~' : ''}${formatNumber(totalRowCount)} rows`
+    : `${formatNumber(rowCount)} rows`
 
   return (
     <footer className="flex h-7 shrink-0 items-center justify-between gap-4 border-t border-line bg-panel px-3 text-[length:var(--app-text-10)] text-text-muted">
@@ -36,7 +44,7 @@ export default function StatusBar({ result, editSource, activeDatabase, querySta
 
         {queryStatus === 'success' && result ? (
           <>
-            <span className="shrink-0 tabular-nums">{formatNumber(result.rowCount)} rows</span>
+            <span className="shrink-0 tabular-nums">{rowLabel}</span>
             <span className="text-text-faint">•</span>
             <span className="shrink-0 tabular-nums">{formatDuration(result.elapsedMs)}</span>
             {resultSets.length > 1 ? (

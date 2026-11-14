@@ -351,6 +351,20 @@ export function createDatabaseOps(ctx: DatabaseOpsContext) {
       return res?.columns || []
     },
 
+    countTableRows: async (input: {
+      connectionId: string
+      database: string
+      schema: string
+      table: string
+      estimateThreshold: number
+    }): Promise<{ count: number; estimated: boolean }> => {
+      const res = await callCommand<{ count?: number; estimated?: boolean }>('count_table_rows', input)
+      return {
+        count: Number(res?.count ?? 0),
+        estimated: res?.estimated === true,
+      }
+    },
+
     runQuery: async (input: {
       connectionId: string
       database: string

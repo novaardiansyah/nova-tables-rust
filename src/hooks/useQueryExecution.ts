@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { api } from '@/api'
-import { SessionTab, SessionData } from '@/utils/sessionHelpers'
+import { SessionTab, SessionData, browseSql } from '@/utils/sessionHelpers'
 import { executionGuard, ExecutionModeId } from '@/queryModes'
 import { parseExecutionPlan, parseShowPlanXml } from '@/planParser'
 import { FilterCondition, buildFilterWhere, buildFilteredSql } from '@/filters'
@@ -16,6 +16,10 @@ import {
 } from '@/edits'
 import { isDesignDirty, getDesignSql } from '@/designSql'
 import { csvRecords, jsonRecords } from '@/resultFormats'
+
+function normalizeSqlText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim().toLowerCase()
+}
 
 export interface UseQueryExecutionProps {
   activeSession: () => SessionData | null
@@ -96,7 +100,11 @@ export function useQueryExecution({
   }, [activeSession, updateTab])
 
   const execute = useCallback(
-    async (sql: string, tabId: string) => {
+    async (
+      sql: string,
+      tabId: string,
+      browseTable?: { schema: string; name: string; primaryKey?: string[] } | null,
+    ) => {
       cancelRequestedRef.current = false
       const current = activeSession()
       if (!current) {
@@ -155,6 +163,59 @@ export function useQueryExecution({
           state: { status: 'success', result: { ...result, resultSets }, error: null },
           activeSet: firstFilled === -1 ? 0 : firstFilled,
         })
+        const driverType = current.connection?.driverType ?? null
+        const browseTarget =
+          browseTable ??
+          inferredTable ??
+          (source && !source.joined && source.tables.length === 1
+            ? {
+                schema: source.tables[0].schema,
+                name: source.tables[0].table,
+                primaryKey: source.tables[0].primaryKey,
+              }
+            : null)
+        if (
+          browseTarget &&
+          resultSets.length === 1 &&
+          normalizeSqlText(sql) ===
+            normalizeSqlText(
+              browseSql(
+                {
+                  schema: browseTarget.schema,
+                  name: browseTarget.name,
+                  primaryKey: browseTarget.primaryKey ?? undefined,
+                },
+                driverType,
+              ),
+            )
+        ) {
+          api
+            .countTableRows({
+              connectionId: current.connectionId,
+              database: current.activeDatabase,
+              schema: browseTarget.schema,
+              table: browseTarget.name,
+              estimateThreshold: settings.estimateCountThreshold,
+            })
+            .then((count) => {
+              if (editSourceRequestsRef.current[tabId] !== requestId) return
+              updateTab(current.connectionId, tabId, (latest) => {
+                const latestResult = latest.state?.result
+                if (!latestResult) return {}
+                return {
+                  state: {
+                    ...latest.state,
+                    result: {
+                      ...latestResult,
+                      totalRowCount: count.count,
+                      totalEstimated: count.estimated,
+                    },
+                  },
+                }
+              })
+            })
+            .catch(() => {})
+        }
         if (inferredTable) {
           const relations = await api
             .tableRelations(
@@ -206,7 +267,7 @@ export function useQueryExecution({
         })
       }
     },
-    [activeSession, describeEditSource, showBanner, updateTab],
+    [activeSession, describeEditSource, settings.estimateCountThreshold, showBanner, updateTab],
   )
 
   const runWithGuard = useCallback(

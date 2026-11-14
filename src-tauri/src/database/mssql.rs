@@ -725,6 +725,65 @@ pub async fn table_relations(
     }))
 }
 
+// Targeted for SQL Server: estimates rows from sys.partitions and uses COUNT_BIG when the table is under the threshold.
+pub async fn count_table_rows(
+    client: &mut MssqlClient,
+    database: Option<&str>,
+    schema: &str,
+    table: &str,
+    estimate_threshold: u64,
+) -> Result<Value, String> {
+    if let Some(db) = database {
+        if !db.is_empty() {
+            let switch_query = format!("USE [{}]", db.replace(']', "]]"));
+            let _ = client.simple_query(switch_query).await;
+        }
+    }
+
+    let stream = client
+        .query(
+            "SELECT SUM(CAST(p.rows AS BIGINT))
+         FROM sys.tables t
+         JOIN sys.schemas s ON s.schema_id = t.schema_id
+         JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0, 1)
+         WHERE s.name = @P1 AND t.name = @P2",
+            &[&schema, &table],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let rows = stream
+        .into_first_result()
+        .await
+        .map_err(|e| e.to_string())?;
+    let estimated: Option<i64> = rows.first().and_then(|row| row.get(0));
+    let should_count_exactly = match estimated {
+        Some(value) => value >= 0 && (value as u64) <= estimate_threshold,
+        None => true,
+    };
+
+    if should_count_exactly {
+        // Targeted for SQL Server: COUNT_BIG returns the exact row count for small tables and views.
+        let count_sql = format!(
+            "SELECT COUNT_BIG(*) FROM [{}].[{}]",
+            schema.replace(']', "]]"),
+            table.replace(']', "]]")
+        );
+        let count_stream = client
+            .simple_query(count_sql)
+            .await
+            .map_err(|e| e.to_string())?;
+        let count_rows = count_stream
+            .into_first_result()
+            .await
+            .map_err(|e| e.to_string())?;
+        let count: i64 = count_rows.first().and_then(|row| row.get(0)).unwrap_or(0);
+        return Ok(json!({ "count": count, "estimated": false }));
+    }
+
+    Ok(json!({ "count": estimated.unwrap_or(0), "estimated": true }))
+}
+
 pub async fn table_structure(
     client: &mut MssqlClient,
     database: Option<&str>,

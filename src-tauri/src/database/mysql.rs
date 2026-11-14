@@ -894,6 +894,54 @@ pub async fn table_relations(
 }
 
 /// Gets table structure via information_schema + SHOW CREATE TABLE.
+// Targeted for MySQL: uses information_schema.TABLES.TABLE_ROWS as an estimate and COUNT(*) for small tables.
+pub async fn count_table_rows(
+    conn: &mut Conn,
+    database: Option<&str>,
+    schema: &str,
+    table: &str,
+    estimate_threshold: u64,
+) -> Result<Value, String> {
+    let db = database.filter(|value| !value.is_empty()).unwrap_or(schema);
+    let estimate_query = format!(
+        "SELECT TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{}' AND TABLE_NAME = '{}'",
+        db.replace('\\', "\\\\").replace('\'', "''"),
+        table.replace('\\', "\\\\").replace('\'', "''")
+    );
+
+    let estimate_row: Option<Row> = conn
+        .query_first(estimate_query)
+        .await
+        .map_err(|e| e.to_string())?;
+    let estimated = estimate_row
+        .and_then(|row| row.get::<Option<u64>, usize>(0))
+        .flatten();
+    let should_count_exactly = match estimated {
+        Some(value) => value <= estimate_threshold,
+        None => true,
+    };
+
+    if should_count_exactly {
+        // Targeted for MySQL: COUNT(*) returns the exact row count for small tables and views.
+        let count_query = format!(
+            "SELECT COUNT(*) FROM `{}`.`{}`",
+            db.replace('`', "``"),
+            table.replace('`', "``")
+        );
+        let count_row: Option<Row> = conn
+            .query_first(count_query)
+            .await
+            .map_err(|e| e.to_string())?;
+        let count = count_row
+            .and_then(|row| row.get::<Option<u64>, usize>(0))
+            .flatten()
+            .unwrap_or(0);
+        return Ok(json!({ "count": count, "estimated": false }));
+    }
+
+    Ok(json!({ "count": estimated.unwrap_or(0), "estimated": true }))
+}
+
 pub async fn table_structure(
     conn: &mut Conn,
     database: Option<&str>,

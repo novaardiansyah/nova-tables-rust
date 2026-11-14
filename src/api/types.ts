@@ -202,6 +202,8 @@ export interface QueryResult {
   rowCount?: number
   truncated?: boolean
   maxRows?: number
+  totalRowCount?: number
+  totalEstimated?: boolean
   columns?: { name: string; type?: string; [key: string]: unknown }[]
   rows?: unknown[][]
   executionTimeMs?: number
