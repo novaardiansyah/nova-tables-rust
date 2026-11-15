@@ -12,7 +12,7 @@ export interface QueryState {
   focus: boolean
 }
 
-export function useWorkspaceLayout(timezone?: string) {
+export function useWorkspaceLayout() {
   const [query, setQuery] = useState<QueryState>({ id: 0, value: STARTER_SQL, focus: true })
   const [editorHeight, setEditorHeight] = useState(EDITOR_DEFAULT_HEIGHT)
   const [headerCollapsed, setHeaderCollapsed] = useState(false)
@@ -21,6 +21,8 @@ export function useWorkspaceLayout(timezone?: string) {
   const [jsonPanelWidth, setJsonPanelWidth] = useState(JSON_PANEL_DEFAULT_WIDTH)
   const [jsonPanelCollapsed, setJsonPanelCollapsed] = useState(true)
   const [activeResultData, setActiveResultData] = useState<ActiveDataPayload | null>(null)
+  const [timezone, setTimezone] = useState<string | null>(null)
+  const [systemTimezone, setSystemTimezone] = useState<string | null>(null)
 
   const sqlRef = useRef(STARTER_SQL)
   const selectionRef = useRef('')
@@ -80,8 +82,16 @@ export function useWorkspaceLayout(timezone?: string) {
 
   const jsonPanelVisible = !jsonPanelCollapsed
   const jsonText = useMemo(
-    () => (jsonPanelVisible && activeResultData ? jsonRecords(activeResultData.columnNames, activeResultData.rows, timezone) : ''),
-    [jsonPanelVisible, activeResultData, timezone],
+    () =>
+      jsonPanelVisible && activeResultData
+        ? jsonRecords(
+            activeResultData.columnNames,
+            activeResultData.rows,
+            timezone ?? undefined,
+            systemTimezone ?? undefined,
+          )
+        : '',
+    [jsonPanelVisible, activeResultData, timezone, systemTimezone],
   )
 
   return {
@@ -101,6 +111,10 @@ export function useWorkspaceLayout(timezone?: string) {
     setJsonPanelCollapsed,
     activeResultData,
     setActiveResultData,
+    timezone,
+    setTimezone,
+    systemTimezone,
+    setSystemTimezone,
     sqlRef,
     selectionRef,
     splitRef,

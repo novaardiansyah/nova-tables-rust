@@ -366,8 +366,8 @@ export default function ConfigTransferDialog({
                   </div>
                   <p className="mt-0.5 text-[length:var(--app-text-11)] text-text-muted">
                     {exporting
-                      ? 'Color theme, application & editor fonts, timezones, and query word wrap options.'
-                      : 'Restore workspace color theme, typography, timezones, and editor preferences.'}
+                      ? 'Color theme, application & editor fonts, and query word wrap options.'
+                      : 'Restore workspace color theme, typography, and editor preferences.'}
                   </p>
                 </div>
               </div>

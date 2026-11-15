@@ -51,6 +51,7 @@ export interface SidebarProps {
   pinnedTables: string[]
   onActivateSession: (connectionId: string) => void
   onCloseSession: (connectionId: string) => void
+  onOpenConnectionSettings?: (connectionId: string) => void
   onBrowseTable: (table: SidebarTable) => void
   onNewRecord: (table: SidebarTable) => void
   onCopyObjectName: (object: { schema: string; name: string }) => void
@@ -103,6 +104,7 @@ export default function Sidebar({
   pinnedTables,
   onActivateSession,
   onCloseSession,
+  onOpenConnectionSettings,
   onBrowseTable,
   onNewRecord,
   onCopyObjectName,
@@ -588,6 +590,11 @@ export default function Sidebar({
                 id: 'refresh-connection',
                 label: 'Refresh',
                 onSelect: () => onRefreshDatabases(menu.item.connectionId),
+              },
+              {
+                id: 'connection-settings',
+                label: 'Settings',
+                onSelect: () => onOpenConnectionSettings?.(menu.item.connectionId),
               },
               {
                 id: 'users-permissions',

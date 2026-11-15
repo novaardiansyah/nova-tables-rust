@@ -310,7 +310,10 @@ export function useTableBrowser({
     async ({ format, filename, columnNames, rows }: ExportDataPayload) => {
       try {
         const isCsv = format === 'csv'
-        const content = isCsv ? csvRecords(columnNames, rows) : jsonRecords(columnNames, rows)
+        const current = activeSession()
+        const content = isCsv
+          ? csvRecords(columnNames, rows, current?.timezone, current?.systemTimezone)
+          : jsonRecords(columnNames, rows, current?.timezone, current?.systemTimezone)
         const ext = isCsv ? 'csv' : 'json'
         const filterName = isCsv ? 'CSV Files (*.csv)' : 'JSON Files (*.json)'
         const defaultName = `${filename ? filename.replace(/[^a-zA-Z0-9_-]/g, '_') : 'query_results'}.${ext}`
@@ -331,7 +334,7 @@ export function useTableBrowser({
         showBanner('error', `Export failed: ${error.message}`)
       }
     },
-    [showBanner],
+    [activeSession, showBanner],
   )
 
   const openDesignTab = useCallback(

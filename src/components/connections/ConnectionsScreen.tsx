@@ -81,6 +81,7 @@ export interface ConnectionsScreenProps {
   onReloadConnections?: () => Promise<unknown> | void
   onNotify?: (type: 'info' | 'warn' | 'error' | 'success', message: string) => void
   onTestConnection?: (connection: ConnectionItem) => Promise<unknown> | void
+  onOpenConnectionSettings?: (connection: ConnectionItem) => void
   currentUser?: AuthUser | null
   onLogout?: () => void
   loading?: boolean
@@ -111,6 +112,7 @@ export default function ConnectionsScreen({
   onReloadConnections,
   onNotify,
   onTestConnection,
+  onOpenConnectionSettings,
   onCancelConnection,
 }: ConnectionsScreenProps) {
   const [openFolders, setOpenFolders] = useState<Set<string>>(() => new Set())
@@ -580,6 +582,7 @@ export default function ConnectionsScreen({
     },
     { id: 'open', label: 'Open Connection', onSelect: () => onOpen(connection) },
     { id: 'replicate', label: 'Replicate Connection', onSelect: () => onDuplicateConnection(connection) },
+    { id: 'settings', label: 'Settings', onSelect: () => onOpenConnectionSettings?.(connection) },
     {
       id: 'test',
       label: testingConnectionId === connection.id ? 'Testing Connection…' : 'Test Connection',
@@ -848,7 +851,6 @@ export default function ConnectionsScreen({
                         <EnvironmentBadge environment={lastConnection.environment} />
                         {lastConnection.driverType === 'sqlserver' ? (
                           <span
-                            title={lastConnection.driverType}
                             className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-success"
                           >
                             <span className="h-1 w-1 rounded-full bg-current" />
@@ -856,7 +858,6 @@ export default function ConnectionsScreen({
                           </span>
                         ) : lastConnection.driverType === 'mysql' ? (
                           <span
-                            title={lastConnection.driverType}
                             className="flex shrink-0 items-center gap-1 rounded-full bg-warning/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-warning"
                           >
                             <span className="h-1 w-1 rounded-full bg-current" />
@@ -899,11 +900,6 @@ export default function ConnectionsScreen({
                       className="btn-primary"
                       disabled={connectingId === lastConnection.id || testingConnectionId === lastConnection.id}
                       onClick={() => onOpen(lastConnection)}
-                      title={
-                        openIds.includes(lastConnection.id)
-                          ? `Switch to ${lastConnection.name}`
-                          : `Quick connect to ${lastConnection.name}`
-                      }
                     >
                       {testingConnectionId === lastConnection.id || connectingId === lastConnection.id ? (
                         <Spinner size={13} />

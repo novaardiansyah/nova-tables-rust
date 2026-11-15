@@ -1,5 +1,3 @@
-import { getCurrentSettings } from '@/settings'
-
 export interface SpecialValue {
   special: string
 }
@@ -154,12 +152,12 @@ function formatWithFormatter(date: Date, timeZone: string): string {
   return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}.${ms}`
 }
 
-export function formatDateTime(value: unknown, timeZone?: string): string {
+export function formatDateTime(value: unknown, timeZone?: string, systemTimezone?: string): string {
   const date = parseDateTime(value)
   if (!date) return value === null || value === undefined ? '' : String(value)
   
-  const userTz = timeZone || getCurrentSettings()?.timezone || 'UTC'
-  const systemTz = getCurrentSettings()?.systemTimezone || 'UTC'
+  const userTz = timeZone ?? 'UTC'
+  const systemTz = systemTimezone ?? 'UTC'
   const isNaive = typeof value === 'string' && !/Z|[+-]\d{2}:?\d{2}$/i.test(value.trim())
   
   // Naive timestamps are interpreted as system timezone and converted to user timezone
@@ -184,15 +182,15 @@ export function formatDateTime(value: unknown, timeZone?: string): string {
   }
 }
 
-export function cellText(value: unknown, timeZone?: string): string {
+export function cellText(value: unknown, timeZone?: string, systemTimezone?: string): string {
   if (value === null || value === undefined) return ''
   if (typeof value === 'object' && value !== null && 'special' in value) {
     return String((value as SpecialValue).special)
   }
-  if (value instanceof Date) return formatDateTime(value, timeZone)
+  if (value instanceof Date) return formatDateTime(value, timeZone, systemTimezone)
   const str = String(value)
   if (isDateTimeString(str)) {
-    return formatDateTime(str, timeZone)
+    return formatDateTime(str, timeZone, systemTimezone)
   }
   return str
 }
@@ -207,8 +205,10 @@ export function formatDuration(ms: number | null | undefined): string {
   return `${(ms / 1000).toFixed(2)} s`
 }
 
-export function cleanText(matrix: unknown[][], timeZone?: string): string {
-  return matrix.map((cells) => cells.map((cell) => cellText(cell, timeZone)).join('\t')).join('\n')
+export function cleanText(matrix: unknown[][], timeZone?: string, systemTimezone?: string): string {
+  return matrix
+    .map((cells) => cells.map((cell) => cellText(cell, timeZone, systemTimezone)).join('\t'))
+    .join('\n')
 }
 
 export function sqlInsertRows(
@@ -226,13 +226,18 @@ export function sqlInsertRows(
     .join('\n\n')
 }
 
-export function jsonRecords(columnNames: string[], matrix: unknown[][], timeZone?: string): string {
+export function jsonRecords(
+  columnNames: string[],
+  matrix: unknown[][],
+  timeZone?: string,
+  systemTimezone?: string,
+): string {
   const records = matrix.map((cells) => {
     const record: Record<string, unknown> = {}
     columnNames.forEach((name, index) => {
       const val = cells[index]
       if (val !== null && val !== undefined && isDateTimeString(val)) {
-        record[name] = formatDateTime(val, timeZone)
+        record[name] = formatDateTime(val, timeZone, systemTimezone)
       } else {
         record[name] = val ?? null
       }
@@ -242,17 +247,24 @@ export function jsonRecords(columnNames: string[], matrix: unknown[][], timeZone
   return JSON.stringify(records, null, 2)
 }
 
-function escapeCsvCell(value: unknown, timeZone?: string): string {
+function escapeCsvCell(value: unknown, timeZone?: string, systemTimezone?: string): string {
   if (value === null || value === undefined) return ''
-  const str = cellText(value, timeZone)
+  const str = cellText(value, timeZone, systemTimezone)
   if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`
   }
   return str
 }
 
-export function csvRecords(columnNames: string[], matrix: unknown[][], timeZone?: string): string {
-  const header = columnNames.map((name) => escapeCsvCell(name, timeZone)).join(',')
-  const rows = matrix.map((cells) => cells.map((cell) => escapeCsvCell(cell, timeZone)).join(','))
+export function csvRecords(
+  columnNames: string[],
+  matrix: unknown[][],
+  timeZone?: string,
+  systemTimezone?: string,
+): string {
+  const header = columnNames.map((name) => escapeCsvCell(name, timeZone, systemTimezone)).join(',')
+  const rows = matrix.map((cells) =>
+    cells.map((cell) => escapeCsvCell(cell, timeZone, systemTimezone)).join(','),
+  )
   return [header, ...rows].join('\r\n')
 }

@@ -77,7 +77,7 @@ export default function App() {
     }
   }, [])
 
-  const layout = useWorkspaceLayout(settings.timezone)
+  const layout = useWorkspaceLayout()
   const { sqlRef, selectionRef, seedEditor } = layout
 
   const workspaceRef = useRef<WorkspaceState>(DEFAULT_WORKSPACE_STATE)
@@ -94,7 +94,6 @@ export default function App() {
     onDismissBanner: () => setBanner(null),
     seedEditor,
     setSettings,
-    settings,
     setSettingsOpen,
     getPersistedTabs,
   })
@@ -293,6 +292,7 @@ export default function App() {
 
   const hasDialog =
     Boolean(sessionManager.dialog) ||
+    Boolean(sessionManager.connectionSettings) ||
     Boolean(tableOperations.tablePrompt) ||
     Boolean(tableOperations.dropTarget) ||
     Boolean(sessionManager.deleteTarget) ||
@@ -312,6 +312,11 @@ export default function App() {
 
   const session = activeConnectionId ? sessions[activeConnectionId] || null : null
   const activeTab = session ? session.tabs.find((tab) => tab.id === session.activeTabId) || null : null
+
+  useEffect(() => {
+    layout.setTimezone(session?.timezone ?? null)
+    layout.setSystemTimezone(session?.systemTimezone ?? null)
+  }, [layout.setTimezone, layout.setSystemTimezone, session?.timezone, session?.systemTimezone])
   const workspaceReady = screen === 'workspace' && Boolean(session)
 
   useKeyboardShortcuts({
@@ -580,6 +585,7 @@ export default function App() {
           onReloadConnections={sessionManager.handleReloadConnections}
           onNotify={showBanner}
           onTestConnection={api.testConnection}
+          onOpenConnectionSettings={(connection) => sessionManager.handleOpenConnectionSettings(connection.id)}
           onCancelConnection={(connection) => sessionManager.handleCancelConnection(connection.id)}
         />
       )}

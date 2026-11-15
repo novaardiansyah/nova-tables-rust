@@ -116,6 +116,7 @@ export interface ResultGridProps {
   columns: ResultColumn[]
   rows: unknown[][]
   timezone?: string
+  systemTimezone?: string
   relations?: ResultRelation[] | null
   onRelationClick?: (relation: ResultRelation, value: unknown) => void
   driverType?: string | null
@@ -143,6 +144,7 @@ export default function ResultGrid({
   columns,
   rows,
   timezone = 'UTC',
+  systemTimezone = 'UTC',
   relations,
   onRelationClick,
   selection = null,
@@ -694,7 +696,7 @@ export default function ResultGrid({
                         >
                           {active?.row === origIndex && active?.col === colIndex && !isAutoIncPk ? (
                             <CellEditor
-                              value={isDateTimeString(display) ? formatDateTime(display, timezone) : display}
+                              value={isDateTimeString(display) ? formatDateTime(display, timezone, systemTimezone) : display}
                               onCommit={commitEdit}
                               onCancel={cancelEdit}
                               controllerRef={editorRef}
@@ -712,10 +714,10 @@ export default function ResultGrid({
                               title={`Navigate to ${columnRelations[colIndex]?.referencedTable} (${columnRelations[colIndex]?.referencedColumn} = ${String(display)})`}
                               className="cursor-pointer border-b border-dashed border-text-muted/50 hover:border-text-soft"
                             >
-                              {isDateTimeString(display) ? formatDateTime(display, timezone) : String(display)}
+                              {isDateTimeString(display) ? formatDateTime(display, timezone, systemTimezone) : String(display)}
                             </button>
                           ) : (
-                            <Cell value={display} timezone={timezone} />
+                            <Cell value={display} timezone={timezone} systemTimezone={systemTimezone} />
                           )}
                         </td>
                       )
@@ -754,7 +756,15 @@ export default function ResultGrid({
   )
 }
 
-function Cell({ value, timezone }: { value: unknown; timezone?: string }) {
+function Cell({
+  value,
+  timezone,
+  systemTimezone,
+}: {
+  value: unknown
+  timezone?: string
+  systemTimezone?: string
+}) {
   if (value === '') {
     return <span className="font-mono text-[length:calc(var(--grid-font-size)-1px)] italic text-text-faint"></span>
   }
@@ -773,7 +783,7 @@ function Cell({ value, timezone }: { value: unknown; timezone?: string }) {
 
   const rawText = String(value)
   const isDate = isDateTimeString(rawText) || DATE_RE.test(rawText)
-  const text = isDate ? formatDateTime(rawText, timezone) : rawText
+  const text = isDate ? formatDateTime(rawText, timezone, systemTimezone) : rawText
   const isLong = text.length > 64
 
   return (

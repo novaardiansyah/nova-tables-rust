@@ -112,7 +112,7 @@ Your full name and user profile are prominently shown in the application interfa
 
 ### Customise Preferences, Typography, and Themes
 
-Fine-tune typography, editor font sizes, results grid fonts, timezone alignment (Asia/Jakarta UTC+7), and theme palettes to tailor the environment to your workstation.
+Fine-tune typography, editor font sizes, results grid fonts, and theme palettes to tailor the environment to your workstation.
 
 ![Preferences](./public/demo/v2.2.4/settings-preferences.png)
 
@@ -154,7 +154,7 @@ A comprehensive shortcut sheet lets you master keyboard navigation for running q
 - **Verifiable In-Grid Editing**: Edit cells or mark rows for deletion directly in the grid. Generate verifiable `UPDATE` and `DELETE` SQL statements without silent background modifications.
 - **Execution Plan Inspection**: Inspect query performance with visual estimated execution plans on Microsoft SQL Server.
 - **Exporting & Query History**: Export query results directly to CSV or JSON, and review detailed query execution logs anytime.
-- **Preferences & Themes**: Customize dark and light themes, typography, display scaling, and timezone settings.
+- **Preferences & Themes**: Customize dark and light themes, typography, and display scaling. Each connection keeps its own timezone, configurable from the connection context menu.
 
 ---
 

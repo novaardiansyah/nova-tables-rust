@@ -84,6 +84,7 @@ export interface ResultsPanelProps {
   onRelationClick?: (relation: ResultRelation, value: unknown) => void
   onCopyText?: (payload: string, message?: string) => void
   timezone?: string
+  systemTimezone?: string
   driverType?: string | null
   editSource?: EditSource | null
   edits?: Record<string, { value: unknown; original?: unknown }>
@@ -117,6 +118,7 @@ export default function ResultsPanel({
   onRelationClick,
   onCopyText,
   timezone = 'UTC',
+  systemTimezone = 'UTC',
   driverType = null,
   editSource,
   edits = {},
@@ -402,7 +404,7 @@ export default function ResultsPanel({
         label: 'Copy JSON',
         onSelect: () =>
           copy(
-            jsonRecords(selectionColumnNames, selectionMatrix, timezone),
+            jsonRecords(selectionColumnNames, selectionMatrix, timezone, systemTimezone),
             `Copied selected ${selectionLabel} as JSON.`,
           ),
       },
@@ -421,7 +423,10 @@ export default function ResultsPanel({
         id: 'copy-text',
         label: 'Copy Text',
         onSelect: () =>
-          copy(cleanText(selectionMatrix, timezone), `Copied selected ${selectionLabel} as clean text.`),
+          copy(
+              cleanText(selectionMatrix, timezone, systemTimezone),
+              `Copied selected ${selectionLabel} as clean text.`,
+            ),
       },
     ]
 
@@ -517,6 +522,7 @@ export default function ResultsPanel({
     tabTitle,
     table,
     timezone,
+    systemTimezone,
   ])
 
   const actionMenuItems = useMemo<ContextMenuItem[]>(() => {
@@ -815,6 +821,7 @@ export default function ResultsPanel({
                   rows={activeResultSet?.rows ?? []}
                   relations={relations}
                   timezone={timezone}
+                  systemTimezone={systemTimezone}
                   onRelationClick={onRelationClick}
                   selection={selection}
                   onSelectionChange={setSelection}
@@ -897,6 +904,7 @@ export default function ResultsPanel({
         open={Boolean(inspectTarget)}
         target={inspectTarget}
         timezone={timezone}
+        systemTimezone={systemTimezone}
         edits={edits}
         editable={
           editable &&

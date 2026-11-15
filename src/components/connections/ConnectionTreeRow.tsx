@@ -140,11 +140,6 @@ export function ConnectionRow({
             onOpen(connection)
           }}
           className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:opacity-70"
-          title={
-            isOpen
-              ? `Switch to ${connection.name}`
-              : `Connect to ${connection.name} (${connection.host}:${connection.port})`
-          }
         >
           {isConnecting || isTesting ? (
             <Spinner size={12} className="shrink-0 text-accent" />
@@ -162,14 +157,12 @@ export function ConnectionRow({
                 <EnvironmentBadge environment={connection.environment} />
                 {connection.driverType === 'sqlserver' ? (
                   <span
-                    title={connection.driverType}
                     className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-success">
                     <span className="h-1 w-1 rounded-full bg-current" />
                     {connection.driverType}
                   </span>
                 ) : connection.driverType === 'mysql' ? (
                   <span
-                    title={connection.driverType}
                     className="flex shrink-0 items-center gap-1 rounded-full bg-warning/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-warning">
                     <span className="h-1 w-1 rounded-full bg-current" />
                     {connection.driverType}
@@ -177,7 +170,6 @@ export function ConnectionRow({
                 ) : null}
                 {isLastConnected ? (
                   <span
-                    title="Last connected session"
                     className="flex shrink-0 items-center gap-1 rounded-full bg-accent/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-accent"
                   >
                     <span className="h-1 w-1 rounded-full bg-current" />
@@ -186,7 +178,6 @@ export function ConnectionRow({
                 ) : null}
                 {isOpen ? (
                   <span
-                    title="Session is open"
                     className="flex shrink-0 items-center gap-1 rounded-full bg-success/10 px-1.5 py-px text-[length:var(--app-text-9)] font-medium leading-[calc(var(--app-text-9)+4px)] text-success"
                   >
                     <span className="h-1 w-1 rounded-full bg-current" />
@@ -329,7 +320,6 @@ export function FolderRow({
             onToggleFolder(folder.id)
           }}
           className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-          title={isOpen ? 'Collapse folder' : 'Expand folder'}
         >
           <Icon
             name="chevron-right"

@@ -10,7 +10,6 @@ import {
   FONT_SIZE_MAX,
   FONT_SIZE_MIN,
   THEMES,
-  TIMEZONES,
   applySettings,
   getResponsiveDefaultFontSize,
   normalizeSettings,
@@ -20,8 +19,6 @@ import {
 const THEME_OPTIONS = THEMES.map((theme) => ({ value: theme.id, label: theme.label }))
 
 const FONT_OPTIONS = FONT_FAMILIES.map((family) => ({ value: family.id, label: family.label }))
-
-const TIMEZONE_OPTIONS = TIMEZONES.map((tz) => ({ value: tz.id, label: tz.label }))
 
 // Shared control width (256px). Font rows split it: 152px select + 8px gap + 96px size input.
 const CONTROL_WIDTH = 'w-64'
@@ -216,7 +213,6 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
       ...DEFAULT_SETTINGS,
       appFontSize: defaultSize,
       contentFontSize: defaultSize,
-      systemTimezone: 'UTC',
       queryWordWrap: false,
     })
   }
@@ -318,32 +314,6 @@ export default function SettingsDialog({ open, settings, onClose, onSave }: Sett
                   onChange={update('contentFontSize')}
                 />
               </div>
-            </Row>
-            <Row label="System Timezone">
-              <Select
-                value={draft.systemTimezone || 'UTC'}
-                options={TIMEZONE_OPTIONS}
-                onChange={update('systemTimezone')}
-                icon="clock"
-                placeholder="Select system timezone"
-                emptyLabel="No timezones"
-                panelAlign="right"
-                className={CONTROL_WIDTH}
-                searchable
-              />
-            </Row>
-            <Row label="User Timezone">
-              <Select
-                value={draft.timezone}
-                options={TIMEZONE_OPTIONS}
-                onChange={update('timezone')}
-                icon="clock"
-                placeholder="Select timezone"
-                emptyLabel="No timezones"
-                panelAlign="right"
-                className={CONTROL_WIDTH}
-                searchable
-              />
             </Row>
             <Row label="Word wrap">
               <span className="text-[length:var(--app-text-11)] text-text-muted">

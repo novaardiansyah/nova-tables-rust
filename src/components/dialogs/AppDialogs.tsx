@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import ShortcutPanel from '@/components/dialogs/ShortcutPanel'
 import SettingsDialog from '@/components/dialogs/SettingsDialog'
+import ConnectionSettingsDialog from '@/components/dialogs/ConnectionSettingsDialog'
 import ConfigTransferDialog, {
   ConfigTransferMode,
   ConfigTransferExportData,
@@ -69,6 +70,9 @@ export default function AppDialogs({
   const {
     dialog,
     setDialog,
+    connectionSettings,
+    setConnectionSettings,
+    handleSaveConnectionSettings,
     handleSaveConnection,
     databaseCreate,
     setDatabaseCreate,
@@ -296,6 +300,18 @@ export default function AppDialogs({
         settings={settings}
         onClose={() => setSettingsOpen(false)}
         onSave={saveSettings}
+      />
+
+      <ConnectionSettingsDialog
+        open={Boolean(connectionSettings)}
+        connectionName={connectionSettings?.name ?? ''}
+        timezone={connectionSettings?.timezone ?? 'UTC'}
+        busy={connectionSettings?.busy ?? false}
+        error={connectionSettings?.error ?? null}
+        onCancel={() => {
+          if (!connectionSettings?.busy) setConnectionSettings(null)
+        }}
+        onSave={handleSaveConnectionSettings}
       />
 
       <ConfigTransferDialog

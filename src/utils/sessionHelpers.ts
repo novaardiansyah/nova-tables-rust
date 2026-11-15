@@ -88,6 +88,8 @@ export interface SessionData {
   name: string
   host: string
   port: number
+  timezone?: string
+  systemTimezone?: string
   activeDatabase?: string | null
   tables: any
   columns: any
@@ -253,6 +255,8 @@ export function createSession(result: any, connection: any, database: string, ta
     host: result?.host || connection?.host || '127.0.0.1',
     port: Number(result?.port || connection?.port || (isMysql ? 3306 : 1433)),
     connection,
+    timezone: connection?.timezone ?? 'UTC',
+    systemTimezone: result?.timezone ?? 'UTC',
     activeDatabase: database,
     tables: EMPTY_TABLES,
     columns: EMPTY_COLUMNS,

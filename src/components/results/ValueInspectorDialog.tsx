@@ -3,11 +3,11 @@ import Icon from '@/components/common/Icon'
 import JsonView from '@/components/results/JsonView'
 import { cellText, formatDateTime, isDateTimeString } from '@/resultFormats'
 
-function formatRaw(value: unknown, timeZone?: string): string {
+function formatRaw(value: unknown, timeZone?: string, systemTimezone?: string): string {
   if (value === null || value === undefined) return ''
   if (typeof value === 'object' && value !== null && 'special' in value) return String((value as { special: unknown }).special)
-  if (value instanceof Date) return formatDateTime(value, timeZone)
-  if (typeof value === 'string' && isDateTimeString(value)) return formatDateTime(value, timeZone)
+  if (value instanceof Date) return formatDateTime(value, timeZone, systemTimezone)
+  if (typeof value === 'string' && isDateTimeString(value)) return formatDateTime(value, timeZone, systemTimezone)
   if (typeof value === 'object') {
     try {
       return JSON.stringify(value, null, 2)
@@ -130,6 +130,7 @@ export interface ValueInspectorDialogProps {
   open: boolean
   target?: InspectorTarget | null
   timezone?: string
+  systemTimezone?: string
   edits?: Record<string, EditCellState>
   editable?: boolean
   onSave?: (newValue: string) => void
@@ -141,6 +142,7 @@ export default function ValueInspectorDialog({
   open,
   target = null,
   timezone,
+  systemTimezone,
   edits = {},
   editable = false,
   onSave,
@@ -154,7 +156,7 @@ export default function ValueInspectorDialog({
     if (target.type === 'cell') {
       const edit = edits[`${target.rowIndex}:${target.column?.name}`]
       const val = edit ? edit.value : target.value
-      return formatRaw(val, timezone)
+      return formatRaw(val, timezone, systemTimezone)
     }
     if (target.type === 'rows' || target.type === 'selection') {
       const cols = target.columnNames || []
@@ -163,7 +165,7 @@ export default function ValueInspectorDialog({
         cols.forEach((colName, idx) => {
           const cellVal = row[idx]
           if (cellVal !== null && cellVal !== undefined && isDateTimeString(cellVal)) {
-            item[colName] = formatDateTime(cellVal, timezone)
+            item[colName] = formatDateTime(cellVal, timezone, systemTimezone)
           } else {
             item[colName] = cellVal ?? null
           }
@@ -173,11 +175,13 @@ export default function ValueInspectorDialog({
       try {
         return JSON.stringify(records.length === 1 ? records[0] : records, null, 2)
       } catch {
-        return (target.matrix || []).map((row) => row.map((c) => cellText(c, timezone)).join('\t')).join('\n')
+        return (target.matrix || [])
+          .map((row) => row.map((c) => cellText(c, timezone, systemTimezone)).join('\t'))
+          .join('\n')
       }
     }
     return ''
-  }, [edits, open, target, timezone])
+  }, [edits, open, target, timezone, systemTimezone])
 
   const initialFormat = useMemo(() => {
     if (isMulti) return 'json'

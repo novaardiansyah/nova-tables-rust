@@ -23,6 +23,7 @@ export interface JsonPanelProps {
   onCellChange?: (row: number, columnName: string, nextValue: unknown, prevValue: unknown) => void
   driverType?: string | null
   timezone?: string
+  systemTimezone?: string
   onCopyText?: (payload: string, message?: string) => void
 }
 
@@ -42,6 +43,7 @@ export default function JsonPanel({
   onCellChange,
   driverType,
   timezone,
+  systemTimezone,
   onCopyText,
 }: JsonPanelProps) {
   const [panelView, setPanelView] = useState<'json' | 'form'>('json')
@@ -137,6 +139,7 @@ export default function JsonPanel({
             onCellChange={onCellChange}
             driverType={driverType}
             timezone={timezone}
+            systemTimezone={systemTimezone}
             onCopyText={onCopyText}
           />
         ) : jsonText ? (

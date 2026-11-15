@@ -99,6 +99,7 @@ async function buildConnectionsBundle(
       encrypt: item.encrypt !== false,
       trustServerCertificate: item.trustServerCertificate !== false,
       driverType: item.driverType ?? null,
+      timezone: item.timezone ?? null,
       password: resolvedPassword,
       folderId: item.folderId ?? null,
     })
@@ -251,6 +252,7 @@ export async function applyImportedConnections(payload: {
       encrypt: item.encrypt !== false,
       trustServerCertificate: item.trustServerCertificate !== false,
       driverType: item.driverType ?? (Number(item.port) === 3306 ? 'mysql' : 'sqlserver'),
+      timezone: item.timezone ?? null,
       folderId,
       password: resolvedPassword,
     })

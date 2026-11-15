@@ -13,6 +13,7 @@ export interface FormViewerProps {
   onCellChange?: (rowIndex: number, columnName: string, nextValue: unknown, prevValue: unknown) => void
   driverType?: string | null
   timezone?: string
+  systemTimezone?: string
   onCopyText?: (payload: string, message?: string) => void
 }
 
@@ -34,20 +35,26 @@ function prettyJsonText(raw: string): string | null {
   }
 }
 
-function toText(value: unknown, timezone?: string): string {
+function toText(value: unknown, timezone?: string, systemTimezone?: string): string {
   if (value === null || value === undefined) return ''
   if (isSpecial(value)) return String(value.special)
-  if (value instanceof Date) return formatDateTime(value, timezone)
+  if (value instanceof Date) return formatDateTime(value, timezone, systemTimezone)
   if (typeof value === 'object') return JSON.stringify(value, null, 2)
   const rawText = String(value)
   const jsonText = prettyJsonText(rawText)
   if (jsonText !== null) return jsonText
   const isDate = isDateTimeString(rawText) || DATE_RE.test(rawText)
-  return isDate ? formatDateTime(rawText, timezone) : rawText
+  return isDate ? formatDateTime(rawText, timezone, systemTimezone) : rawText
 }
 
-function parseValue(raw: string, original: unknown, specialValues: SpecialValueOption[], timezone?: string): unknown {
-  if (raw === toText(original, timezone)) return original
+function parseValue(
+  raw: string,
+  original: unknown,
+  specialValues: SpecialValueOption[],
+  timezone?: string,
+  systemTimezone?: string,
+): unknown {
+  if (raw === toText(original, timezone, systemTimezone)) return original
   const text = raw.trim()
   if (text === '') return null
   const exact = specialValues.find((option) => option.label.toLowerCase() === text.toLowerCase())
@@ -100,6 +107,7 @@ function FormField({
   onSpecial,
   specialValues,
   timezone,
+  systemTimezone,
   onLabelContextMenu,
 }: {
   id: string
@@ -110,9 +118,10 @@ function FormField({
   onSpecial?: (special: unknown) => void
   specialValues: SpecialValueOption[]
   timezone?: string
+  systemTimezone?: string
   onLabelContextMenu?: (event: React.MouseEvent, label: string) => void
 }) {
-  const [draft, setDraft] = useState(() => toText(value, timezone))
+  const [draft, setDraft] = useState(() => toText(value, timezone, systemTimezone))
   const [menuOpen, setMenuOpen] = useState(false)
   const focused = useRef(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -128,8 +137,8 @@ function FormField({
 
   useEffect(() => {
     userResizedRef.current = false
-    if (!focused.current) setDraft(toText(value, timezone))
-  }, [value, timezone])
+    if (!focused.current) setDraft(toText(value, timezone, systemTimezone))
+  }, [value, timezone, systemTimezone])
 
   const adjustTextareaHeight = useCallback(() => {
     const el = fieldRef.current as HTMLTextAreaElement | null
@@ -199,7 +208,7 @@ function FormField({
         end: event.target.selectionEnd ?? nextVal.length,
       }
       setDraft(nextVal)
-      onChange(parseValue(nextVal, value, specialValues, timezone))
+      onChange(parseValue(nextVal, value, specialValues, timezone, systemTimezone))
     },
     style: { fontSize: 'var(--json-font-size)' },
     spellCheck: false,
@@ -237,7 +246,7 @@ function FormField({
                       key={option.label}
                       type="button"
                       onClick={() => {
-                        setDraft(toText(option.value, timezone))
+                        setDraft(toText(option.value, timezone, systemTimezone))
                         onSpecial(option.value)
                         setMenuOpen(false)
                       }}
@@ -328,6 +337,7 @@ export default function FormViewer({
   onCellChange,
   driverType,
   timezone,
+  systemTimezone,
   onCopyText,
 }: FormViewerProps) {
   const [filter, setFilter] = useState('')
@@ -415,6 +425,7 @@ export default function FormViewer({
                       onSpecial={onCellChange ? (special) => onCellChange(rowIndex, columnName, special, original) : undefined}
                       specialValues={specialValues}
                       timezone={timezone}
+                      systemTimezone={systemTimezone}
                       onLabelContextMenu={handleLabelContextMenu}
                     />
                   )

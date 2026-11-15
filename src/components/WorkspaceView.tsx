@@ -224,6 +224,7 @@ export default function WorkspaceView({
         pinnedTables={pinnedTables}
         onActivateSession={activateSession}
         onCloseSession={closeSession}
+        onOpenConnectionSettings={sessionManager.handleOpenConnectionSettings}
         onReorderSessions={handleReorderSessions}
         onBrowseTable={handleBrowseTable}
         onNewRecord={handleNewRecord}
@@ -376,7 +377,8 @@ export default function WorkspaceView({
               relations={activeTab?.relations || []}
               onRelationClick={handleOpenRelation}
               onCopyText={handleCopyText}
-              timezone={settings.timezone}
+              timezone={session.timezone}
+              systemTimezone={session.systemTimezone}
               driverType={session?.connection?.driverType ?? null}
               editSource={activeTab?.editSource ?? null}
               edits={activeTab?.edits ?? {}}
@@ -435,7 +437,8 @@ export default function WorkspaceView({
         rowIndexes={activeResultData?.rowIndexes ?? []}
         onCellChange={handleCellChange}
         driverType={session?.connection?.driverType ?? null}
-        timezone={settings.timezone}
+        timezone={session.timezone}
+        systemTimezone={session.systemTimezone}
         onCopyText={handleCopyText}
       />
     </div>

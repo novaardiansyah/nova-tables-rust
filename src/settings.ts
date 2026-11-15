@@ -18,8 +18,6 @@ export interface TimezoneOption {
 
 export interface Settings {
   theme: string
-  timezone: string
-  systemTimezone: string
   appFontSize: number
   appFontFamily: string
   contentFontSize: number
@@ -112,8 +110,6 @@ export const TIMEZONES: TimezoneOption[] = [
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'light-nova',
-  timezone: 'UTC',
-  systemTimezone: 'UTC',
   appFontSize: 12,
   appFontFamily: 'system',
   contentFontSize: 12,
@@ -155,16 +151,6 @@ function normalizeEstimateCountThreshold(value: unknown): number {
   return Math.min(Math.max(threshold, ESTIMATE_COUNT_MIN), ESTIMATE_COUNT_MAX)
 }
 
-function normalizeTimezone(value: unknown, fallback: string): string {
-  return TIMEZONES.some((tz) => tz.id === value) ? (value as string) : fallback
-}
-
-function normalizeSystemTimezone(value: unknown, fallback: string): string {
-  const candidate = typeof value === 'string' ? value.trim() : ''
-  if (candidate === 'Etc/UTC') return 'UTC'
-  return TIMEZONES.some((tz) => tz.id === candidate) ? candidate : fallback
-}
-
 export function normalizeSettings(input: unknown): Settings {
   const source = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
   const defaultSize = getResponsiveDefaultFontSize()
@@ -189,8 +175,6 @@ export function normalizeSettings(input: unknown): Settings {
     theme: THEMES.some((theme) => theme.id === source.theme)
       ? (source.theme as string)
       : DEFAULT_SETTINGS.theme,
-    timezone: normalizeTimezone(source.timezone, DEFAULT_SETTINGS.timezone),
-    systemTimezone: normalizeSystemTimezone(source.systemTimezone, DEFAULT_SETTINGS.systemTimezone),
     appFontSize: normalizeFontSize(source.appFontSize, defaultSize, APP_FONT_SIZE_MAX),
     appFontFamily: normalizeFontFamily(source.appFontFamily, DEFAULT_SETTINGS.appFontFamily),
     contentFontSize: normalizeFontSize(source.contentFontSize ?? contentFontSizeFallback, defaultSize),

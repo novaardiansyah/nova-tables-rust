@@ -10,7 +10,6 @@ export interface UseSessionManagerProps {
   onDismissBanner?: () => void
   seedEditor: (sql: string, focus?: boolean) => void
   setSettings: React.Dispatch<React.SetStateAction<Settings>>
-  settings: Settings
   setSettingsOpen: React.Dispatch<React.SetStateAction<boolean>>
   getPersistedTabs?: (connectionId: string) => PersistedSessionTabs | null
 }
@@ -20,7 +19,6 @@ export function useSessionManager({
   onDismissBanner,
   seedEditor,
   setSettings,
-  settings,
   setSettingsOpen,
   getPersistedTabs,
 }: UseSessionManagerProps) {
@@ -35,6 +33,13 @@ export function useSessionManager({
   const connectingIdRef = useRef<string | null>(null)
   const cancelConnectionRef = useRef<Set<string>>(new Set())
   const [dialog, setDialog] = useState<{ mode: ConnectionDialogMode; connection?: ConnectionDialogConnection | null; notice?: string | null } | null>(null)
+  const [connectionSettings, setConnectionSettings] = useState<{
+    connectionId: string
+    name: string
+    timezone: string
+    error?: string | null
+    busy?: boolean
+  } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [databaseDrop, setDatabaseDrop] = useState<{ database: string; error?: string | null } | null>(null)
@@ -291,7 +296,6 @@ export function useSessionManager({
           return
         }
         const database = pickDatabase(result.databases, result.database)
-        const detectedTz = result?.timezone || (connection as any)?.timezone
 
         await api.setLastConnectedId(connection.id)
         setLastConnectedId(connection.id)
@@ -326,14 +330,6 @@ export function useSessionManager({
         const created = createSession(result, connection, database, tabs[0])
         created.tabs = tabs
         created.activeTabId = activeTabId
-        if (detectedTz) {
-          created.timezone = detectedTz
-          if (settings.systemTimezone !== detectedTz) {
-            const nextSettings = applySettings({ ...settings, systemTimezone: detectedTz })
-            setSettings(nextSettings)
-            void api.saveSettings(nextSettings)
-          }
-        }
 
         setSessions((prev) => ({ ...prev, [connection.id]: created }))
         setActiveConnectionId(connection.id)
@@ -365,7 +361,7 @@ export function useSessionManager({
         cancelConnectionRef.current.delete(connection.id)
       }
     },
-    [activateSession, getPersistedTabs, loadColumns, loadModules, loadTables, seedEditor, showBanner, settings],
+    [activateSession, getPersistedTabs, loadColumns, loadModules, loadTables, seedEditor, showBanner],
   )
 
   const handleSelectDatabase = useCallback(
@@ -614,6 +610,59 @@ export function useSessionManager({
     [closeSession, patchSession, showBanner],
   )
 
+  const handleOpenConnectionSettings = useCallback(
+    (connectionId: string) => {
+      const connection =
+        connections.find((item: any) => item.id === connectionId) ??
+        sessionsRef.current[connectionId]?.connection
+      if (!connection) return
+      setConnectionSettings({
+        connectionId,
+        name: connection.name ?? '',
+        timezone: connection.timezone ?? 'UTC',
+        error: null,
+        busy: false,
+      })
+    },
+    [connections],
+  )
+
+  const handleSaveConnectionSettings = useCallback(
+    async (timezone: string) => {
+      const target = connectionSettings
+      if (!target || target.busy) return
+      const connection =
+        connections.find((item: any) => item.id === target.connectionId) ??
+        sessionsRef.current[target.connectionId]?.connection
+      if (!connection) return
+
+      setConnectionSettings({ ...target, busy: true, error: null })
+      try {
+        const saved = await api.saveConnection({ ...connection, timezone })
+        const nextTimezone = saved.timezone ?? timezone
+        setConnections((prev) =>
+          prev.map((item: any) =>
+            item.id === target.connectionId ? { ...item, timezone: nextTimezone } : item,
+          ),
+        )
+        const current = sessionsRef.current[target.connectionId]
+        if (current) {
+          patchSession(target.connectionId, {
+            timezone: nextTimezone,
+            connection: { ...current.connection, timezone: nextTimezone },
+          })
+        }
+        setConnectionSettings(null)
+        showBanner('success', `Settings saved for “${target.name}”.`)
+      } catch (error: any) {
+        setConnectionSettings((prev) =>
+          prev ? { ...prev, busy: false, error: error.message } : prev,
+        )
+      }
+    },
+    [connectionSettings, connections, patchSession, showBanner],
+  )
+
   const handleDeleteSelection = useCallback(
     async ({ connectionIds = [], folderIds = [] }: { connectionIds?: string[]; folderIds?: string[] }) => {
       const result = await api.deleteTree({ connectionIds, folderIds })
@@ -761,6 +810,10 @@ export function useSessionManager({
     connectingId,
     dialog,
     setDialog,
+    connectionSettings,
+    setConnectionSettings,
+    handleOpenConnectionSettings,
+    handleSaveConnectionSettings,
     deleteTarget,
     setDeleteTarget,
     deleting,
