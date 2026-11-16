@@ -589,6 +589,7 @@ export function useTableBrowser({
       try {
         await api.runQuery({
           connectionId: current.connectionId,
+          historyConnectionId: current.connection?.id ?? null,
           database: current.activeDatabase,
           sql,
         })
@@ -622,6 +623,7 @@ export function useTableBrowser({
             : `EXEC sp_rename N'${quoteIdentifier(draft.schema || 'dbo', driverType)}.${quoteIdentifier(draft.table, driverType)}', N'${nextName.replace(/'/g, "''")}';`
         await api.runQuery({
           connectionId: current.connectionId,
+          historyConnectionId: current.connection?.id ?? null,
           database: current.activeDatabase,
           sql: renameSql,
         })

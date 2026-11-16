@@ -72,9 +72,10 @@ export function useSavedQueries({
 
   const refreshSavedQueries = useCallback(async () => {
     const current = activeSession()
-    if (!current?.activeDatabase) return
+    const connectionId = current?.connection?.id ?? null
+    if (!connectionId || !current?.activeDatabase) return
     try {
-      const items = await api.listSavedQueries(current.connectionId, current.activeDatabase)
+      const items = await api.listSavedQueries(connectionId, current.activeDatabase)
       setSavedQueries(items)
       setSavedQueriesError(null)
     } catch (error: any) {
@@ -90,12 +91,20 @@ export function useSavedQueries({
       return undefined
     }
 
+    const connectionId = activeSession()?.connection?.id ?? null
+    if (!connectionId) {
+      setSavedQueries([])
+      setSavedQueriesError(null)
+      setSavedQueriesLoading(false)
+      return undefined
+    }
+
     let active = true
     setSavedQueriesLoading(true)
     setSavedQueriesError(null)
 
     api
-      .listSavedQueries(activeConnectionId, scopeDatabase)
+      .listSavedQueries(connectionId, scopeDatabase)
       .then((items) => {
         if (!active) return
         setSavedQueries(items)
@@ -135,7 +144,7 @@ export function useSavedQueries({
       setQueryBusy(true)
       try {
         const saved = await api.saveSavedQuery({
-          connectionId: current.connectionId,
+          connectionId: current.connection?.id ?? null,
           databaseName: current.activeDatabase,
           name: tab.savedQueryName || tab.title,
           sql,
@@ -184,7 +193,7 @@ export function useSavedQueries({
       setQueryBusy(true)
       try {
         const saved = await api.saveSavedQuery({
-          connectionId: current.connectionId,
+          connectionId: current.connection?.id ?? null,
           databaseName: current.activeDatabase,
           name,
           sql: liveSql,
@@ -225,7 +234,7 @@ export function useSavedQueries({
       if (!current || !current.activeDatabase) return
       const db = item.database || item.databaseName
       if (
-        item.connectionId !== current.connectionId ||
+        item.connectionId !== (current.connection?.id ?? null) ||
         (db && db.toLowerCase() !== current.activeDatabase.toLowerCase())
       ) {
         showBanner('warn', 'This saved query belongs to another connection or database.')
@@ -247,10 +256,12 @@ export function useSavedQueries({
       try {
         const saved = await api.renameSavedQuery({ id: target.id, name })
         if (saved && target.connectionId) {
-          const current = sessionsRef.current[target.connectionId]
-          for (const tab of current?.tabs ?? []) {
-            if (tab.savedQueryId !== saved.id) continue
-            updateTab(target.connectionId, tab.id, { savedQueryName: saved.name, title: saved.name })
+          for (const current of Object.values(sessionsRef.current)) {
+            if (current?.connection?.id !== target.connectionId) continue
+            for (const tab of current.tabs ?? []) {
+              if (tab.savedQueryId !== saved.id) continue
+              updateTab(current.connectionId, tab.id, { savedQueryName: saved.name, title: saved.name })
+            }
           }
         }
         setQueryRenameTarget(null)
@@ -273,10 +284,12 @@ export function useSavedQueries({
     try {
       await api.deleteSavedQuery(target.id)
       if (target.connectionId) {
-        const current = sessionsRef.current[target.connectionId]
-        for (const tab of current?.tabs ?? []) {
-          if (tab.savedQueryId !== target.id) continue
-          updateTab(target.connectionId, tab.id, { savedQueryId: null, savedQueryName: null })
+        for (const current of Object.values(sessionsRef.current)) {
+          if (current?.connection?.id !== target.connectionId) continue
+          for (const tab of current.tabs ?? []) {
+            if (tab.savedQueryId !== target.id) continue
+            updateTab(current.connectionId, tab.id, { savedQueryId: null, savedQueryName: null })
+          }
         }
       }
       setQueryDeleteTarget(null)

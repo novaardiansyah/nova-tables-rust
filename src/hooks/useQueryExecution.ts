@@ -142,6 +142,7 @@ export function useQueryExecution({
       try {
         const result = await api.runQuery({
           connectionId: current.connectionId,
+          historyConnectionId: current.connection?.id ?? null,
           database: current.activeDatabase,
           sql,
           recordHistory: true,
@@ -606,6 +607,7 @@ export function useQueryExecution({
       try {
         await api.runQuery({
           connectionId: current.connectionId,
+          historyConnectionId: current.connection?.id ?? null,
           database: current.activeDatabase,
           sql,
           recordHistory: true,

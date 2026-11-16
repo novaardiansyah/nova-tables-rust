@@ -410,19 +410,14 @@ export const api = {
     }
 
     const localList: ConnectionModel[] = res.connections.map((conn) => {
-      const explicitDb =
-        conn.databaseName !== undefined && conn.databaseName !== null
-          ? conn.databaseName
-          : conn.database !== undefined && conn.database !== null
-            ? conn.database
-            : conn.lastDatabaseUsed || ''
+      const configuredDb = conn.databaseName ?? conn.database ?? ''
       const password = conn.password ?? null
       const hasPassword = Boolean(conn.hasPassword || (password && password.length > 0))
       return {
         ...conn,
         password,
-        database: explicitDb,
-        databaseName: explicitDb,
+        database: configuredDb,
+        databaseName: configuredDb,
         hasPassword,
       }
     })

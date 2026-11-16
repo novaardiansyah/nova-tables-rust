@@ -155,37 +155,32 @@ export default function WorkspaceView({
   )
 
   const sidebarSessions: SidebarSessionItem[] = useMemo(() => {
-    const sessionMap = new Map<string, any>(Object.entries(sessions))
+    const sessionEntries = Object.entries(sessions)
     const ordered: SidebarSessionItem[] = []
     const seen = new Set<string>()
 
+    const push = (sessionId: string, s: any) => {
+      seen.add(sessionId)
+      ordered.push({
+        connectionId: sessionId,
+        connection: s.connection,
+        activeDatabase: s.activeDatabase,
+        databases: s.databases || [],
+        tables: s.tables,
+        modules: s.modules,
+      })
+    }
+
     const connList = sessionManager.connections || []
     for (const conn of connList) {
-      const s = sessionMap.get(conn.id)
-      if (s) {
-        seen.add(conn.id)
-        ordered.push({
-          connectionId: s.connectionId,
-          connection: s.connection,
-          activeDatabase: s.activeDatabase,
-          databases: s.databases || [],
-          tables: s.tables,
-          modules: s.modules,
-        })
+      for (const [sessionId, s] of sessionEntries) {
+        if (seen.has(sessionId) || s.connection?.id !== conn.id) continue
+        push(sessionId, s)
       }
     }
 
-    for (const [id, s] of sessionMap.entries()) {
-      if (!seen.has(id)) {
-        ordered.push({
-          connectionId: s.connectionId,
-          connection: s.connection,
-          activeDatabase: s.activeDatabase,
-          databases: s.databases || [],
-          tables: s.tables,
-          modules: s.modules,
-        })
-      }
+    for (const [sessionId, s] of sessionEntries) {
+      if (!seen.has(sessionId)) push(sessionId, s)
     }
 
     return ordered
@@ -194,15 +189,18 @@ export default function WorkspaceView({
   const handleReorderSessions = useCallback(
     (fromConnectionId: string, toConnectionId: string, position: 'before' | 'after') => {
       if (fromConnectionId === toConnectionId) return
+      const fromId = sessions[fromConnectionId]?.connection?.id ?? null
+      const toId = sessions[toConnectionId]?.connection?.id ?? null
+      if (!fromId || !toId || fromId === toId) return
       const currentList: any[] = sessionManager.connections || []
       const currentIds = currentList.map((c: any) => c.id)
-      if (!currentIds.includes(fromConnectionId) || !currentIds.includes(toConnectionId)) return
+      if (!currentIds.includes(fromId) || !currentIds.includes(toId)) return
 
-      const next = currentIds.filter((id: string) => id !== fromConnectionId)
-      const toIndex = next.indexOf(toConnectionId)
+      const next = currentIds.filter((id: string) => id !== fromId)
+      const toIndex = next.indexOf(toId)
       if (toIndex < 0) return
       const insertIndex = position === 'before' ? toIndex : toIndex + 1
-      next.splice(insertIndex, 0, fromConnectionId)
+      next.splice(insertIndex, 0, fromId)
 
       const folderOrder = (sessionManager.folders || []).map((f: any) => f.id)
       sessionManager.handleReorderTree({
@@ -212,7 +210,7 @@ export default function WorkspaceView({
         folderParents: {},
       })
     },
-    [sessionManager],
+    [sessionManager, sessions],
   )
 
   return (

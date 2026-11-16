@@ -89,12 +89,8 @@ export function createDatabaseOps(ctx: DatabaseOpsContext) {
         }
       }
       const isMysql = target?.driverType === 'mysql'
-      if (!connection?.database && !connection?.databaseName) {
-        const preferredDb = target.lastDatabaseUsed || target.database || target.databaseName || ''
-        if (preferredDb && !(isMysql && preferredDb === 'master')) {
-          target.database = preferredDb
-        }
-      }
+      const savedId = target?.id
+      const sessionId = typeof target?.sessionId === 'string' ? target.sessionId : ''
 
       if (target?.password && target?.id && isCiphertext(target.password)) {
         target = {
@@ -103,24 +99,24 @@ export function createDatabaseOps(ctx: DatabaseOpsContext) {
         }
       }
 
-      const res = await callCommand<any>('connect', { input: target })
-      if (target?.id) {
-        ctx.updateLastDatabase(target.id, res?.database || target.database || '').catch(() => {})
+      const res = await callCommand<any>('connect', { input: { ...target, id: sessionId } })
+      if (savedId) {
+        ctx.updateLastDatabase(savedId, res?.database || target.database || '').catch(() => {})
       }
 
       try {
-        if (target?.id) {
-          localStorage.setItem('nova_tables_last_connected_id', target.id)
+        if (savedId) {
+          localStorage.setItem('nova_tables_last_connected_id', savedId)
         }
       } catch {
       }
 
       return {
-        connectionId: target?.id || 'session-1',
+        connectionId: sessionId || 'session-1',
         name: target?.name || (isMysql ? 'MySQL' : 'SQL Server'),
         host: target?.host || '127.0.0.1',
         port: target?.port || (isMysql ? 3306 : 1433),
-        database: (res?.database !== undefined && res?.database !== null) ? res.database : target?.database || target?.lastDatabaseUsed || target?.databaseName || (isMysql ? '' : 'master'),
+        database: (res?.database !== undefined && res?.database !== null) ? res.database : target?.database || target?.databaseName || (isMysql ? '' : 'master'),
         databases: res?.databases || (isMysql
           ? [
             { name: 'information_schema', isSystem: true, isOnline: true },
@@ -367,6 +363,7 @@ export function createDatabaseOps(ctx: DatabaseOpsContext) {
 
     runQuery: async (input: {
       connectionId: string
+      historyConnectionId?: string | null
       database: string
       sql: string
       maxRows?: number
@@ -388,7 +385,7 @@ export function createDatabaseOps(ctx: DatabaseOpsContext) {
         await apiRequest('/api/member/query-history', {
           method: 'POST',
           body: JSON.stringify({
-            connectionId: input.connectionId,
+            connectionId: input.historyConnectionId ?? null,
             database: input.database,
             databaseName: input.database,
             sql: input.sql,

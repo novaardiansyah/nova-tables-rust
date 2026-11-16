@@ -150,7 +150,8 @@ export default function App() {
         session,
         session.connectionId === activeConnectionId ? sqlRef.current : null,
       )
-      if (persisted) connections[session.connectionId] = persisted
+      const savedConnectionId = session.connection?.id ?? null
+      if (persisted && savedConnectionId) connections[savedConnectionId] = persisted
     })
 
     const snapshot: WorkspaceState = {
@@ -564,7 +565,9 @@ export default function App() {
         <ConnectionsScreen
           connections={sessionManager.connections}
           folders={sessionManager.folders}
-          openIds={Object.keys(sessions)}
+          openIds={Object.values(sessions)
+            .map((session) => session.connection?.id)
+            .filter((id): id is string => typeof id === 'string')}
           connectingId={sessionManager.connectingId}
           appVersion={sessionManager.appVersion}
           lastConnectedId={sessionManager.lastConnectedId}

@@ -80,32 +80,32 @@ export function useTableOperations({
   const [pinnedByConnection, setPinnedByConnection] = useState<Record<string, string[]>>({})
 
   const currentSession = activeSession()
-  const activeConnectionId = currentSession?.connectionId ?? null
+  const savedConnectionId = currentSession?.connection?.id ?? null
 
   useEffect(() => {
-    if (!activeConnectionId) return
+    if (!savedConnectionId) return
     let cancelled = false
 
     const initialPinned = Array.isArray(currentSession?.connection?.pinnedTables)
       ? (currentSession.connection.pinnedTables as string[])
       : null
 
-    if (initialPinned && !pinnedByConnection[activeConnectionId]) {
-      setPinnedByConnection((prev) => ({ ...prev, [activeConnectionId]: initialPinned }))
+    if (initialPinned && !pinnedByConnection[savedConnectionId]) {
+      setPinnedByConnection((prev) => ({ ...prev, [savedConnectionId]: initialPinned }))
     }
 
-    void api.getPinnedTables(activeConnectionId).then((tables) => {
+    void api.getPinnedTables(savedConnectionId).then((tables) => {
       if (!cancelled && Array.isArray(tables)) {
-        setPinnedByConnection((prev) => ({ ...prev, [activeConnectionId]: tables }))
+        setPinnedByConnection((prev) => ({ ...prev, [savedConnectionId]: tables }))
       }
     })
 
     return () => {
       cancelled = true
     }
-  }, [activeConnectionId])
+  }, [savedConnectionId])
 
-  const pinnedTables = activeConnectionId ? (pinnedByConnection[activeConnectionId] ?? []) : []
+  const pinnedTables = savedConnectionId ? (pinnedByConnection[savedConnectionId] ?? []) : []
 
   const handleRenameTable = useCallback((table: TableItem) => {
     setTablePrompt({ kind: 'rename', table })
@@ -114,8 +114,8 @@ export function useTableOperations({
   const handleTogglePin = useCallback(
     async (table: TableItem) => {
       const current = activeSession()
-      if (!current?.connectionId) return
-      const connectionId = current.connectionId
+      const connectionId = current?.connection?.id ?? null
+      if (!connectionId) return
       const key = `${table.schema}.${table.name}`
       const currentList = pinnedByConnection[connectionId] ?? []
       const nextList = currentList.includes(key)
@@ -198,6 +198,7 @@ export function useTableOperations({
       try {
         await api.runQuery({
           connectionId: current.connectionId,
+          historyConnectionId: current.connection?.id ?? null,
           database: current.activeDatabase,
           sql: statement,
         })
@@ -210,11 +211,12 @@ export function useTableOperations({
         if (prompt.kind === 'rename') {
           const previousKey = `${table.schema}.${table.name}`
           const nextKey = `${table.schema}.${value}`
-          const currentList = pinnedByConnection[current.connectionId] ?? []
-          if (currentList.includes(previousKey)) {
+          const pinnedId = current.connection?.id ?? null
+          const currentList = pinnedId ? pinnedByConnection[pinnedId] ?? [] : []
+          if (pinnedId && currentList.includes(previousKey)) {
             const nextList = currentList.map((item) => (item === previousKey ? nextKey : item))
-            setPinnedByConnection((prev) => ({ ...prev, [current.connectionId]: nextList }))
-            void api.savePinnedTables(current.connectionId, nextList).catch(() => {})
+            setPinnedByConnection((prev) => ({ ...prev, [pinnedId]: nextList }))
+            void api.savePinnedTables(pinnedId, nextList).catch(() => {})
           }
         }
         setTablePrompt(null)
@@ -237,17 +239,19 @@ export function useTableOperations({
     try {
       await api.runQuery({
         connectionId: current.connectionId,
+        historyConnectionId: current.connection?.id ?? null,
         database: current.activeDatabase,
         sql: `DROP TABLE ${qualifiedName(dropTarget, current.connection?.driverType ?? null)};`,
       })
       showBanner('success', `Dropped ${dropTarget.schema}.${dropTarget.name}.`)
       patchSession(current.connectionId, { selectedTable: null })
       const dropKey = `${dropTarget.schema}.${dropTarget.name}`
-      const currentList = pinnedByConnection[current.connectionId] ?? []
-      if (currentList.includes(dropKey)) {
+      const pinnedId = current.connection?.id ?? null
+      const currentList = pinnedId ? pinnedByConnection[pinnedId] ?? [] : []
+      if (pinnedId && currentList.includes(dropKey)) {
         const nextList = currentList.filter((item) => item !== dropKey)
-        setPinnedByConnection((prev) => ({ ...prev, [current.connectionId]: nextList }))
-        void api.savePinnedTables(current.connectionId, nextList).catch(() => {})
+        setPinnedByConnection((prev) => ({ ...prev, [pinnedId]: nextList }))
+        void api.savePinnedTables(pinnedId, nextList).catch(() => {})
       }
       setDropTarget(null)
       await loadTables(current.connectionId, current.activeDatabase)

@@ -11,7 +11,11 @@ export interface QueryHistoryState {
 }
 
 export interface UseQueryHistoryProps {
-  activeSession: () => { connectionId: string; activeDatabase?: string | null } | null
+  activeSession: () => {
+    connectionId: string
+    connection?: { id?: string | null } | null
+    activeDatabase?: string | null
+  } | null
   showBanner: (type: 'info' | 'warn' | 'error' | 'success', message: string) => void
   openTab: (connectionId: string, title: string, sql: string) => void
 }
@@ -36,12 +40,13 @@ export function useQueryHistory({ activeSession, showBanner, openTab }: UseQuery
 
   const handleOpenQueryHistory = useCallback(() => {
     const current = activeSession()
-    if (!current || !current.activeDatabase) {
+    const connectionId = current?.connection?.id ?? null
+    if (!current || !connectionId || !current.activeDatabase) {
       showBanner('warn', 'Open a connection and pick a database to see its query history.')
       return
     }
     setHistory({ open: true, items: [], loading: true, error: null })
-    loadHistory(current.connectionId, current.activeDatabase)
+    loadHistory(connectionId, current.activeDatabase)
   }, [activeSession, loadHistory, showBanner])
 
   const handleOpenHistoryItem = useCallback(
@@ -68,12 +73,13 @@ export function useQueryHistory({ activeSession, showBanner, openTab }: UseQuery
 
   const handleClearHistory = useCallback(async () => {
     const current = activeSession()
-    if (!current?.activeDatabase) return
+    const connectionId = current?.connection?.id ?? null
+    if (!connectionId || !current?.activeDatabase) return
     const itemsToClear = history.items.slice(0, 30)
     if (itemsToClear.length === 0) return
     try {
-      await api.clearQueryHistory(current.connectionId, current.activeDatabase, itemsToClear.map((item) => item.id))
-      await loadHistory(current.connectionId, current.activeDatabase)
+      await api.clearQueryHistory(connectionId, current.activeDatabase, itemsToClear.map((item) => item.id))
+      await loadHistory(connectionId, current.activeDatabase)
     } catch (error: any) {
       showBanner('error', error.message)
     }

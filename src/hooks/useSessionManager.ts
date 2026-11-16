@@ -48,6 +48,7 @@ export function useSessionManager({
   const [databaseCreateBusy, setDatabaseCreateBusy] = useState(false)
   const [appVersion, setAppVersion] = useState('')
   const duplicateSaveInFlightRef = useRef(false)
+  const sessionSeqRef = useRef(0)
 
   const sessionsRef = useRef<Record<string, SessionData>>({})
   const activeIdRef = useRef<string | null>(null)
@@ -278,20 +279,18 @@ export function useSessionManager({
 
   const handleConnect = useCallback(
     async (connection: any) => {
-      if (sessionsRef.current[connection.id]) {
-        activateSession(connection.id)
-        return
-      }
+      sessionSeqRef.current += 1
+      const sessionId = `${connection.id}:${sessionSeqRef.current}`
 
       cancelConnectionRef.current.delete(connection.id)
       connectingIdRef.current = connection.id
       setConnectingId(connection.id)
       try {
-        const result = await api.connect({ id: connection.id })
+        const result = await api.connect({ ...connection, sessionId })
         if (cancelConnectionRef.current.has(connection.id)) {
           cancelConnectionRef.current.delete(connection.id)
           try {
-            await api.disconnect(connection.id)
+            await api.disconnect(sessionId)
           } catch {}
           return
         }
@@ -304,7 +303,6 @@ export function useSessionManager({
             ...c,
             lastConnectedAt: c.id === connection.id ? new Date().toISOString() : c.lastConnectedAt,
             lastDatabaseUsed: c.id === connection.id ? database : c.lastDatabaseUsed,
-            database: c.id === connection.id ? database : c.database,
             isRecent: c.id === connection.id,
           })),
         )
@@ -331,18 +329,18 @@ export function useSessionManager({
         created.tabs = tabs
         created.activeTabId = activeTabId
 
-        setSessions((prev) => ({ ...prev, [connection.id]: created }))
-        setActiveConnectionId(connection.id)
+        setSessions((prev) => ({ ...prev, [sessionId]: created }))
+        setActiveConnectionId(sessionId)
         setScreen('workspace')
         seedEditor((tabs.find((tab) => tab.id === activeTabId) || tabs[0]).sql)
-        await loadTables(connection.id, database)
-        await loadColumns(connection.id, database)
-        await loadModules(connection.id, database)
+        await loadTables(sessionId, database)
+        await loadColumns(sessionId, database)
+        await loadModules(sessionId, database)
       } catch (error: any) {
         if (cancelConnectionRef.current.has(connection.id)) {
           cancelConnectionRef.current.delete(connection.id)
           try {
-            await api.disconnect(connection.id)
+            await api.disconnect(sessionId)
           } catch {}
         } else if (error.code === 'PASSWORD_MISSING') {
           setDialog({
@@ -361,23 +359,23 @@ export function useSessionManager({
         cancelConnectionRef.current.delete(connection.id)
       }
     },
-    [activateSession, getPersistedTabs, loadColumns, loadModules, loadTables, seedEditor, showBanner],
+    [getPersistedTabs, loadColumns, loadModules, loadTables, seedEditor, showBanner],
   )
 
   const handleSelectDatabase = useCallback(
     async (database: string) => {
       const current = activeSession()
       if (!current || !database) return
+      const savedId = current.connection?.id ?? null
       patchSession(current.connectionId, { activeDatabase: database })
       try {
-        await api.updateLastDatabase(current.connectionId, database)
+        if (savedId) await api.updateLastDatabase(savedId, database)
         setConnections((prev) =>
           prev.map((c) =>
-            c.id === current.connectionId
+            c.id === savedId
               ? {
                   ...c,
                   lastDatabaseUsed: database,
-                  database,
                 }
               : c,
           ),
@@ -423,6 +421,7 @@ export function useSessionManager({
     async (confirmName: string) => {
       const target = databaseDrop?.database
       if (!target || !activeConnectionId) return
+      const savedId = sessionsRef.current[activeConnectionId]?.connection?.id ?? null
 
       setDatabaseDropBusy(true)
       setDatabaseDrop((prev) => (prev ? { ...prev, error: null } : prev))
@@ -452,14 +451,13 @@ export function useSessionManager({
         patchSession(activeConnectionId, { databases, activeDatabase: database })
         if (database) {
           try {
-            await api.updateLastDatabase(activeConnectionId, database)
+            if (savedId) await api.updateLastDatabase(savedId, database)
             setConnections((prev) =>
               prev.map((c) =>
-                c.id === activeConnectionId
+                c.id === savedId
                   ? {
                       ...c,
                       lastDatabaseUsed: database,
-                      database,
                     }
                   : c,
               ),
@@ -488,6 +486,7 @@ export function useSessionManager({
     async (databaseName: string) => {
       const target = databaseName.trim()
       if (!target || !activeConnectionId) return
+      const savedId = sessionsRef.current[activeConnectionId]?.connection?.id ?? null
 
       setDatabaseCreateBusy(true)
       setDatabaseCreate((prev) => (prev ? { ...prev, error: null } : prev))
@@ -510,14 +509,13 @@ export function useSessionManager({
         if (!current) return
         patchSession(activeConnectionId, { databases, activeDatabase: target })
         try {
-          await api.updateLastDatabase(activeConnectionId, target)
+          if (savedId) await api.updateLastDatabase(savedId, target)
           setConnections((prev) =>
             prev.map((c) =>
-              c.id === activeConnectionId
+              c.id === savedId
                 ? {
                     ...c,
                     lastDatabaseUsed: target,
-                    database: target,
                   }
                 : c,
             ),
@@ -574,8 +572,11 @@ export function useSessionManager({
       setDialog(null)
 
       if (!saved.id) return
-      const current = sessionsRef.current[saved.id]
-      if (!current) return
+      const targets = Object.values(sessionsRef.current).filter(
+        (item) => item.connection?.id === saved.id,
+      )
+      if (targets.length === 0) return
+      const first = targets[0]
 
       const reconnectKeys = [
         'host',
@@ -589,22 +590,24 @@ export function useSessionManager({
       ]
       const nextDb = saved.database || saved.databaseName || ''
       const currentDb =
-        current.connection?.database ||
-        current.connection?.databaseName ||
-        current.activeDatabase ||
+        first.connection?.database ||
+        first.connection?.databaseName ||
+        first.activeDatabase ||
         ''
       const dbChanged = Boolean(nextDb !== currentDb)
       const needsReconnect =
         dbChanged ||
         reconnectKeys.some(
-          (key) => (current.connection?.[key] ?? null) !== (saved[key] ?? null),
+          (key) => (first.connection?.[key] ?? null) !== (saved[key] ?? null),
         )
 
       if (needsReconnect) {
-        await closeSession(saved.id)
+        for (const target of targets) await closeSession(target.connectionId)
         showBanner('info', 'Connection settings changed — reconnect to apply them.')
       } else {
-        patchSession(saved.id, { name: saved.name || '', connection: saved })
+        for (const target of targets) {
+          patchSession(target.connectionId, { name: saved.name || '', connection: saved })
+        }
       }
     },
     [closeSession, patchSession, showBanner],
@@ -612,12 +615,12 @@ export function useSessionManager({
 
   const handleOpenConnectionSettings = useCallback(
     (connectionId: string) => {
+      const session = sessionsRef.current[connectionId] ?? null
       const connection =
-        connections.find((item: any) => item.id === connectionId) ??
-        sessionsRef.current[connectionId]?.connection
+        session?.connection ?? connections.find((item: any) => item.id === connectionId)
       if (!connection) return
       setConnectionSettings({
-        connectionId,
+        connectionId: connection.id ?? connectionId,
         name: connection.name ?? '',
         timezone: connection.timezone ?? 'UTC',
         error: null,
@@ -631,9 +634,12 @@ export function useSessionManager({
     async (timezone: string) => {
       const target = connectionSettings
       if (!target || target.busy) return
+      const session =
+        Object.values(sessionsRef.current).find(
+          (item) => item.connection?.id === target.connectionId,
+        ) ?? null
       const connection =
-        connections.find((item: any) => item.id === target.connectionId) ??
-        sessionsRef.current[target.connectionId]?.connection
+        connections.find((item: any) => item.id === target.connectionId) ?? session?.connection
       if (!connection) return
 
       setConnectionSettings({ ...target, busy: true, error: null })
@@ -645,11 +651,11 @@ export function useSessionManager({
             item.id === target.connectionId ? { ...item, timezone: nextTimezone } : item,
           ),
         )
-        const current = sessionsRef.current[target.connectionId]
-        if (current) {
-          patchSession(target.connectionId, {
+        for (const item of Object.values(sessionsRef.current)) {
+          if (item.connection?.id !== target.connectionId) continue
+          patchSession(item.connectionId, {
             timezone: nextTimezone,
-            connection: { ...current.connection, timezone: nextTimezone },
+            connection: { ...item.connection, timezone: nextTimezone },
           })
         }
         setConnectionSettings(null)
@@ -672,8 +678,11 @@ export function useSessionManager({
         setLastConnectedId(null)
         void api.setLastConnectedId(null)
       }
-      for (const id of result.connectionIds) {
-        if (sessionsRef.current[id]) await closeSession(id)
+      const sessionIds = Object.values(sessionsRef.current)
+        .filter((item) => result.connectionIds.includes(item.connection?.id))
+        .map((item) => item.connectionId)
+      for (const id of sessionIds) {
+        await closeSession(id)
       }
       return result
     },
