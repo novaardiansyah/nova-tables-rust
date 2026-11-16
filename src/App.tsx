@@ -82,6 +82,7 @@ export default function App() {
 
   const workspaceRef = useRef<WorkspaceState>(DEFAULT_WORKSPACE_STATE)
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false)
+  const [workspaceReloadKey, setWorkspaceReloadKey] = useState(0)
 
   const getPersistedTabs = useCallback(
     (connectionId: string): PersistedSessionTabs | null =>
@@ -96,6 +97,7 @@ export default function App() {
     setSettings,
     setSettingsOpen,
     getPersistedTabs,
+    sqlRef,
   })
 
   const { activeSession, patchSession, updateTab, setSessions, tabIdRef, activeConnectionId, screen, sessions } = sessionManager
@@ -125,16 +127,16 @@ export default function App() {
         const state = normalizeWorkspaceState(stored)
         workspaceRef.current = state
         layout.hydrateLayout(state)
+        setWorkspaceLoaded(true)
       })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setWorkspaceLoaded(true)
+      .catch(() => {
+        if (!cancelled) setWorkspaceLoaded(false)
       })
 
     return () => {
       cancelled = true
     }
-  }, [layout.hydrateLayout])
+  }, [layout.hydrateLayout, workspaceReloadKey])
 
   useEffect(() => {
     if (!workspaceLoaded) return undefined
@@ -531,6 +533,7 @@ export default function App() {
           appVersion={sessionManager.appVersion}
           onLoginSuccess={(user) => {
             setCurrentUser(user)
+            setWorkspaceReloadKey((key) => key + 1)
             void sessionManager.handleReloadConnections()
           }}
         />

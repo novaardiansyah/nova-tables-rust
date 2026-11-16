@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react'
+import React, { useMemo, useCallback, useEffect, useRef } from 'react'
 import Sidebar, { SidebarSessionItem } from '@/components/Sidebar'
 import WorkspaceHeader from '@/components/WorkspaceHeader'
 import TabBar from '@/components/TabBar'
@@ -130,11 +130,46 @@ export default function WorkspaceView({
     handleRefreshDatabases,
     handleOpenCreateDatabase,
     handleOpenDropDatabase,
+    updateTab,
   } = sessionManager
 
   const activeTab = session
     ? session.tabs.find((tab) => tab.id === session.activeTabId) || null
     : null
+
+  const sqlSyncTimerRef = useRef<number | null>(null)
+  const pendingSqlRef = useRef<{ connectionId: string; tabId: string; value: string } | null>(null)
+
+  const flushPendingSql = useCallback(() => {
+    if (sqlSyncTimerRef.current !== null) {
+      window.clearTimeout(sqlSyncTimerRef.current)
+      sqlSyncTimerRef.current = null
+    }
+    const pending = pendingSqlRef.current
+    pendingSqlRef.current = null
+    if (pending) updateTab(pending.connectionId, pending.tabId, { sql: pending.value })
+  }, [updateTab])
+
+  const handleEditorChange = useCallback(
+    (value: string) => {
+      handleSqlChange(value)
+      const connectionId = session.connectionId
+      const tabId = session.activeTabId
+      pendingSqlRef.current = { connectionId, tabId, value }
+      if (sqlSyncTimerRef.current !== null) {
+        window.clearTimeout(sqlSyncTimerRef.current)
+      }
+      sqlSyncTimerRef.current = window.setTimeout(() => {
+        sqlSyncTimerRef.current = null
+        const pending = pendingSqlRef.current
+        pendingSqlRef.current = null
+        if (pending) updateTab(pending.connectionId, pending.tabId, { sql: pending.value })
+      }, 800)
+    },
+    [handleSqlChange, session.connectionId, session.activeTabId, updateTab],
+  )
+
+  useEffect(() => flushPendingSql, [flushPendingSql])
 
   const running = activeTab?.state.status === 'running'
   const activeDatabaseInfo = session
@@ -352,7 +387,7 @@ export default function WorkspaceView({
                 theme={settings.theme}
                 settings={settings}
                 catalog={completionCatalog}
-                onChange={handleSqlChange}
+                onChange={handleEditorChange}
                 onRun={handleRun}
                 onSelectionChange={handleSelectionChange}
               />

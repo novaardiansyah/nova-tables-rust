@@ -334,18 +334,14 @@ export const api = {
   },
 
   loadWorkspaceState: async (): Promise<Record<string, unknown> | null> => {
-    try {
-      const res = await apiRequest<{ ok: boolean; value: Record<string, unknown> | null }>('/api/member/meta/workspace', {
-        method: 'GET',
-      })
-      const value = res?.value ?? null
-      if (value === undefined || value === null) return null
-      const raw = typeof value === 'string' ? JSON.parse(value) : value
-      if (!raw) return null
-      return raw
-    } catch {
-      return null
-    }
+    const res = await apiRequest<{ ok: boolean; value: Record<string, unknown> | null }>('/api/member/meta/workspace', {
+      method: 'GET',
+    })
+    const value = res?.value ?? null
+    if (value === undefined || value === null) return null
+    const raw = typeof value === 'string' ? JSON.parse(value) : value
+    if (!raw) return null
+    return raw
   },
 
   saveWorkspaceState: async (workspace: unknown): Promise<unknown> => {

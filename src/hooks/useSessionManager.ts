@@ -12,6 +12,7 @@ export interface UseSessionManagerProps {
   setSettings: React.Dispatch<React.SetStateAction<Settings>>
   setSettingsOpen: React.Dispatch<React.SetStateAction<boolean>>
   getPersistedTabs?: (connectionId: string) => PersistedSessionTabs | null
+  sqlRef: MutableRefObject<string>
 }
 
 export function useSessionManager({
@@ -21,6 +22,7 @@ export function useSessionManager({
   setSettings,
   setSettingsOpen,
   getPersistedTabs,
+  sqlRef,
 }: UseSessionManagerProps) {
   const [connections, setConnections] = useState<any[]>([])
   const [folders, setFolders] = useState<any[]>([])
@@ -105,14 +107,38 @@ export function useSessionManager({
     [seedEditor],
   )
 
+  const syncActiveSql = useCallback(() => {
+    const sessionId = activeIdRef.current
+    if (!sessionId) return
+    const session = sessionsRef.current[sessionId]
+    if (!session) return
+    const tabId = session.activeTabId
+    if (!tabId) return
+    const sql = sqlRef.current
+    setSessions((prev) => {
+      const current = prev[sessionId]
+      if (!current) return prev
+      const tab = current.tabs.find((item) => item.id === tabId)
+      if (!tab || tab.sql === sql) return prev
+      return {
+        ...prev,
+        [sessionId]: {
+          ...current,
+          tabs: current.tabs.map((item) => (item.id === tabId ? { ...item, sql } : item)),
+        },
+      }
+    })
+  }, [setSessions, sqlRef])
+
   const activateSession = useCallback(
     (connectionId: string) => {
       if (!sessionsRef.current[connectionId]) return
+      if (connectionId !== activeIdRef.current) syncActiveSql()
       setActiveConnectionId(connectionId)
       setScreen('workspace')
       seedSessionEditor(sessionsRef.current[connectionId])
     },
-    [seedSessionEditor],
+    [seedSessionEditor, syncActiveSql],
   )
 
   const openConnectionScreen = useCallback(() => {
@@ -248,6 +274,8 @@ export function useSessionManager({
       const target = connectionId || activeIdRef.current
       if (!target) return
 
+      syncActiveSql()
+
       try {
         await api.disconnect(target)
       } catch {}
@@ -265,7 +293,7 @@ export function useSessionManager({
       if (nextId) seedSessionEditor(remaining[nextId])
       else setScreen('connections')
     },
-    [seedSessionEditor],
+    [seedSessionEditor, syncActiveSql],
   )
 
   const handleCancelConnection = useCallback((connectionId?: string) => {
@@ -279,6 +307,7 @@ export function useSessionManager({
 
   const handleConnect = useCallback(
     async (connection: any) => {
+      syncActiveSql()
       sessionSeqRef.current += 1
       const sessionId = `${connection.id}:${sessionSeqRef.current}`
 
@@ -359,7 +388,7 @@ export function useSessionManager({
         cancelConnectionRef.current.delete(connection.id)
       }
     },
-    [getPersistedTabs, loadColumns, loadModules, loadTables, seedEditor, showBanner],
+    [getPersistedTabs, loadColumns, loadModules, loadTables, seedEditor, showBanner, syncActiveSql],
   )
 
   const handleSelectDatabase = useCallback(
@@ -839,6 +868,7 @@ export function useSessionManager({
     activeSession,
     patchSession,
     updateTab,
+    syncActiveSql,
     activateSession,
     openConnectionScreen,
     loadTables,
