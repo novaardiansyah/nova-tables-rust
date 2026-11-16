@@ -92,6 +92,13 @@ export function createDatabaseOps(ctx: DatabaseOpsContext) {
       const savedId = target?.id
       const sessionId = typeof target?.sessionId === 'string' ? target.sessionId : ''
 
+      if (!target.database && !target.databaseName) {
+        const preferredDatabase = target.lastDatabaseUsed ?? null
+        if (preferredDatabase && !(isMysql && preferredDatabase === 'master')) {
+          target.database = preferredDatabase
+        }
+      }
+
       if (target?.password && target?.id && isCiphertext(target.password)) {
         target = {
           ...target,
