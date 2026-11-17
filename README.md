@@ -6,6 +6,8 @@ Welcome to **Nova Tables**, a modern, high-performance desktop SQL client for **
 
 Nova Tables is crafted for developers and database administrators who work with Microsoft SQL Server and MySQL every day and simply want a fast, tidy place to explore schemas, write queries, and inspect results. Built natively with Tauri and Rust, it delivers ultra-lightweight binaries, minimal memory consumption (~60–80MB), instant startup, and bank-grade client-side encryption.
 
+The project website at [https://nova-tables.novaardiansyah.id](https://nova-tables.novaardiansyah.id) also ships a built-in **Client Area** for managing your profile, connections, saved queries, and query history from the browser, all synchronized with the desktop app.
+
 > **Note:** Nova Tables supports Microsoft SQL Server and MySQL (including MariaDB). Database queries and connections communicate directly from your local machine to your database instances database credentials are encrypted with AES-256-GCM on the client before synchronization, ensuring your database credentials remain entirely private.
 
 ---
@@ -124,6 +126,46 @@ A comprehensive shortcut sheet lets you master keyboard navigation for running q
 
 ---
 
+## Landing Page & Client Area
+
+The official website at [https://nova-tables.novaardiansyah.id](https://nova-tables.novaardiansyah.id) is not just a landing page. It also provides an integrated **Client Area** at [https://nova-tables.novaardiansyah.id/client](https://nova-tables.novaardiansyah.id/client), a web workspace backed by the same companion API used by the desktop app, so you can review and manage your account and synchronized data directly from the browser.
+
+### A Single Place for Your Workspace Data
+
+Sign in with the same account you use in the desktop app to reach your profile, query history, connections, and saved queries through a simple sidebar navigation. All panels read the exact data synchronized by the companion API.
+
+### Manage Profile and Account Security
+
+Update your display name and change your password from the Profile panel. Your email address remains read-only because it is the identity used to sign in, while account status and membership date are displayed for quick confirmation.
+
+![Client Area Profile](./public/demo/v2.2.9/client-my-profile.png)
+
+### Review and Manage Synchronized Connections
+
+The Connections panel lists every database connection synchronized with your workspace, including driver badges, environment, default database, and last connected time. Connections can be created, edited, or deleted without opening the desktop client.
+
+![Client Area Connections](./public/demo/v2.2.9/client-manage-connections.png)
+
+### Create a Connection from the Browser
+
+The web connection form accepts the same fields as the desktop dialog, covering name, host, port, driver, credentials, default database, and environment, then saves it straight to your synchronized workspace.
+
+![Client Area New Connection](./public/demo/v2.2.9/client-form-create-connection.png)
+
+### Browse and Organize Saved Queries
+
+Saved queries from the desktop workspace are listed with their associated connection and database, complete with syntax-formatted SQL previews and inline edit and delete actions.
+
+![Client Area Saved Queries](./public/demo/v2.2.9/client-manage-saved-connections.png)
+
+### Audit Query History Online
+
+The Query History panel shows the most recent queries logged by the desktop app, ordered by execution time and searchable by SQL text or database name, with status, timestamp, connection, duration, row count, and a copy-to-clipboard action.
+
+![Client Area Query History](./public/demo/v2.2.9/client-query-history.png)
+
+---
+
 ## Dazzling Tech Stack
 
 - [Tauri v2](https://v2.tauri.app/) - High-performance desktop application runtime and security framework
@@ -155,6 +197,7 @@ A comprehensive shortcut sheet lets you master keyboard navigation for running q
 - **Execution Plan Inspection**: Inspect query performance with visual estimated execution plans on Microsoft SQL Server.
 - **Exporting & Query History**: Export query results directly to CSV or JSON, and review detailed query execution logs anytime.
 - **Preferences & Themes**: Customize dark and light themes, typography, and display scaling. Each connection keeps its own timezone, configurable from the connection context menu.
+- **Web Client Area**: Manage your profile, connections, saved queries, and query history from the browser at [nova-tables.novaardiansyah.id/client](https://nova-tables.novaardiansyah.id/client), using the same synchronized workspace as the desktop app.
 
 ---
 
@@ -163,6 +206,7 @@ A comprehensive shortcut sheet lets you master keyboard navigation for running q
 - Direct database connections (`tiberius` for SQL Server and `mysql_async` for MySQL) are established directly from your local machine to your target servers.
 - Database passwords are encrypted client-side using AES-256-GCM with PBKDF2 key derivation and are decrypted only in memory when establishing direct database sessions.
 - Application state (connections, folders, query history, and preferences) is synchronized securely through the companion Laravel API with Sanctum access token rotation.
+- The Client Area at [nova-tables.novaardiansyah.id/client](https://nova-tables.novaardiansyah.id/client) is part of the same companion web application, so profile, connection, saved query, and query history changes made in the browser appear in the desktop app and vice versa.
 - In-place grid edits never write directly to the database without review; they generate verifiable SQL statements with primary key `WHERE` clauses.
 - Estimated execution plans are supported natively for Microsoft SQL Server connections.
 
