@@ -27,8 +27,17 @@ const GROUPS: ShortcutGroup[] = [
     items: [
       { keys: ['Ctrl', '↵'], label: 'Run the selected SQL, or the whole tab' },
       { keys: ['F5'], label: 'Run the selected SQL, or the whole tab' },
-      { keys: ['Ctrl', 'S'], label: 'Save the active tab, or update it when already saved' },
+      { keys: ['Ctrl', 'S'], label: 'Save the active query tab outside result grid editing or Add Row mode' },
       { keys: ['Ctrl', 'R'], label: 'Re-run the last executed query on the active tab' },
+    ],
+  },
+  {
+    title: 'Result Grid',
+    items: [
+      { keys: ['Ctrl', 'D'], label: 'Duplicate Row' },
+      { keys: ['Ctrl', 'N'], label: 'New Row' },
+      { keys: ['Delete'], label: 'Delete Row' },
+      { keys: ['Ctrl', 'S'], label: 'Confirm pending changes in Editing or Add Row mode' },
     ],
   },
   {
@@ -36,6 +45,8 @@ const GROUPS: ShortcutGroup[] = [
     items: [
       { keys: ['Ctrl', 'O'], label: 'Open the connections list' },
       { keys: ['Ctrl', 'N'], label: 'Open the new connection dialog' },
+      { keys: ['Delete'], label: 'Delete selected connection folders or items' },
+      { keys: ['Backspace'], label: 'Delete selected connection folders or items' },
     ],
   },
   {

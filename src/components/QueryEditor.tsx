@@ -1,13 +1,16 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import Editor, { Monaco } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import { editorThemeName } from '@/monaco'
 import { CompletionCatalog, setCompletionCatalog } from '@/completions'
 import { queryFontOptions, Settings, subscribeSettings } from '@/settings'
 import { Spinner } from '@/components/common/Icon'
+import ContextMenu from '@/components/common/ContextMenu'
+import { api } from '@/api'
 
 const EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   minimap: { enabled: false },
+  contextmenu: false,
   scrollBeyondLastLine: false,
   smoothScrolling: true,
   cursorBlinking: 'smooth',
@@ -67,6 +70,7 @@ export default function QueryEditor({
   const handlersRef = useRef({ onChange, onRun, onSelectionChange })
   const lastSeedRef = useRef<string | number | null>(null)
   const seedingRef = useRef(false)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
   const { fontFamily, fontSize, lineHeight, wordWrap } = queryFontOptions(settings)
 
   useEffect(() => {
@@ -142,8 +146,55 @@ export default function QueryEditor({
     editor.focus()
   }
 
+  async function runClipboardAction(actionId: string) {
+    const editor = editorRef.current
+    if (!editor) return
+    editor.focus()
+
+    if (actionId === 'paste') {
+      try {
+        const text = await navigator.clipboard.readText()
+        editor.focus()
+        editor.trigger('clipboard', 'paste', { text })
+      } catch (error) {
+        console.error('Unable to read text from the clipboard.', error)
+      }
+      return
+    }
+
+    const model = editor.getModel()
+    const selection = editor.getSelection()
+    if (!model || !selection || selection.isEmpty()) return
+
+    const selectedText = model.getValueInRange(selection)
+    const modelVersion = model.getVersionId()
+    const copied = await api.copyText(selectedText)
+    if (!copied) {
+      console.error('Unable to write the selected text to the clipboard.')
+      return
+    }
+
+    if (actionId === 'cut') {
+      if (editor.getModel() !== model || model.getVersionId() !== modelVersion) return
+      const cursor = selection.getStartPosition()
+      if (!editor.executeEdits('nova.clipboard.cut', [{ range: selection, text: '' }])) {
+        console.error('Unable to remove the selected text from the editor.')
+        return
+      }
+      editor.setPosition(cursor)
+      editor.focus()
+    }
+  }
+
   return (
-    <div className="h-full w-full">
+    <div
+      className="h-full w-full"
+      onContextMenu={(event) => {
+        if (!(event.target instanceof Element) || !event.target.closest('.monaco-editor')) return
+        event.preventDefault()
+        setContextMenu({ x: event.clientX, y: event.clientY })
+      }}
+    >
       <Editor
         language="sql"
         theme={editorThemeName(theme || 'light-nova')}
@@ -161,6 +212,30 @@ export default function QueryEditor({
           </div>
         }
       />
+      {contextMenu ? (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={[
+            {
+              id: 'copy',
+              label: 'Copy',
+              onSelect: () => runClipboardAction('copy'),
+            },
+            {
+              id: 'cut',
+              label: 'Cut',
+              onSelect: () => runClipboardAction('cut'),
+            },
+            {
+              id: 'paste',
+              label: 'Paste',
+              onSelect: () => runClipboardAction('paste'),
+            },
+          ]}
+          onClose={() => setContextMenu(null)}
+        />
+      ) : null}
     </div>
   )
 }
