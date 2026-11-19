@@ -123,6 +123,7 @@ export function useQueryExecution({
         edits: {},
         deletingRows: [],
         creatingRows: [],
+        editMode: false,
         lastExecutedSql: sql,
       }
       const source = tab?.editSource && tab.editSource.sql === sql ? tab.editSource : null
@@ -533,6 +534,7 @@ export function useQueryExecution({
           edits: shiftedEdits,
           deletingRows: shiftedDeletingRows,
           creatingRows: nextCreatingRows,
+          editMode: true,
         }
       })
     },
@@ -594,6 +596,7 @@ export function useQueryExecution({
         edits: shiftedEdits,
         deletingRows: shiftedDeletingRows,
         creatingRows: nextCreatingRows,
+        editMode: true,
       })
     },
     [activeQueryTab, activeSession, tabResultSet, updateTab],
@@ -614,7 +617,7 @@ export function useQueryExecution({
         })
         const tab = current.tabs.find((item) => item.id === current.activeTabId)
         if (tab) {
-          const patch: Partial<SessionTab> = { edits: {}, deletingRows: [], creatingRows: [] }
+          const patch: Partial<SessionTab> = { edits: {}, deletingRows: [], creatingRows: [], editMode: false }
           const creatingRows = tab.creatingRows || []
           const resultSets = tab.state.result?.resultSets
           if (options?.refresh === false && creatingRows.length > 0 && resultSets) {
@@ -779,7 +782,13 @@ export function useQueryExecution({
       updateTab(current.connectionId, tab.id, { designDraft: null })
       setEditConfirmOpen(false)
       setEditConfirmTarget(null)
-      if (target?.type === 'close-tab' && target.tabId) {
+      if (target?.type === 'switch-tab' && target.tabId) {
+        const next = current.tabs.find((item) => item.id === target.tabId)
+        if (next) {
+          patchSession(current.connectionId, { activeTabId: target.tabId })
+          seedEditor(next.sql)
+        }
+      } else if (target?.type === 'close-tab' && target.tabId) {
         handleCloseTab(target.tabId, true)
       } else if (target?.type === 'reload') {
         const schema = tab.design?.schema || tab.target?.schema || 'dbo'
@@ -810,14 +819,21 @@ export function useQueryExecution({
           : tab.state,
         edits: {},
         creatingRows: [],
+        editMode: false,
       })
     }
     setEditConfirmOpen(false)
     setEditConfirmTarget(null)
-    if (target?.type === 'close-tab' && target.tabId) {
+    if (target?.type === 'switch-tab' && target.tabId) {
+      const next = current.tabs.find((item) => item.id === target.tabId)
+      if (next) {
+        patchSession(current.connectionId, { activeTabId: target.tabId })
+        seedEditor(next.sql)
+      }
+    } else if (target?.type === 'close-tab' && target.tabId) {
       handleCloseTab(target.tabId, true)
     }
-  }, [activeSession, editConfirmTarget, updateTab, handleCloseTab, reloadDesign])
+  }, [activeSession, editConfirmTarget, updateTab, handleCloseTab, reloadDesign, patchSession, seedEditor])
 
   const handleEditConfirmCopy = useCallback(async () => {
     const target = editConfirmTarget

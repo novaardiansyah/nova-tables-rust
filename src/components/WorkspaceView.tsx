@@ -436,6 +436,10 @@ export default function WorkspaceView({
               onActiveDataChange={setActiveResultData}
               onExport={handleExportResult}
               tabTitle={activeTab?.title}
+              editMode={activeTab?.editMode ?? false}
+              onEditModeChange={(editing) => {
+                sessionManager.updateTab(session.connectionId, activeTab?.id ?? session.activeTabId, { editMode: editing })
+              }}
               executionPlan={activeTab?.executionPlan ?? null}
               onCopyPlan={(raw) => handleCopyText(raw, 'Copied execution plan XML.')}
               onCancel={queryExecution.handleCancel}

@@ -335,8 +335,16 @@ export default function App() {
       if (activeTab && activeTab.kind === 'design' && isDesignDirty(activeTab, session?.connection?.driverType)) {
         queryExecution.setEditConfirmTarget({ type: 'save', tabId: activeTab.id })
         queryExecution.setEditConfirmOpen(true)
-      } else if (activeTab && Object.keys(activeTab.edits || {}).length > 0) {
-        queryExecution.handleReRun()
+      } else if (
+        activeTab &&
+        (
+          activeTab.editMode ||
+          Object.keys(activeTab.edits || {}).length > 0 ||
+          (activeTab.creatingRows && activeTab.creatingRows.length > 0)
+        )
+      ) {
+        queryExecution.setEditConfirmTarget({ type: 'save', tabId: activeTab.id })
+        queryExecution.setEditConfirmOpen(true)
       } else {
         savedQueries.handleSaveQuery()
       }

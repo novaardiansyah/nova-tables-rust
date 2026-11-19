@@ -107,6 +107,8 @@ export interface ResultsPanelProps {
   onCopyPlan?: ((raw: string) => void) | null
   onOpenStructure?: (table: { schema: string; name: string }) => void
   onGenerateErd?: () => void
+  editMode?: boolean
+  onEditModeChange?: (editing: boolean) => void
 }
 
 export default function ResultsPanel({
@@ -141,6 +143,8 @@ export default function ResultsPanel({
   onCopyPlan = null,
   onOpenStructure,
   onGenerateErd,
+  editMode: editModeProp = false,
+  onEditModeChange,
 }: ResultsPanelProps) {
   const { status, result, error } = state
   const resultSets = result?.resultSets ?? []
@@ -149,7 +153,14 @@ export default function ResultsPanel({
   const activeResultSet = resultSets[activeIndex]
   const rowsAffected = (result?.rowsAffected ?? []).reduce((total, count) => total + count, 0)
   const [selection, setSelection] = useState<GridSelection | null>(null)
-  const [editMode, setEditMode] = useState(creatingRows.length > 0)
+  const [editMode, setEditModeState] = useState(editModeProp || creatingRows.length > 0)
+  const setEditMode = useCallback(
+    (editing: boolean) => {
+      setEditModeState(editing)
+      onEditModeChange?.(editing)
+    },
+    [onEditModeChange],
+  )
   const [view, setView] = useState<'results' | 'messages' | 'plan'>('results')
   const [menu, setMenu] = useState<{ x: number; y: number; column: ResultColumn | null; columnIndex: number; row: number } | null>(null)
   const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number; column: ResultColumn } | null>(null)
@@ -209,6 +220,10 @@ export default function ResultsPanel({
   const deletable = editable && editSource?.tables.length === 1
   const changeCount = Object.keys(edits).length > 0 ? Object.keys(edits).length : (creatingRows?.length ?? 0)
   const previousChangeCountRef = useRef(changeCount)
+
+  useEffect(() => {
+    setEditModeState(editModeProp || creatingRows.length > 0)
+  }, [editModeProp, creatingRows.length])
 
   useEffect(() => {
     const previous = previousChangeCountRef.current

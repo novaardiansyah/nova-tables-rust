@@ -67,6 +67,7 @@ export interface SessionTab {
   edits: Record<string, { value: unknown; original?: unknown }>
   deletingRows: number[]
   creatingRows?: number[]
+  editMode?: boolean
   lastExecutedSql?: string | null
   baseSql?: string
   filterConditions?: FilterCondition[]
@@ -117,6 +118,7 @@ export function createTab(id: string, title: string, sql: string, editSource: Ed
     edits: {},
     deletingRows: [],
     creatingRows: [],
+    editMode: false,
     lastExecutedSql: null,
   }
 }

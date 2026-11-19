@@ -125,17 +125,6 @@ export function useTabManager({
       if (!current || tabId === current.activeTabId) return
       const next = current.tabs.find((tab) => tab.id === tabId)
       if (!next) return
-      const active = current.tabs.find((tab) => tab.id === current.activeTabId)
-      if (active && (Object.keys(active.edits || {}).length > 0 || (active.creatingRows && active.creatingRows.length > 0))) {
-        setEditConfirmTarget({ type: 'switch-tab', tabId })
-        setEditConfirmOpen(true)
-        return
-      }
-      if (active && active.deletingRows && active.deletingRows.length > 0) {
-        setDeleteConfirmTarget({ type: 'switch-tab', tabId })
-        setDeleteConfirmOpen(true)
-        return
-      }
       syncLiveSql(current.connectionId, current.activeTabId)
       patchSession(current.connectionId, { activeTabId: tabId })
       seedEditor(next.sql)
