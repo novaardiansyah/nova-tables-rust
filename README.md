@@ -138,31 +138,31 @@ Sign in with the same account you use in the desktop app to reach your profile, 
 
 Update your display name and change your password from the Profile panel. Your email address remains read-only because it is the identity used to sign in, while account status and membership date are displayed for quick confirmation.
 
-![Client Area Profile](./public/demo/v2.2.9/client-my-profile.png)
+![Client Area Profile](./public/demo/v2.3.0/client-my-profile.png)
 
 ### Review and Manage Synchronized Connections
 
 The Connections panel lists every database connection synchronized with your workspace, including driver badges, environment, default database, and last connected time. Connections can be created, edited, or deleted without opening the desktop client.
 
-![Client Area Connections](./public/demo/v2.2.9/client-manage-connections.png)
+![Client Area Connections](./public/demo/v2.3.0/client-manage-connections.png)
 
 ### Create a Connection from the Browser
 
 The web connection form accepts the same fields as the desktop dialog, covering name, host, port, driver, credentials, default database, and environment, then saves it straight to your synchronized workspace.
 
-![Client Area New Connection](./public/demo/v2.2.9/client-form-create-connection.png)
+![Client Area New Connection](./public/demo/v2.3.0/client-form-create-connection.png)
 
 ### Browse and Organize Saved Queries
 
 Saved queries from the desktop workspace are listed with their associated connection and database, complete with syntax-formatted SQL previews and inline edit and delete actions.
 
-![Client Area Saved Queries](./public/demo/v2.2.9/client-manage-saved-connections.png)
+![Client Area Saved Queries](./public/demo/v2.3.0/client-manage-saved-connections.png)
 
 ### Audit Query History Online
 
 The Query History panel shows the most recent queries logged by the desktop app, ordered by execution time and searchable by SQL text or database name, with status, timestamp, connection, duration, row count, and a copy-to-clipboard action.
 
-![Client Area Query History](./public/demo/v2.2.9/client-query-history.png)
+![Client Area Query History](./public/demo/v2.3.0/client-query-history.png)
 
 ---
 
