@@ -2,7 +2,7 @@ use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use tiberius::{AuthMethod, Client, ColumnData, Config, EncryptionLevel, FromSql};
+use tiberius::{AuthMethod, Client, ColumnData, Config, EncryptionLevel, FromSql, QueryItem};
 use tokio::net::TcpStream;
 use tokio_util::compat::{Compat, TokioAsyncWriteCompatExt};
 
@@ -457,43 +457,58 @@ pub async fn get_client_for_connection(
 }
 
 pub async fn execute_sql(client: &mut MssqlClient, sql: &str) -> Result<Value, String> {
+    use futures_util::TryStreamExt;
+
     let started = std::time::Instant::now();
-    let stream = client.simple_query(sql).await.map_err(|e| e.to_string())?;
-    let results = stream.into_results().await.map_err(|e| e.to_string())?;
+    let mut stream = client.simple_query(sql).await.map_err(|e| e.to_string())?;
 
     let mut result_sets = Vec::new();
     let mut total_rows = 0;
 
-    for rows in results {
-        if rows.is_empty() {
-            continue;
-        }
-        let first = &rows[0];
-        let columns: Vec<Value> = first
-            .columns()
-            .iter()
-            .map(|col| json!({ "name": col.name(), "type": column_type_to_string(col.column_type()) }))
-            .collect();
+    let mut current_columns: Option<Vec<Value>> = None;
+    let mut current_rows: Vec<Vec<Value>> = Vec::new();
 
-        let row_count = rows.len();
-        total_rows += row_count;
-
-        let mut row_values = Vec::new();
-        for row in rows {
-            let mut cells = Vec::new();
-            for (i, _) in row.columns().iter().enumerate() {
-                if let Ok(data) = row.get_column_data(i) {
-                    cells.push(column_data_to_json(data));
-                } else {
-                    cells.push(Value::Null);
+    while let Some(item) = stream.try_next().await.map_err(|e| e.to_string())? {
+        match item {
+            QueryItem::Metadata(metadata) => {
+                if let Some(columns) = current_columns.take() {
+                    let row_count = current_rows.len();
+                    total_rows += row_count;
+                    result_sets.push(json!({
+                      "columns": columns,
+                      "rows": current_rows,
+                      "rowCount": row_count,
+                    }));
+                    current_rows = Vec::new();
                 }
+                current_columns = Some(
+                    metadata
+                        .columns()
+                        .iter()
+                        .map(|col| json!({ "name": col.name(), "type": column_type_to_string(col.column_type()) }))
+                        .collect(),
+                );
             }
-            row_values.push(cells);
+            QueryItem::Row(row) => {
+                let mut cells = Vec::new();
+                for (i, _) in row.columns().iter().enumerate() {
+                    if let Ok(data) = row.get_column_data(i) {
+                        cells.push(column_data_to_json(data));
+                    } else {
+                        cells.push(Value::Null);
+                    }
+                }
+                current_rows.push(cells);
+            }
         }
+    }
 
+    if let Some(columns) = current_columns.take() {
+        let row_count = current_rows.len();
+        total_rows += row_count;
         result_sets.push(json!({
           "columns": columns,
-          "rows": row_values,
+          "rows": current_rows,
           "rowCount": row_count,
         }));
     }

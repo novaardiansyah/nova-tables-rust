@@ -557,13 +557,10 @@ export default function ResultGrid({
     return () => observer.disconnect()
   }, [bounds, rows, sort, visibleRows])
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && columns.length === 0) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-[var(--grid-font-size)] text-text-muted">
-          Query returned no rows
-          {columns.length > 0 ? ` (${columns.length} columns)` : ''}
-        </p>
+        <p className="text-[var(--grid-font-size)] text-text-muted">Query returned no rows</p>
       </div>
     )
   }
@@ -585,7 +582,12 @@ export default function ResultGrid({
           className="min-w-full border-separate border-spacing-0"
           style={{ fontFamily: 'var(--grid-font-family)', fontSize: 'var(--grid-font-size)' }}
         >
-          <thead>
+          <thead
+            onContextMenu={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+          >
             <tr>
               <th className="sticky left-0 top-0 z-30 w-12 border-b border-r border-line bg-elevated px-2 py-1.5 text-right text-[length:calc(var(--grid-font-size)-2px)] font-medium text-text-faint">
                 #
@@ -640,15 +642,27 @@ export default function ResultGrid({
                     onCellContextMenu?.(event.clientX, event.clientY, 0, 0)
                   }}
                 >
-                  <div className="flex flex-col items-center justify-center gap-2">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-line-strong bg-elevated text-text-faint">
-                      <Icon name="filter" size={16} />
-                    </span>
-                    <span className="font-medium text-text-soft">No rows match the filter</span>
-                    <span className="text-[length:var(--app-text-11)] text-text-faint">
-                      Try modifying your conditions or resetting the filter.
-                    </span>
-                  </div>
+                  {rows.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-line-strong bg-elevated text-text-faint">
+                        <Icon name="grid" size={16} />
+                      </span>
+                      <span className="font-medium text-text-soft">Query succeeded with no rows</span>
+                      <span className="text-[length:var(--app-text-11)] text-text-faint">
+                        {columns.length} column{columns.length === 1 ? '' : 's'} returned, but the result set is empty.
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-line-strong bg-elevated text-text-faint">
+                        <Icon name="filter" size={16} />
+                      </span>
+                      <span className="font-medium text-text-soft">No rows match the filter</span>
+                      <span className="text-[length:var(--app-text-11)] text-text-faint">
+                        Try modifying your conditions or resetting the filter.
+                      </span>
+                    </div>
+                  )}
                 </td>
               </tr>
             ) : (

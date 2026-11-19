@@ -374,13 +374,32 @@ pub fn mysql_column_type_to_string(col_type: mysql_async::consts::ColumnType) ->
 /// Executes a SQL statement and returns result as JSON.
 pub async fn execute_sql(conn: &mut Conn, sql: &str) -> Result<Value, String> {
     let started = std::time::Instant::now();
-    let rows: Vec<Row> = conn.query(sql).await.map_err(|e| e.to_string())?;
+    let mut query_result = conn.query_iter(sql).await.map_err(|e| e.to_string())?;
+
+    // Targeted for MySQL: mysql_async only exposes result set column metadata through
+    // `QueryResult::columns()` before rows are read, so it is captured here to keep headers
+    // available for statements that succeed without returning any row.
+    let mut current_columns: Option<Vec<Value>> = query_result.columns().map(|columns| {
+        columns
+            .iter()
+            .map(|c| {
+                json!({
+                    "name": c.name_str(),
+                    "type": mysql_column_type_to_string(c.column_type()),
+                })
+            })
+            .collect()
+    });
+
+    let mut rows: Vec<Row> = Vec::new();
+    while let Some(row) = query_result.next().await.map_err(|e| e.to_string())? {
+        rows.push(row);
+    }
 
     let mut result_sets = Vec::new();
 
     // Group rows into result sets (for multi-statement queries)
     let mut current_set: Vec<Vec<Value>> = Vec::new();
-    let mut current_columns: Option<Vec<Value>> = None;
 
     for row in rows {
         // Each row becomes a set of column values

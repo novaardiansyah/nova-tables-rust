@@ -648,23 +648,10 @@ export default function ResultsPanel({
         ) : null}
 
         {status === 'running' ? (
-          <div className="flex items-center justify-between w-full px-2" >
-            <span className="flex items-center gap-1.5 text-[length:var(--app-text-11)] text-text-soft">
-              <div className="skeleton-shimmer h-3 w-3 shrink-0 rounded-full" />
-              Running query…
-            </span>
-            {onCancel ? (
-              <button
-                type="button"
-                onClick={onCancel}
-                className="flex h-5 items-center gap-1 rounded bg-danger/15 px-1.5 text-[length:var(--app-text-10)] font-medium text-danger transition-colors hover:bg-danger/25"
-                title="Cancel running query"
-              >
-                <Icon name="x" size={10} />
-                Cancel
-              </button>
-            ) : null}
-          </div>
+          <span className="flex items-center gap-1.5 px-2 text-[length:var(--app-text-11)] text-text-soft">
+            <div className="skeleton-shimmer h-3 w-3 shrink-0 rounded-full" />
+            Running query…
+          </span>
         ) : null}
 
         {status !== 'error' && status !== 'running' && resultSets.length === 0 && view !== 'messages' ? (
@@ -796,7 +783,6 @@ export default function ResultsPanel({
                     : 'text-text-muted hover:bg-tint/[0.03] hover:text-text'
                 }`}
               >
-                <Icon name="more-horizontal" size={11} />
                 <span>Actions</span>
                 {hasActiveFilter ? (
                   <span className="rounded-full bg-accent/20 px-1.5 text-[length:var(--app-text-9)] font-semibold text-accent">
@@ -819,6 +805,17 @@ export default function ResultsPanel({
                 </button>
               ) : null}
             </div>
+          ) : null}
+          {status === 'running' && onCancel ? (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="flex h-5 shrink-0 items-center gap-1 rounded bg-danger/15 px-1.5 text-[length:var(--app-text-10)] font-medium text-danger transition-colors hover:bg-danger/25"
+              title="Cancel running query"
+            >
+              <Icon name="x" size={10} />
+              Cancel
+            </button>
           ) : null}
         </div>
       </div>
