@@ -219,17 +219,18 @@ export function useQueryExecution({
             .catch(() => {})
         }
         if (inferredTable) {
-          const relations = await api
+          void api
             .tableRelations(
               current.connectionId,
               current.activeDatabase,
               inferredTable.schema,
               inferredTable.name,
             )
-            .catch(() => [])
-          if (editSourceRequestsRef.current[tabId] === requestId) {
-            updateTab(current.connectionId, tabId, { relations })
-          }
+            .then((relations) => {
+              if (editSourceRequestsRef.current[tabId] !== requestId) return
+              updateTab(current.connectionId, tabId, { relations })
+            })
+            .catch(() => {})
         }
         if (
           tab &&
@@ -238,18 +239,21 @@ export function useQueryExecution({
           result.resultSets.length === 1 &&
           (result.resultSets[0]?.columns?.length ?? 0) > 0
         ) {
-          const editSource = await describeEditSource(
+          void describeEditSource(
             current.connectionId,
             current.activeDatabase,
             sql,
             current.tables?.tables ?? [],
             current.connection?.driverType,
           )
-          if (editSource && editSourceRequestsRef.current[tabId] === requestId) {
-            updateTab(current.connectionId, tabId, (latest) =>
-              latest.editSource ? {} : { editSource },
-            )
-          }
+            .then((editSource) => {
+              if (editSource && editSourceRequestsRef.current[tabId] === requestId) {
+                updateTab(current.connectionId, tabId, (latest) =>
+                  latest.editSource ? {} : { editSource },
+                )
+              }
+            })
+            .catch(() => {})
         }
       } catch (error: any) {
         if (cancelRequestedRef.current) return
@@ -399,15 +403,12 @@ export function useQueryExecution({
   }, [execute, runGuard])
 
   const handleChangeExecutionMode = useCallback(
-    async (modeId: ExecutionModeId) => {
+    (modeId: ExecutionModeId) => {
       const next = { ...settings, queryExecutionMode: modeId }
       setSettings(next)
-      try {
-        const saved = await api.saveSettings(next)
-        setSettings(saved)
-      } catch (error: any) {
-        showBanner('error', error.message)
-      }
+      void api
+        .saveSettings(next)
+        .catch((error: any) => showBanner('error', error.message))
     },
     [settings, setSettings, showBanner],
   )

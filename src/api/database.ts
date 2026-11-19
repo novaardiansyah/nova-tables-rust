@@ -389,7 +389,7 @@ export function createDatabaseOps(ctx: DatabaseOpsContext) {
       }
       const shouldRecord = input.recordHistory ?? true
       if (shouldRecord && input.sql && input.sql.trim().length > 0) {
-        await apiRequest('/api/member/query-history', {
+        void apiRequest('/api/member/query-history', {
           method: 'POST',
           body: JSON.stringify({
             connectionId: input.historyConnectionId ?? null,

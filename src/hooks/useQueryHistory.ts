@@ -60,30 +60,30 @@ export function useQueryHistory({ activeSession, showBanner, openTab }: UseQuery
   )
 
   const handleDeleteHistoryItem = useCallback(
-    async (item: QueryHistoryItem) => {
-      try {
-        await api.deleteQueryHistory(item.id)
-        setHistory((prev) => ({ ...prev, items: prev.items.filter((entry) => entry.id !== item.id) }))
-      } catch (error: any) {
-        showBanner('error', error.message)
-      }
+    (item: QueryHistoryItem) => {
+      setHistory((prev) => ({ ...prev, items: prev.items.filter((entry) => entry.id !== item.id) }))
+      void api
+        .deleteQueryHistory(item.id)
+        .catch((error: any) => showBanner('error', error.message))
     },
     [showBanner],
   )
 
-  const handleClearHistory = useCallback(async () => {
+  const handleClearHistory = useCallback(() => {
     const current = activeSession()
     const connectionId = current?.connection?.id ?? null
     if (!connectionId || !current?.activeDatabase) return
     const itemsToClear = history.items.slice(0, 30)
     if (itemsToClear.length === 0) return
-    try {
-      await api.clearQueryHistory(connectionId, current.activeDatabase, itemsToClear.map((item) => item.id))
-      await loadHistory(connectionId, current.activeDatabase)
-    } catch (error: any) {
-      showBanner('error', error.message)
-    }
-  }, [activeSession, history.items, loadHistory, showBanner])
+    const clearedIds = new Set(itemsToClear.map((item) => item.id))
+    setHistory((prev) => ({
+      ...prev,
+      items: prev.items.filter((entry) => !clearedIds.has(entry.id)),
+    }))
+    void api
+      .clearQueryHistory(connectionId, current.activeDatabase, [...clearedIds])
+      .catch((error: any) => showBanner('error', error.message))
+  }, [activeSession, history.items, showBanner])
 
   const handleCloseHistory = useCallback(() => {
     setHistory((prev) => ({ ...prev, open: false }))

@@ -276,9 +276,7 @@ export function useSessionManager({
 
       syncActiveSql()
 
-      try {
-        await api.disconnect(target)
-      } catch {}
+      void api.disconnect(target).catch(() => {})
 
       const remaining = { ...sessionsRef.current }
       delete remaining[target]
@@ -325,7 +323,7 @@ export function useSessionManager({
         }
         const database = pickDatabase(result.databases, result.database)
 
-        await api.setLastConnectedId(connection.id)
+        void api.setLastConnectedId(connection.id).catch(() => {})
         setLastConnectedId(connection.id)
         setConnections((prev) =>
           prev.map((c) => ({
@@ -397,21 +395,17 @@ export function useSessionManager({
       if (!current || !database) return
       const savedId = current.connection?.id ?? null
       patchSession(current.connectionId, { activeDatabase: database })
-      try {
-        if (savedId) await api.updateLastDatabase(savedId, database)
-        setConnections((prev) =>
-          prev.map((c) =>
-            c.id === savedId
-              ? {
-                  ...c,
-                  lastDatabaseUsed: database,
-                }
-              : c,
-          ),
-        )
-      } catch {
-        // Ignore failure
-      }
+      setConnections((prev) =>
+        prev.map((c) =>
+          c.id === savedId
+            ? {
+                ...c,
+                lastDatabaseUsed: database,
+              }
+            : c,
+        ),
+      )
+      if (savedId) void api.updateLastDatabase(savedId, database).catch(() => {})
       await loadTables(current.connectionId, database)
       await loadColumns(current.connectionId, database)
       await loadModules(current.connectionId, database)
@@ -479,21 +473,17 @@ export function useSessionManager({
         const database = pickDatabase(databases, current.activeDatabase)
         patchSession(activeConnectionId, { databases, activeDatabase: database })
         if (database) {
-          try {
-            if (savedId) await api.updateLastDatabase(savedId, database)
-            setConnections((prev) =>
-              prev.map((c) =>
-                c.id === savedId
-                  ? {
-                      ...c,
-                      lastDatabaseUsed: database,
-                    }
-                  : c,
-              ),
-            )
-          } catch {
-            // Ignore failure
-          }
+          if (savedId) void api.updateLastDatabase(savedId, database).catch(() => {})
+          setConnections((prev) =>
+            prev.map((c) =>
+              c.id === savedId
+                ? {
+                    ...c,
+                    lastDatabaseUsed: database,
+                  }
+                : c,
+            ),
+          )
         }
         await loadTables(activeConnectionId, database)
         await loadColumns(activeConnectionId, database)
@@ -537,21 +527,17 @@ export function useSessionManager({
         const current = sessionsRef.current[activeConnectionId]
         if (!current) return
         patchSession(activeConnectionId, { databases, activeDatabase: target })
-        try {
-          if (savedId) await api.updateLastDatabase(savedId, target)
-          setConnections((prev) =>
-            prev.map((c) =>
-              c.id === savedId
-                ? {
-                    ...c,
-                    lastDatabaseUsed: target,
-                  }
-                : c,
-            ),
-          )
-        } catch {
-          // Ignore failure
-        }
+        if (savedId) void api.updateLastDatabase(savedId, target).catch(() => {})
+        setConnections((prev) =>
+          prev.map((c) =>
+            c.id === savedId
+              ? {
+                  ...c,
+                  lastDatabaseUsed: target,
+                }
+              : c,
+          ),
+        )
         await loadTables(activeConnectionId, target)
         await loadColumns(activeConnectionId, target)
         await loadModules(activeConnectionId, target)

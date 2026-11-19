@@ -123,13 +123,9 @@ export function useTableOperations({
         : [...currentList, key]
 
       setPinnedByConnection((prev) => ({ ...prev, [connectionId]: nextList }))
-
-      try {
-        await api.savePinnedTables(connectionId, nextList)
-      } catch (error: any) {
-        setPinnedByConnection((prev) => ({ ...prev, [connectionId]: currentList }))
-        showBanner('error', error?.message || 'Failed to save pinned status')
-      }
+      void api
+        .savePinnedTables(connectionId, nextList)
+        .catch((error: any) => showBanner('error', error?.message || 'Failed to save pinned status'))
     },
     [activeSession, pinnedByConnection, showBanner],
   )
