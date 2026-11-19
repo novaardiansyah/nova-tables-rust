@@ -138,6 +138,7 @@ export interface ResultGridProps {
   onDeleteRows?: (rowsOrStart: number[] | number, maybeEnd?: number) => void
   onNewRow?: () => void
   onDuplicateRow?: (rowIndex: number) => void
+  onActivate?: () => void
 }
 
 export default function ResultGrid({
@@ -165,6 +166,7 @@ export default function ResultGrid({
   onDeleteRows,
   onNewRow,
   onDuplicateRow,
+  onActivate,
   driverType,
 }: ResultGridProps) {
   const [sort, setSort] = useState<{ index: number; direction: 'asc' | 'desc' } | null>(null)
@@ -176,7 +178,17 @@ export default function ResultGrid({
   const preClickBoundsRef = useRef<GridBounds | null>(null)
   const frameDragRef = useRef<FrameDragData | null>(null)
   const tableRef = useRef<HTMLTableElement | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const gridFocusedRef = useRef(false)
   const editorRef = useRef<CellEditorController | null>(null)
+
+  useEffect(() => {
+    const trackFocus = (event: MouseEvent) => {
+      gridFocusedRef.current = Boolean(containerRef.current?.contains(event.target as Node))
+    }
+    window.addEventListener('mousedown', trackFocus, true)
+    return () => window.removeEventListener('mousedown', trackFocus, true)
+  }, [])
 
   useEffect(() => {
     setSort(null)
@@ -279,6 +291,7 @@ export default function ResultGrid({
       const firstCol = columns.findIndex((_, idx) => columnEditable(idx, 0))
       if (firstCol !== -1) {
         onStartEdit?.()
+        onActivate?.()
         setActive({ row: 0, col: firstCol })
         if (onSelectionChange) {
           onSelectionChange({ anchor: { row: 0, col: firstCol }, focus: { row: 0, col: firstCol } })
@@ -286,7 +299,7 @@ export default function ResultGrid({
       }
     }
     prevCreatingRowsLengthRef.current = creatingRows.length
-  }, [creatingRows.length, columns, onSelectionChange, onStartEdit])
+  }, [creatingRows.length, columns, onSelectionChange, onStartEdit, onActivate])
 
   const numericColumns = useMemo(
     () =>
@@ -367,6 +380,7 @@ export default function ResultGrid({
     event.stopPropagation()
     draggingRef.current = true
     document.body.style.userSelect = 'none'
+    onActivate?.()
     if (onSelectionChange) onSelectionChange({ anchor, focus })
   }
 
@@ -466,6 +480,8 @@ export default function ResultGrid({
         return
       }
 
+      if (!gridFocusedRef.current) return
+
       if (event.key === 'Delete') {
         if (!bounds || active || !onDeleteRows) return
         event.preventDefault()
@@ -477,7 +493,7 @@ export default function ResultGrid({
         return
       }
 
-      if (!bounds || !(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return
 
       const key = event.key.toLowerCase()
       if (key === 'n' && onNewRow) {
@@ -487,7 +503,7 @@ export default function ResultGrid({
         onNewRow()
         return
       }
-      if (key === 'd' && onDuplicateRow && bounds.rowStart < rows.length) {
+      if (key === 'd' && onDuplicateRow && bounds && bounds.rowStart < rows.length) {
         event.preventDefault()
         event.stopPropagation()
         onStartEdit?.()
@@ -554,6 +570,7 @@ export default function ResultGrid({
 
   return (
     <div
+      ref={containerRef}
       className="h-full select-none overflow-auto"
       onContextMenu={(event) => {
         if (visibleRows.length === 0) {

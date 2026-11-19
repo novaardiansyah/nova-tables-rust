@@ -109,6 +109,7 @@ export interface ResultsPanelProps {
   onGenerateErd?: () => void
   editMode?: boolean
   onEditModeChange?: (editing: boolean) => void
+  onGridActivate?: () => void
 }
 
 export default function ResultsPanel({
@@ -145,6 +146,7 @@ export default function ResultsPanel({
   onGenerateErd,
   editMode: editModeProp = false,
   onEditModeChange,
+  onGridActivate,
 }: ResultsPanelProps) {
   const { status, result, error } = state
   const resultSets = result?.resultSets ?? []
@@ -600,16 +602,31 @@ export default function ResultsPanel({
       })
     }
 
+    if (editable && onNewRow) {
+      items.push({
+        id: 'new-record',
+        label: 'New Record',
+        onSelect: () => {
+          setView('results')
+          setEditMode(true)
+          onNewRow()
+        },
+      })
+    }
+
     items.sort((a, b) => a.label.localeCompare(b.label))
     return items
   }, [
     activeResultSet?.rows,
     canFilter,
     editSource?.tables,
+    editable,
     handleExportAll,
     onGenerateErd,
+    onNewRow,
     onOpenStructure,
     resultSets.length,
+    setEditMode,
     status,
     view,
   ])
@@ -857,6 +874,7 @@ export default function ResultsPanel({
                   onDeleteRows={deletable ? onDeleteRows : undefined}
                   onNewRow={editable ? onNewRow : undefined}
                   onDuplicateRow={editable ? onDuplicateRow : undefined}
+                  onActivate={onGridActivate}
                 />
               </div>
             </div>

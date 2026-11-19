@@ -98,6 +98,7 @@ export function useKeyboardShortcuts({
       if (isFormField) return
 
       if (key === 'n' && !event.shiftKey) {
+        if (inEditor) return
         event.preventDefault()
         setDialog({ mode: 'create' })
         return

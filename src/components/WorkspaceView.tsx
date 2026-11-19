@@ -5,6 +5,7 @@ import TabBar from '@/components/TabBar'
 import TableDesigner from '@/components/designer/TableDesigner'
 import ErdViewer from '@/components/erd/ErdViewer'
 import QueryEditor from '@/components/QueryEditor'
+import type { QueryEditorControl } from '@/components/QueryEditor'
 import ResultsPanel from '@/components/results/ResultsPanel'
 import StatusBar from '@/components/common/StatusBar'
 import JsonPanel from '@/components/results/JsonPanel'
@@ -136,6 +137,12 @@ export default function WorkspaceView({
   const activeTab = session
     ? session.tabs.find((tab) => tab.id === session.activeTabId) || null
     : null
+
+  const editorControlRef = useRef<QueryEditorControl | null>(null)
+
+  const handleGridActivate = useCallback(() => {
+    editorControlRef.current?.clearSelection()
+  }, [])
 
   const sqlSyncTimerRef = useRef<number | null>(null)
   const pendingSqlRef = useRef<{ connectionId: string; tabId: string; value: string } | null>(null)
@@ -390,6 +397,7 @@ export default function WorkspaceView({
                 onChange={handleEditorChange}
                 onRun={handleRun}
                 onSelectionChange={handleSelectionChange}
+                controlRef={editorControlRef}
               />
             </div>
 
@@ -445,6 +453,7 @@ export default function WorkspaceView({
               onCancel={queryExecution.handleCancel}
               onOpenStructure={handleOpenStructure}
               onGenerateErd={handleGenerateErd ? () => handleGenerateErd(null) : undefined}
+              onGridActivate={handleGridActivate}
             />
           </div>
         )}

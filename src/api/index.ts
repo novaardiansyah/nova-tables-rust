@@ -306,7 +306,7 @@ export const api = {
     const res = await callCommand<{ version?: string }>('get_system_info')
     return {
       name: 'Nova Tables',
-      version: res?.version || '2.3.0',
+      version: res?.version || '2.3.1',
     }
   },
 
@@ -377,7 +377,7 @@ export const api = {
     }
   },
 
-  saveFile: async (input: unknown): Promise<{ saved?: boolean; filePath?: string; [key: string]: unknown }> => {
+  saveFile: async (input: unknown): Promise<{ saved?: boolean; filePath?: string;[key: string]: unknown }> => {
     const res = await callCommand<any>('save_file', { input })
     return res || { saved: false }
   },
@@ -659,7 +659,7 @@ export const api = {
     return res || { ok: true, deletedConnectionIds: [] }
   },
 
-  reorderTree: async (input: unknown): Promise<{ connections: ConnectionModel[]; folders: FolderModel[]; [key: string]: unknown }> => {
+  reorderTree: async (input: unknown): Promise<{ connections: ConnectionModel[]; folders: FolderModel[];[key: string]: unknown }> => {
     const payload = (input || {}) as {
       connections?: string[]
       folders?: string[]

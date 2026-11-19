@@ -38,6 +38,10 @@ export interface QueryEditorSeed {
   focus?: boolean
 }
 
+export interface QueryEditorControl {
+  clearSelection: () => void
+}
+
 export interface QueryEditorProps {
   seed: QueryEditorSeed
   theme?: string
@@ -46,6 +50,7 @@ export interface QueryEditorProps {
   onChange?: (value: string) => void
   onRun?: () => void
   onSelectionChange?: (selectedText: string) => void
+  controlRef?: React.MutableRefObject<QueryEditorControl | null>
 }
 
 export default function QueryEditor({
@@ -56,6 +61,7 @@ export default function QueryEditor({
   onChange,
   onRun,
   onSelectionChange,
+  controlRef,
 }: QueryEditorProps) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const handlersRef = useRef({ onChange, onRun, onSelectionChange })
@@ -83,6 +89,26 @@ export default function QueryEditor({
   useEffect(() => {
     setCompletionCatalog(catalog || null)
   }, [catalog])
+
+  useEffect(() => {
+    if (!controlRef) return undefined
+    controlRef.current = {
+      clearSelection: () => {
+        const editor = editorRef.current
+        const selection = editor?.getSelection()
+        if (!editor || !selection) return
+        editor.setSelection({
+          startLineNumber: selection.positionLineNumber,
+          startColumn: selection.positionColumn,
+          endLineNumber: selection.positionLineNumber,
+          endColumn: selection.positionColumn,
+        })
+      },
+    }
+    return () => {
+      controlRef.current = null
+    }
+  }, [controlRef])
 
   useEffect(() => {
     if (lastSeedRef.current === null || lastSeedRef.current === seed.id) {
