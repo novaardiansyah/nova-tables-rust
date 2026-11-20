@@ -123,8 +123,8 @@ export default function ShortcutPanel({ open, onClose, session }: ShortcutPanelP
             </div>
           ))}
 
-          <div className="mt-1 space-y-2 border-t border-line pt-3">
-            {session ? (
+          {session ? (
+            <div className="mt-1 border-t border-line pt-3">
               <p className="flex items-center gap-1.5 text-[length:var(--app-text-11)] text-text-faint">
                 <Icon name="server" size={10} className="shrink-0" />
                 <span className="truncate">
@@ -137,11 +137,8 @@ export default function ShortcutPanel({ open, onClose, session }: ShortcutPanelP
                     .join(' · ')}
                 </span>
               </p>
-            ) : null}
-            <p className="text-[length:var(--app-text-11)] text-text-faint">
-              In the editor, Monaco keeps its own keys, so Ctrl+F, Ctrl+D and friends still work there.
-            </p>
-          </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

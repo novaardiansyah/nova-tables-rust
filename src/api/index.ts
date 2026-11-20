@@ -279,11 +279,12 @@ export const api = {
       const session: AuthSession = { user: res.user, token: getAuthToken() || token, refreshToken }
       setStoredSession(session)
       return session
-    } catch {
-      setAuthToken(null)
-      setRefreshToken(null)
-      setStoredSession(null)
-      return null
+    } catch (error) {
+      const authError = error as { status?: number; isUnauthorized?: boolean }
+      if (authError?.isUnauthorized || authError?.status === 401) {
+        return null
+      }
+      return getStoredSession()
     }
   },
 

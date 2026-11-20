@@ -87,19 +87,32 @@ export function setStoredSession(session: AuthSession | null): void {
   }
 }
 
+const REFRESH_LOCK_NAME = 'nova_tables_auth_refresh'
 let refreshPromise: Promise<string | null> | null = null
 
-export async function refreshAccessTokenSingleFlight(): Promise<string | null> {
+async function runWithCrossWindowLock<T>(task: () => Promise<T>): Promise<T> {
+  if (typeof navigator !== 'undefined' && navigator.locks && typeof navigator.locks.request === 'function') {
+    return navigator.locks.request(REFRESH_LOCK_NAME, task)
+  }
+  return task()
+}
+
+export async function refreshAccessTokenSingleFlight(failedAccessToken: string | null = null): Promise<string | null> {
   if (refreshPromise) {
     return refreshPromise
   }
 
-  const refreshToken = getRefreshToken()
-  if (!refreshToken) {
-    return null
-  }
+  refreshPromise = runWithCrossWindowLock(async () => {
+    const latestAccessToken = getAuthToken()
+    if (failedAccessToken && latestAccessToken && latestAccessToken !== failedAccessToken) {
+      return latestAccessToken
+    }
 
-  refreshPromise = (async () => {
+    const refreshToken = getRefreshToken()
+    if (!refreshToken) {
+      return null
+    }
+
     try {
       const baseUrl = getApiBaseUrl()
       const res = await fetch(`${baseUrl}/api/member/refresh`, {
@@ -112,13 +125,17 @@ export async function refreshAccessTokenSingleFlight(): Promise<string | null> {
       })
 
       if (!res.ok) {
+        const updatedAfterFailure = getAuthToken()
+        if (failedAccessToken && updatedAfterFailure && updatedAfterFailure !== failedAccessToken) {
+          return updatedAfterFailure
+        }
         return null
       }
 
       const text = await res.text()
-      let data: any = null
+      let data: { ok?: boolean; token?: string; refreshToken?: string; user?: AuthSession['user'] } | null = null
       try {
-        data = JSON.parse(text)
+        data = JSON.parse(text) as { ok?: boolean; token?: string; refreshToken?: string; user?: AuthSession['user'] }
       } catch {
         return null
       }
@@ -127,8 +144,8 @@ export async function refreshAccessTokenSingleFlight(): Promise<string | null> {
         return null
       }
 
-      const newAccessToken = data.token as string
-      const newRefreshToken = (data.refreshToken as string) || null
+      const newAccessToken = data.token
+      const newRefreshToken = data.refreshToken ?? null
 
       setAuthToken(newAccessToken)
       if (newRefreshToken) {
@@ -139,19 +156,19 @@ export async function refreshAccessTokenSingleFlight(): Promise<string | null> {
       if (currentSession) {
         setStoredSession({
           ...currentSession,
-          user: data.user || currentSession.user,
+          user: data.user ?? currentSession.user,
           token: newAccessToken,
-          refreshToken: newRefreshToken || currentSession.refreshToken,
+          refreshToken: newRefreshToken ?? currentSession.refreshToken,
         })
       }
 
       return newAccessToken
     } catch {
       return null
-    } finally {
-      refreshPromise = null
     }
-  })()
+  }).finally(() => {
+    refreshPromise = null
+  })
 
   return refreshPromise
 }
@@ -188,13 +205,24 @@ export async function apiRequest<T = any>(
   })
 
   if (response.status === 401 && !isAuthRoute) {
-    const newToken = await refreshAccessTokenSingleFlight()
-    if (newToken) {
-      token = newToken
+    const latestToken = getAuthToken()
+    if (latestToken && latestToken !== token) {
+      token = latestToken
       response = await fetch(url, {
         ...options,
         headers: buildHeaders(token),
       })
+    }
+
+    if (response.status === 401) {
+      const newToken = await refreshAccessTokenSingleFlight(token)
+      if (newToken) {
+        token = newToken
+        response = await fetch(url, {
+          ...options,
+          headers: buildHeaders(token),
+        })
+      }
     }
   }
 
@@ -210,10 +238,14 @@ export async function apiRequest<T = any>(
 
   if (!response.ok) {
     if (response.status === 401 && !isAuthRoute) {
-      setAuthToken(null)
-      setRefreshToken(null)
-      setStoredSession(null)
-      notifyUnauthenticated()
+      const currentStoredToken = getAuthToken()
+      const tokenWasReplaced = Boolean(currentStoredToken && currentStoredToken !== token)
+      if (token && !tokenWasReplaced) {
+        setAuthToken(null)
+        setRefreshToken(null)
+        setStoredSession(null)
+        notifyUnauthenticated()
+      }
     }
 
     let message = 'Request failed'
