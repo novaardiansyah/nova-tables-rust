@@ -54,7 +54,7 @@ export default function ConnectionSettingsDialog({
         if (event.target === event.currentTarget && !busy) onCancel()
       }}
     >
-      <div className="w-full max-w-md animate-fade-in overflow-hidden rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70">
+      <div className="w-full max-w-lg animate-fade-in overflow-hidden rounded-xl border border-line-strong bg-surface shadow-2xl shadow-black/70">
         <div className="flex items-center gap-3 border-b border-line px-5 py-4">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-soft text-accent">
             <Icon name="settings" size={16} />
