@@ -355,7 +355,12 @@ export default function App() {
     openConnectionScreen: sessionManager.openConnectionScreen,
     handleCloseActiveTab: tabManager.handleCloseActiveTab,
     handleNewTab: tabManager.handleNewTab,
-    handleReRun: queryExecution.handleReRun,
+    handleReRun: () => {
+      if (session?.connectionId) {
+        void sessionManager.handleRefreshDatabases(session.connectionId)
+      }
+      queryExecution.handleReRun()
+    },
     handleCycleTab: tabManager.handleCycleTab,
     handleSelectTabIndex: tabManager.handleSelectTabIndex,
   })
