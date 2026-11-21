@@ -345,6 +345,9 @@ export default function App() {
       ) {
         queryExecution.setEditConfirmTarget({ type: 'save', tabId: activeTab.id })
         queryExecution.setEditConfirmOpen(true)
+      } else if (activeTab && activeTab.deletingRows && activeTab.deletingRows.length > 0) {
+        queryExecution.setDeleteConfirmTarget({ type: 'save', tabId: activeTab.id })
+        queryExecution.setDeleteConfirmOpen(true)
       } else {
         savedQueries.handleSaveQuery()
       }
