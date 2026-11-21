@@ -99,7 +99,7 @@ const databaseOps = createDatabaseOps({
 
 export const api = {
   ...databaseOps,
-  registerUser: async (email: string, password: string, name?: string): Promise<AuthUser> => {
+  registerUser: async (email: string, password: string, name?: string): Promise<AuthUser & { retryAfter?: number }> => {
     const trimmedEmail = email.trim().toLowerCase()
     if (!trimmedEmail) {
       throw new Error('Email is required.')
@@ -108,12 +108,12 @@ export const api = {
       throw new Error('Password must be at least 6 characters long.')
     }
 
-    const res = await apiRequest<{ ok: boolean; email: string; user: AuthUser }>('/api/member/register', {
+    const res = await apiRequest<{ ok: boolean; email: string; user: AuthUser; retryAfter?: number }>('/api/member/register', {
       method: 'POST',
       body: JSON.stringify({ email: trimmedEmail, password, name }),
     })
 
-    return res.user
+    return { ...res.user, retryAfter: res.retryAfter }
   },
 
   loginUser: async (email: string, password: string): Promise<AuthUser> => {
@@ -238,6 +238,14 @@ export const api = {
     return res
   },
 
+  resendRegistrationOtp: async (email: string): Promise<{ ok: boolean; message: string; retryAfter?: number }> => {
+    const res = await apiRequest<{ ok: boolean; message: string; retryAfter?: number }>('/api/member/register/resend-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email: email.trim().toLowerCase() }),
+    })
+    return res
+  },
+
   verifyResetOtp: async (email: string, otp: string): Promise<{ ok: boolean; resetToken: string; message?: string }> => {
     const res = await apiRequest<{ ok: boolean; resetToken: string; message?: string }>('/api/member/verify-reset-otp', {
       method: 'POST',
@@ -259,8 +267,8 @@ export const api = {
     return res
   },
 
-  forgotPassword: async (email: string): Promise<{ ok: boolean; message: string }> => {
-    const res = await apiRequest<{ ok: boolean; message: string }>('/api/member/forgot-password', {
+  forgotPassword: async (email: string): Promise<{ ok: boolean; message: string; retryAfter?: number }> => {
+    const res = await apiRequest<{ ok: boolean; message: string; retryAfter?: number }>('/api/member/forgot-password', {
       method: 'POST',
       body: JSON.stringify({ email: email.trim().toLowerCase() }),
     })

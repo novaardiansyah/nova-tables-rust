@@ -1,6 +1,17 @@
-import React, { useState, FormEvent } from 'react'
+import React, { useEffect, useState, FormEvent } from 'react'
 import { api, AuthUser } from '@/api'
 import Icon, { BrandMark, Spinner } from '@/components/common/Icon'
+
+function formatCooldown(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const secs = total % 60
+  if (hours > 0) {
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  }
+  return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+}
 
 export interface AuthScreenProps {
   appVersion?: string
@@ -21,6 +32,16 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
   const [otpVerified, setOtpVerified] = useState(false)
   const [resetToken, setResetToken] = useState<string | null>(null)
   const [otp, setOtp] = useState('')
+  const [resendCooldown, setResendCooldown] = useState(0)
+  const [otpNotice, setOtpNotice] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = window.setInterval(() => {
+      setResendCooldown((prev) => (prev > 1 ? prev - 1 : 0))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [resendCooldown])
 
   const clearFieldError = (field: string) => {
     setFieldErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev))
@@ -30,10 +51,12 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
   const setForgot = () => {
     setFieldErrors({})
     setGeneralError(null)
+    setOtpNotice(null)
     setOtpSent(false)
     setOtpVerified(false)
     setResetToken(null)
     setOtp('')
+    setResendCooldown(0)
   }
 
   const handleSubmit = async (event: FormEvent) => {
@@ -55,16 +78,28 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
         }
 
         setFieldErrors({})
-        setOtpSent(true)
-        setOtpVerified(false)
-        setResetToken(null)
-        setOtp('')
+        setOtpNotice(null)
+        setBusy(true)
 
         try {
-          await api.forgotPassword(email)
+          const res = await api.forgotPassword(email)
+          setOtpSent(true)
+          setOtpVerified(false)
+          setResetToken(null)
+          setOtp('')
+          setResendCooldown(typeof res.retryAfter === 'number' ? res.retryAfter : 120)
         } catch (err: unknown) {
-          const errorObj = err as { message?: string }
+          const errorObj = err as { message?: string; status?: number; retryAfter?: number }
+          if (typeof errorObj?.retryAfter === 'number') {
+            setResendCooldown(errorObj.retryAfter)
+          }
+          if (errorObj?.status === 429) {
+            setOtpSent(true)
+            setOtpVerified(false)
+          }
           setGeneralError(errorObj?.message || 'Failed to send reset code.')
+        } finally {
+          setBusy(false)
         }
 
         return
@@ -182,9 +217,14 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
         setOtpVerified(false)
         setResetToken(null)
         setOtp('')
+        setOtpNotice(null)
+        setResendCooldown(typeof user.retryAfter === 'number' ? user.retryAfter : 120)
       }
     } catch (err: unknown) {
-      const errorObj = err as { message?: string }
+      const errorObj = err as { message?: string; retryAfter?: number }
+      if (typeof errorObj?.retryAfter === 'number') {
+        setResendCooldown(errorObj.retryAfter)
+      }
       const msg = errorObj?.message || 'Authentication failed. Please check your credentials.'
 
       if (/email.*taken|already exists/i.test(msg)) {
@@ -263,14 +303,44 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
     }
   }
 
+  const handleResendOtp = async () => {
+    if (busy || resendCooldown > 0) return
+    setGeneralError(null)
+    setOtpNotice(null)
+    setFieldErrors({})
+    setBusy(true)
+
+    try {
+      if (mode === 'forgot') {
+        const res = await api.forgotPassword(email)
+        setResendCooldown(typeof res.retryAfter === 'number' ? res.retryAfter : 120)
+        setOtpNotice(res.message)
+      } else {
+        const res = await api.resendRegistrationOtp(email)
+        setResendCooldown(typeof res.retryAfter === 'number' ? res.retryAfter : 120)
+        setOtpNotice(res.message)
+      }
+    } catch (err: unknown) {
+      const errorObj = err as { message?: string; retryAfter?: number }
+      if (typeof errorObj?.retryAfter === 'number') {
+        setResendCooldown(errorObj.retryAfter)
+      }
+      setGeneralError(errorObj?.message || 'Failed to resend code.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const switchMode = (nextMode: 'login' | 'register' | 'forgot') => {
     setMode(nextMode)
     setFieldErrors({})
     setGeneralError(null)
+    setOtpNotice(null)
     setOtpSent(false)
     setOtpVerified(false)
     setResetToken(null)
     setOtp('')
+    setResendCooldown(0)
   }
 
   return (
@@ -313,6 +383,13 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
               />
               <FieldError message={fieldErrors.otp} />
 
+              {otpNotice ? (
+                <div className="flex items-start gap-2 rounded-lg border border-accent/30 bg-accent/10 p-3 text-[length:var(--app-text-12)] text-accent">
+                  <Icon name="check-circle" size={14} className="mt-0.5 shrink-0" />
+                  <span className="flex-1 leading-snug">{otpNotice}</span>
+                </div>
+              ) : null}
+
               {generalError ? (
                 <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 p-3 text-[length:var(--app-text-12)] text-danger">
                   <Icon name="alert-triangle" size={14} className="mt-0.5 shrink-0" />
@@ -331,18 +408,17 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
 
               <button
                 type="button"
-                onClick={() => {
-                  setOtpSent(false)
-                  setOtpVerified(false)
-                  setResetToken(null)
-                  setOtp('')
-                  setGeneralError(null)
-                  setFieldErrors({})
-                }}
-                className="btn-soft mt-1 flex h-9 w-full items-center justify-center gap-2 rounded-lg font-medium text-text-muted hover:text-text"
+                disabled={busy || resendCooldown > 0}
+                onClick={handleResendOtp}
+                className="btn-soft mt-1 flex h-9 w-full items-center justify-center gap-2 rounded-lg font-medium text-text-muted hover:text-text disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Resend code
+                {resendCooldown > 0 ? `Resend code (${formatCooldown(resendCooldown)})` : 'Resend code'}
               </button>
+              {resendCooldown > 0 ? (
+                <p className="text-center text-[length:var(--app-text-11)] text-text-muted">
+                  You can request a new code in {formatCooldown(resendCooldown)}.
+                </p>
+              ) : null}
             </form>
           ) : mode === 'forgot' && otpVerified ? (
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -429,6 +505,13 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
               />
               <FieldError message={fieldErrors.otp} />
 
+              {otpNotice ? (
+                <div className="flex items-start gap-2 rounded-lg border border-accent/30 bg-accent/10 p-3 text-[length:var(--app-text-12)] text-accent">
+                  <Icon name="check-circle" size={14} className="mt-0.5 shrink-0" />
+                  <span className="flex-1 leading-snug">{otpNotice}</span>
+                </div>
+              ) : null}
+
               {generalError ? (
                 <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 p-3 text-[length:var(--app-text-12)] text-danger">
                   <Icon name="alert-triangle" size={14} className="mt-0.5 shrink-0" />
@@ -447,18 +530,17 @@ export default function AuthScreen({ appVersion, onLoginSuccess }: AuthScreenPro
 
               <button
                 type="button"
-                onClick={() => {
-                  setOtpSent(false)
-                  setOtpVerified(false)
-                  setResetToken(null)
-                  setOtp('')
-                  setGeneralError(null)
-                  setFieldErrors({})
-                }}
-                className="btn-soft mt-1 flex h-9 w-full items-center justify-center gap-2 rounded-lg font-medium text-text-muted hover:text-text"
+                disabled={busy || resendCooldown > 0}
+                onClick={handleResendOtp}
+                className="btn-soft mt-1 flex h-9 w-full items-center justify-center gap-2 rounded-lg font-medium text-text-muted hover:text-text disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Resend code
+                {resendCooldown > 0 ? `Resend code (${formatCooldown(resendCooldown)})` : 'Resend code'}
               </button>
+              {resendCooldown > 0 ? (
+                <p className="text-center text-[length:var(--app-text-11)] text-text-muted">
+                  You can request a new code in {formatCooldown(resendCooldown)}.
+                </p>
+              ) : null}
             </form>
           ) : (
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
