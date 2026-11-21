@@ -132,7 +132,7 @@ export default function DropDatabaseDialog({
             </label>
             <input
               id="drop-database-name"
-              className="field font-mono"
+              className="field"
               value={typed}
               autoFocus
               autoComplete="off"

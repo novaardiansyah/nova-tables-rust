@@ -101,7 +101,7 @@ export default function CreateDatabaseDialog({
             </label>
             <input
               id="create-database-name"
-              className="field font-mono"
+              className="field"
               value={name}
               autoFocus
               autoComplete="off"
