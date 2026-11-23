@@ -189,6 +189,7 @@ export default function ResultGrid({
       gridFocusedRef.current = insideGrid
       if (
         insideGrid &&
+        !editorRef.current?.contains(target) &&
         target?.tagName !== 'INPUT' &&
         target?.tagName !== 'TEXTAREA' &&
         target?.tagName !== 'SELECT' &&

@@ -137,7 +137,10 @@ export default function CellEditor({ value, onCommit, onCancel, controllerRef, d
             cancel()
           }
         }}
-        onBlur={() => finish(draft)}
+        onBlur={(event) => {
+          if (rootRef.current?.contains(event.relatedTarget as Node | null)) return
+          finish(draft)
+        }}
         autoFocus
         className="h-full w-full min-w-0 select-text rounded border border-accent/60 bg-base px-1 text-[length:inherit] text-text outline-none"
         style={{ fontFamily: 'inherit', fontSize: 'inherit' }}

@@ -188,10 +188,11 @@ export default function WorkspaceView({
     () => ({
       tables: session?.tables?.tables ?? [],
       columns: session?.columns?.tables ?? [],
+      modules: session?.modules?.modules ?? [],
       driverType: session?.connection?.driverType ?? null,
       activeDatabase: session?.activeDatabase ?? null,
     }),
-    [session?.tables, session?.columns, session?.connection?.driverType, session?.activeDatabase],
+    [session?.tables, session?.columns, session?.modules, session?.connection?.driverType, session?.activeDatabase],
   )
 
   const sidebarSessions: SidebarSessionItem[] = useMemo(() => {

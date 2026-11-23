@@ -1,7 +1,7 @@
 import { monaco } from '@/monaco'
 
 const SQL_KEYWORDS =
-  'select from where not like union all exists between case when then else having into values set inner outer full cross is null and or insert delete truncate commit rollback begin transaction if order group by using declare with distinct top join on as offset fetch next rows only asc desc primary key foreign references cascade constraint unique default check left right count sum min max avg'.split(
+  'select from where not like union all exists between case when then else having into values set inner outer full cross is null and or insert delete truncate commit rollback begin transaction if order group by using declare with distinct top join on as offset fetch next rows only asc desc primary key foreign references cascade constraint unique default check left right count sum min max avg exec execute call'.split(
     ' ',
   )
 
@@ -34,9 +34,17 @@ export interface CatalogTableColumns {
   columns: string[]
 }
 
+export interface CatalogModule {
+  schema: string
+  name: string
+  type?: string
+  typeDesc?: string
+}
+
 export interface CompletionCatalog {
   tables?: CatalogTable[]
   columns?: CatalogTableColumns[]
+  modules?: CatalogModule[]
   driverType?: string | null
   activeDatabase?: string | null
 }
@@ -55,11 +63,13 @@ interface Reference {
 const catalog: {
   tables: CatalogTable[]
   columns: CatalogTableColumns[]
+  modules: CatalogModule[]
   driverType: string | null
   activeDatabase: string | null
 } = {
   tables: [],
   columns: [],
+  modules: [],
   driverType: null,
   activeDatabase: null,
 }
@@ -67,6 +77,7 @@ const catalog: {
 export function setCompletionCatalog(next: CompletionCatalog | null | undefined): void {
   catalog.tables = [...(next?.tables || [])]
   catalog.columns = [...(next?.columns || [])]
+  catalog.modules = [...(next?.modules || [])]
   catalog.driverType = next?.driverType || null
   catalog.activeDatabase = next?.activeDatabase || null
 }
@@ -350,11 +361,39 @@ function suggestion(
   }
 }
 
+const EXEC_CONTEXT_RE =
+  /\b(?:exec|execute|call)\s+(?:[`"\[]?[A-Za-z0-9_$@#]+[`"\]]?\s*\.\s*)?[`"\[]?[A-Za-z0-9_$@#]*$/i
+
+function isExecContext(contextualSql: string, offsetInContext: number): boolean {
+  const beforeCursor = contextualSql.slice(0, Math.max(0, offsetInContext))
+  return EXEC_CONTEXT_RE.test(beforeCursor)
+}
+
+function moduleSuggestion(
+  mod: CatalogModule,
+  label: string,
+  range: monaco.IRange,
+  bucket: string,
+): monaco.languages.CompletionItem {
+  const isFn = mod.type === 'function'
+  const detail = mod.typeDesc || (isFn ? 'Function' : 'Stored Procedure')
+  return {
+    label: isFn ? `${label}()` : label,
+    kind: FUNCTION_KIND,
+    insertText: isFn ? `${label}(` : label,
+    filterText: `${mod.name} ${label}`,
+    range,
+    detail,
+    sortText: `${bucket}${String(label).toLowerCase().replace(/\W/g, '')}`,
+  }
+}
+
 function buildBareSuggestions(
   cache: Map<string, string[]>,
   references: Reference[],
   prefix: string,
   position: monaco.Position,
+  execContext: boolean,
 ): monaco.languages.CompletionItem[] {
   const items: monaco.languages.CompletionItem[] = []
   const range = new monaco.Range(
@@ -364,6 +403,18 @@ function buildBareSuggestions(
     position.column,
   )
   const prefixLower = prefix.toLowerCase()
+
+  if (execContext) {
+    for (const mod of catalog.modules) {
+      if (mod.type === 'function') continue
+      const label = tableLabel(mod.schema, mod.name)
+      if (!prefixLower || label.toLowerCase().startsWith(prefixLower) || mod.name.toLowerCase().startsWith(prefixLower)) {
+        items.push(moduleSuggestion(mod, label, range, '0'))
+      }
+    }
+    return items
+  }
+
   const unique = new Map<string, Reference>()
 
   for (const reference of references) {
@@ -420,6 +471,13 @@ function buildBareSuggestions(
     }
   }
 
+  for (const mod of catalog.modules) {
+    const label = tableLabel(mod.schema, mod.name)
+    if (!prefixLower || label.toLowerCase().startsWith(prefixLower) || mod.name.toLowerCase().startsWith(prefixLower)) {
+      items.push(moduleSuggestion(mod, label, range, mod.type === 'function' ? '3' : '4'))
+    }
+  }
+
   return items
 }
 
@@ -429,6 +487,7 @@ function buildDottedSuggestions(
   segments: Segment[],
   position: monaco.Position,
   chainStart: number,
+  execContext: boolean,
 ): monaco.languages.CompletionItem[] {
   const items: monaco.languages.CompletionItem[] = []
   const last = segments[segments.length - 1]
@@ -443,33 +502,44 @@ function buildDottedSuggestions(
   )
 
   if (preceding.length === 1) {
-    const identifier = preceding[0].value
-    const columns = resolveColumns(cache, references, [identifier])
+    const identifier = unwrap(preceding[0].value)
 
-    if (columns) {
-      for (let index = 0; index < columns.length; index += 1) {
-        const column = columns[index]
-        if (!prefixLower || column.toLowerCase().startsWith(prefixLower)) {
-          items.push(suggestion(column, COLUMN_KIND, column, range, '0', undefined, index))
+    if (!execContext) {
+      const columns = resolveColumns(cache, references, [identifier])
+
+      if (columns) {
+        for (let index = 0; index < columns.length; index += 1) {
+          const column = columns[index]
+          if (!prefixLower || column.toLowerCase().startsWith(prefixLower)) {
+            items.push(suggestion(column, COLUMN_KIND, column, range, '0', undefined, index))
+          }
         }
+
+        return items
       }
 
-      return items
+      for (const table of catalog.tables) {
+        if (table.schema.toLowerCase() !== identifier.toLowerCase()) continue
+        if (prefixLower && !table.name.toLowerCase().startsWith(prefixLower)) continue
+
+        items.push(
+          suggestion(
+            table.name,
+            TABLE_KIND,
+            table.name,
+            range,
+            `1${table.name.toLowerCase()}`,
+            table.schema,
+          ),
+        )
+      }
     }
 
-    for (const table of catalog.tables) {
-      if (table.schema.toLowerCase() !== identifier.toLowerCase()) continue
-
-      items.push(
-        suggestion(
-          table.name,
-          TABLE_KIND,
-          table.name,
-          range,
-          `1${table.name.toLowerCase()}`,
-          table.schema,
-        ),
-      )
+    for (const mod of catalog.modules) {
+      if (mod.schema.toLowerCase() !== identifier.toLowerCase()) continue
+      if (execContext && mod.type === 'function') continue
+      if (prefixLower && !mod.name.toLowerCase().startsWith(prefixLower)) continue
+      items.push(moduleSuggestion(mod, mod.name, range, execContext ? '0' : '2'))
     }
   }
 
@@ -506,15 +576,16 @@ function provideCompletionItems(
   const strippedSql = stripCommentsAndStrings(fullSql)
   const contextualSql = getContextualSql(strippedSql, offset)
   const references = extractReferences(contextualSql)
+  const execContext = isExecContext(strippedSql, offset)
 
   if (segments.length === 1) {
     return {
-      suggestions: buildBareSuggestions(cache, references, last.value, position),
+      suggestions: buildBareSuggestions(cache, references, last.value, position, execContext),
     }
   }
 
   return {
-    suggestions: buildDottedSuggestions(cache, references, segments, position, chainStart),
+    suggestions: buildDottedSuggestions(cache, references, segments, position, chainStart, execContext),
   }
 }
 
