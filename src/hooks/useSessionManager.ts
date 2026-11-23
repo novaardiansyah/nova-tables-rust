@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, MutableRefObject } from 'react'
-import { api, DatabaseInfo } from '@/api'
+import { api, DatabaseInfo, getAuthToken } from '@/api'
 import { SessionData, SessionTab, createTab, createSession, pickDatabase, starterSql, queryTitle, EMPTY_TABLES, EMPTY_COLUMNS, EMPTY_MODULES } from '@/utils/sessionHelpers'
 import { ConnectionDialogConnection, ConnectionDialogMode } from '@/components/connections/ConnectionDialog'
 import { Settings, applySettings } from '@/settings'
@@ -148,6 +148,21 @@ export function useSessionManager({
 
   useEffect(() => {
     let cancelled = false
+
+    void api
+      .appInfo()
+      .then((info) => {
+        if (!cancelled) setAppVersion(info.version)
+      })
+      .catch(() => {})
+
+    if (!getAuthToken()) {
+      setLoadingConnections(false)
+      return () => {
+        cancelled = true
+      }
+    }
+
     setLoadingConnections(true)
 
     Promise.all([
@@ -157,7 +172,7 @@ export function useSessionManager({
           if (!cancelled) setConnections(list)
         })
         .catch((error) => {
-          if (error?.status !== 401 && !error?.isUnauthorized) {
+          if (!cancelled && error?.status !== 401 && !error?.isUnauthorized) {
             showBanner('error', error.message)
           }
         }),
@@ -167,37 +182,33 @@ export function useSessionManager({
           if (!cancelled) setFolders(list)
         })
         .catch((error) => {
-          if (error?.status !== 401 && !error?.isUnauthorized) {
+          if (!cancelled && error?.status !== 401 && !error?.isUnauthorized) {
             showBanner('error', error.message)
           }
         }),
-      api
-        .getLastConnectedId()
-        .then((id) => {
-          if (!cancelled) setLastConnectedId(id)
-        })
-        .catch(() => {}),
-      api
-        .appInfo()
-        .then((info) => {
-          if (!cancelled) setAppVersion(info.version)
-        })
-        .catch(() => {}),
-      api
-        .loadSettings()
-        .then((stored) => {
-          if (!cancelled) {
-            const resolved = applySettings(stored)
-            setSettings(resolved)
-            if (!stored) {
-              api.saveSettings(resolved).catch(() => {})
-            }
-          }
-        })
-        .catch(() => {}),
     ]).finally(() => {
       if (!cancelled) setLoadingConnections(false)
     })
+
+    void api
+      .getLastConnectedId()
+      .then((id) => {
+        if (!cancelled) setLastConnectedId(id)
+      })
+      .catch(() => {})
+
+    void api
+      .loadSettings()
+      .then((stored) => {
+        if (!cancelled) {
+          const resolved = applySettings(stored)
+          setSettings(resolved)
+          if (!stored) {
+            api.saveSettings(resolved).catch(() => {})
+          }
+        }
+      })
+      .catch(() => {})
 
     return () => {
       cancelled = true
@@ -797,14 +808,12 @@ export function useSessionManager({
   const handleReloadConnections = useCallback(async () => {
     setLoadingConnections(true)
     try {
-      const [nextFolders, nextConnections, nextLastId] = await Promise.all([
+      const [nextFolders, nextConnections] = await Promise.all([
         api.listFolders(),
         api.listConnections(),
-        api.getLastConnectedId().catch(() => null),
       ])
       setFolders(nextFolders)
       setConnections(nextConnections)
-      if (nextLastId) setLastConnectedId(nextLastId)
     } catch (error: any) {
       if (error?.status !== 401 && !error?.isUnauthorized) {
         showBanner('error', error.message)
@@ -812,7 +821,25 @@ export function useSessionManager({
     } finally {
       setLoadingConnections(false)
     }
-  }, [showBanner])
+
+    void api
+      .getLastConnectedId()
+      .then((nextLastId) => {
+        if (nextLastId) setLastConnectedId(nextLastId)
+      })
+      .catch(() => {})
+
+    void api
+      .loadSettings()
+      .then((stored) => {
+        const resolved = applySettings(stored)
+        setSettings(resolved)
+        if (!stored) {
+          api.saveSettings(resolved).catch(() => {})
+        }
+      })
+      .catch(() => {})
+  }, [setSettings, showBanner])
 
   const handleNewConnectionInFolder = useCallback(
     (folderId: string) => {

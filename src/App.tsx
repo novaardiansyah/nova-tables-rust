@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { api, AuthUser, onUnauthenticated } from '@/api'
+import { api, AuthUser, getAuthToken, getStoredSession, onUnauthenticated } from '@/api'
 import { DEFAULT_SETTINGS, applySettings, Settings } from '@/settings'
 import {
   DEFAULT_WORKSPACE_STATE,
@@ -29,8 +29,14 @@ import AuthScreen from '@/components/auth/AuthScreen'
 import { isDesignDirty } from '@/designSql'
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
-  const [authChecking, setAuthChecking] = useState(true)
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    if (!getAuthToken()) return null
+    return getStoredSession()?.user ?? null
+  })
+  const [authChecking, setAuthChecking] = useState<boolean>(() => {
+    if (!getAuthToken()) return false
+    return !getStoredSession()?.user
+  })
   const [banner, setBanner] = useState<{ type: BannerType; message: string } | null>(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -58,14 +64,17 @@ export default function App() {
   }, [banner])
 
   useEffect(() => {
+    if (!getAuthToken()) {
+      setAuthChecking(false)
+      return undefined
+    }
+
     let cancelled = false
     void api
       .getCurrentSession()
       .then((sess) => {
         if (!cancelled) {
-          if (sess?.user) {
-            setCurrentUser(sess.user)
-          }
+          setCurrentUser(sess?.user ?? null)
           setAuthChecking(false)
         }
       })
@@ -117,7 +126,14 @@ export default function App() {
     }
   }, [sessions, sessionManager])
 
+  const hasAuthenticatedUser = Boolean(currentUser)
+
   useEffect(() => {
+    if (!hasAuthenticatedUser) {
+      setWorkspaceLoaded(false)
+      return undefined
+    }
+
     let cancelled = false
 
     api
@@ -136,7 +152,7 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [layout.hydrateLayout, workspaceReloadKey])
+  }, [hasAuthenticatedUser, layout.hydrateLayout, workspaceReloadKey])
 
   useEffect(() => {
     if (!workspaceLoaded) return undefined

@@ -1,50 +1,8 @@
 import { openUrl } from '@tauri-apps/plugin-opener'
-import {
-  AuthSession,
-  AuthUser,
-  ColumnSummary,
-  ConnectionModel,
-  DatabaseInfo,
-  DatabaseModule,
-  DatabaseUserDetail,
-  ExecutionPlanResult,
-  FolderModel,
-  QueryHistoryItem,
-  QueryResult,
-  SavedQueryItem,
-  ServerLoginItem,
-  SystemInfo,
-  TableColumnsSummary,
-  TableRelation,
-  ErdData,
-  ErdTable,
-  ErdRelation,
-  TableStructureResult,
-  TableSummary,
-} from './types'
-import {
-  apiRequest,
-  getAuthToken,
-  getRefreshToken,
-  getStoredSession,
-  notifyUnauthenticated,
-  onUnauthenticated,
-  setAuthToken,
-  setRefreshToken,
-  setStoredSession,
-} from './client'
-import {
-  exportAppConfig,
-  exportConnections,
-  importAppConfig,
-  importConnections,
-  selectImportFile,
-} from './transfer'
-import {
-  isCiphertext,
-  encryptConnectionPassword,
-  decryptConnectionPassword,
-} from './crypto'
+import { AuthSession, AuthUser, ConnectionModel, FolderModel, QueryHistoryItem, SavedQueryItem, SystemInfo } from './types'
+import { apiRequest, getAuthToken, getRefreshToken, getStoredSession, setAuthToken, setRefreshToken, setStoredSession } from './client'
+import { exportAppConfig, exportConnections, importAppConfig, importConnections, selectImportFile } from './transfer'
+import { isCiphertext, encryptConnectionPassword, decryptConnectionPassword } from './crypto'
 import { callCommand, isTauri } from './ipc'
 import { createDatabaseOps } from './database'
 
@@ -52,11 +10,35 @@ export * from './types'
 export {
   getAuthToken,
   getRefreshToken,
+  getStoredSession,
   notifyUnauthenticated,
   onUnauthenticated,
   setAuthToken,
   setRefreshToken,
 } from './client'
+
+let treeOrderInFlight: Promise<{ connections?: string[]; folders?: string[] } | null> | null = null
+
+function fetchTreeOrder(): Promise<{ connections?: string[]; folders?: string[] } | null> {
+  if (treeOrderInFlight) {
+    return treeOrderInFlight
+  }
+
+  treeOrderInFlight = apiRequest<{ ok: boolean; value: unknown }>('/api/member/meta/tree_order')
+    .then((metaRes) => {
+      if (!metaRes?.value) return null
+      const parsed = typeof metaRes.value === 'string' ? JSON.parse(metaRes.value) : metaRes.value
+      return parsed && typeof parsed === 'object'
+        ? (parsed as { connections?: string[]; folders?: string[] })
+        : null
+    })
+    .catch(() => null)
+    .finally(() => {
+      treeOrderInFlight = null
+    })
+
+  return treeOrderInFlight
+}
 
 function legacyCopyText(text: string): boolean {
   if (typeof document === 'undefined' || !document.body) return false
@@ -404,7 +386,10 @@ export const api = {
   },
 
   listConnections: async (): Promise<ConnectionModel[]> => {
-    const res = await apiRequest<{ ok: boolean; connections?: ConnectionModel[]; lastConnectedId?: string | null }>('/api/member/connections')
+    const [res, treeOrder] = await Promise.all([
+      apiRequest<{ ok: boolean; connections?: ConnectionModel[]; lastConnectedId?: string | null }>('/api/member/connections'),
+      fetchTreeOrder(),
+    ])
     if (!res?.ok || !res?.connections) return []
 
     if (res.lastConnectedId) {
@@ -427,21 +412,16 @@ export const api = {
       }
     })
 
-    try {
-      const metaRes = await apiRequest<{ ok: boolean; value: unknown }>('/api/member/meta/tree_order').catch(() => null)
-      if (metaRes?.value) {
-        const parsed = typeof metaRes.value === 'string' ? JSON.parse(metaRes.value) : metaRes.value
-        const order = (parsed.connections || []) as string[]
-        const orderMap = new Map<string, number>(order.map((id, idx) => [id, idx] as [string, number]))
-        localList.sort((a, b) => {
-          const idA = String(a.id || (a as any).uid)
-          const idB = String(b.id || (b as any).uid)
-          const idxA = orderMap.has(idA) ? orderMap.get(idA)! : 999999
-          const idxB = orderMap.has(idB) ? orderMap.get(idB)! : 999999
-          return idxA - idxB
-        })
-      }
-    } catch {
+    if (treeOrder) {
+      const order = (treeOrder.connections || []) as string[]
+      const orderMap = new Map<string, number>(order.map((id, idx) => [id, idx] as [string, number]))
+      localList.sort((a, b) => {
+        const idA = String(a.id || (a as any).uid)
+        const idB = String(b.id || (b as any).uid)
+        const idxA = orderMap.has(idA) ? orderMap.get(idA)! : 999999
+        const idxB = orderMap.has(idB) ? orderMap.get(idB)! : 999999
+        return idxA - idxB
+      })
     }
 
     return localList
@@ -616,26 +596,24 @@ export const api = {
   importAppConfig,
 
   listFolders: async (): Promise<FolderModel[]> => {
-    const res = await apiRequest<{ ok: boolean; folders?: FolderModel[] }>('/api/member/folders')
+    const [res, treeOrder] = await Promise.all([
+      apiRequest<{ ok: boolean; folders?: FolderModel[] }>('/api/member/folders'),
+      fetchTreeOrder(),
+    ])
     if (!res?.ok || !res?.folders) return []
 
     const localList: FolderModel[] = res.folders || []
 
-    try {
-      const metaRes = await apiRequest<{ ok: boolean; value: unknown }>('/api/member/meta/tree_order').catch(() => null)
-      if (metaRes?.value) {
-        const parsed = typeof metaRes.value === 'string' ? JSON.parse(metaRes.value) : metaRes.value
-        const order = (parsed.folders || []) as string[]
-        const orderMap = new Map<string, number>(order.map((id, idx) => [id, idx] as [string, number]))
-        localList.sort((a, b) => {
-          const idA = String(a.id || (a as any).uid || '')
-          const idB = String(b.id || (b as any).uid || '')
-          const idxA = orderMap.has(idA) ? orderMap.get(idA)! : 999999
-          const idxB = orderMap.has(idB) ? orderMap.get(idB)! : 999999
-          return idxA - idxB
-        })
-      }
-    } catch {
+    if (treeOrder) {
+      const order = (treeOrder.folders || []) as string[]
+      const orderMap = new Map<string, number>(order.map((id, idx) => [id, idx] as [string, number]))
+      localList.sort((a, b) => {
+        const idA = String(a.id || (a as any).uid || '')
+        const idB = String(b.id || (b as any).uid || '')
+        const idxA = orderMap.has(idA) ? orderMap.get(idA)! : 999999
+        const idxB = orderMap.has(idB) ? orderMap.get(idB)! : 999999
+        return idxA - idxB
+      })
     }
 
     return localList

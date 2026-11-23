@@ -7,6 +7,7 @@ export {
   setAuthToken,
   getRefreshToken,
   setRefreshToken,
+  getStoredSession,
 } from '@/api/index'
 export type {
   ConnectionModel,
