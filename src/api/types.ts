@@ -176,11 +176,20 @@ export interface ErdData {
   relations: ErdRelation[]
 }
 
+export interface ModuleParameter {
+  name: string
+  dataType: string
+  mode?: string | null
+  isOutput?: boolean
+  hasDefault?: boolean
+}
+
 export interface DatabaseModule {
   schema: string
   name: string
   type: string
   typeDesc?: string
+  parameters?: ModuleParameter[]
 }
 
 export interface QueryResult {

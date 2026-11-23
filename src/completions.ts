@@ -34,11 +34,20 @@ export interface CatalogTableColumns {
   columns: string[]
 }
 
+export interface CatalogModuleParameter {
+  name: string
+  dataType: string
+  mode?: string | null
+  isOutput?: boolean
+  hasDefault?: boolean
+}
+
 export interface CatalogModule {
   schema: string
   name: string
   type?: string
   typeDesc?: string
+  parameters?: CatalogModuleParameter[]
 }
 
 export interface CompletionCatalog {
@@ -369,6 +378,31 @@ function isExecContext(contextualSql: string, offsetInContext: number): boolean 
   return EXEC_CONTEXT_RE.test(beforeCursor)
 }
 
+function formatParameter(param: CatalogModuleParameter): string {
+  const parts = [param.name, param.dataType]
+  if (param.isOutput) parts.push(param.mode && param.mode !== 'IN' ? param.mode : 'OUTPUT')
+  if (param.hasDefault) parts.push('= DEFAULT')
+  return parts.join(' ')
+}
+
+function moduleSignatureText(mod: CatalogModule): string {
+  const params = mod.parameters || []
+  if (params.length === 0) return '(no parameters)'
+  return `(${params.map(formatParameter).join(', ')})`
+}
+
+function moduleDocumentation(mod: CatalogModule): monaco.IMarkdownString {
+  const isFn = mod.type === 'function'
+  const kindLabel = mod.typeDesc || (isFn ? 'Function' : 'Stored Procedure')
+  const params = mod.parameters || []
+  const header = `**${mod.schema}.${mod.name}** — *${kindLabel}*`
+  if (params.length === 0) {
+    return { value: `${header}\n\n_No parameters required_` }
+  }
+  const lines = params.map((param) => `- \`${formatParameter(param)}\``)
+  return { value: `${header}\n\n**Parameters:**\n${lines.join('\n')}` }
+}
+
 function moduleSuggestion(
   mod: CatalogModule,
   label: string,
@@ -376,7 +410,7 @@ function moduleSuggestion(
   bucket: string,
 ): monaco.languages.CompletionItem {
   const isFn = mod.type === 'function'
-  const detail = mod.typeDesc || (isFn ? 'Function' : 'Stored Procedure')
+  const detail = moduleSignatureText(mod)
   return {
     label: isFn ? `${label}()` : label,
     kind: FUNCTION_KIND,
@@ -384,6 +418,7 @@ function moduleSuggestion(
     filterText: `${mod.name} ${label}`,
     range,
     detail,
+    documentation: moduleDocumentation(mod),
     sortText: `${bucket}${String(label).toLowerCase().replace(/\W/g, '')}`,
   }
 }
@@ -592,4 +627,68 @@ function provideCompletionItems(
 monaco.languages.registerCompletionItemProvider('sql', {
   triggerCharacters: ['.'],
   provideCompletionItems,
+})
+
+function findModule(schema: string | undefined, name: string): CatalogModule | null {
+  const targetName = unwrap(name).toLowerCase()
+  const targetSchema = schema ? unwrap(schema).toLowerCase() : ''
+  const matches = catalog.modules.filter((mod) => {
+    if (mod.name.toLowerCase() !== targetName) return false
+    if (targetSchema) return mod.schema.toLowerCase() === targetSchema
+    return true
+  })
+  if (matches.length === 0) return null
+  if (matches.length === 1) return matches[0]
+  const defaultMatch = matches.find((mod) => isDefaultSchema(mod.schema))
+  return defaultMatch || matches[0]
+}
+
+function provideSignatureHelp(
+  model: monaco.editor.ITextModel,
+  position: monaco.Position,
+): monaco.languages.SignatureHelpResult | null {
+  const line = model.getLineContent(position.lineNumber).slice(0, position.column - 1)
+
+  const execMatch =
+    /\b(?:exec|execute)\s+(?:([`"\[]?[A-Za-z0-9_$@#]+[`"\]]?)\s*\.\s*)?([`"\[]?[A-Za-z0-9_$@#]+[`"\]]?)\s+([^;]*)$/i.exec(
+      line,
+    )
+  const callMatch =
+    /\b(?:call\s+)?(?:([`"\[]?[A-Za-z0-9_$@#]+[`"\]]?)\s*\.\s*)?([`"\[]?[A-Za-z0-9_$@#]+[`"\]]?)\s*\(([^()]*)$/i.exec(
+      line,
+    )
+
+  const match = callMatch || execMatch
+  if (!match) return null
+
+  const mod = findModule(match[1], match[2])
+  if (!mod || !mod.parameters || mod.parameters.length === 0) return null
+
+  const argsText = match[3] || ''
+  const activeParameter = Math.min(argsText.split(',').length - 1, mod.parameters.length - 1)
+  const paramStrings = mod.parameters.map(formatParameter)
+  const prefix = `${tableLabel(mod.schema, mod.name)}(`
+  const signatureLabel = `${prefix}${paramStrings.join(', ')})`
+
+  return {
+    value: {
+      signatures: [
+        {
+          label: signatureLabel,
+          documentation: moduleDocumentation(mod),
+          parameters: paramStrings.map((paramLabel) => ({
+            label: paramLabel,
+          })),
+        },
+      ],
+      activeSignature: 0,
+      activeParameter,
+    },
+    dispose: () => {},
+  }
+}
+
+monaco.languages.registerSignatureHelpProvider('sql', {
+  signatureHelpTriggerCharacters: ['(', ',', ' '],
+  provideSignatureHelp,
 })

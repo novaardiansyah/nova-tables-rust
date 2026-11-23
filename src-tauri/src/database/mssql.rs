@@ -556,6 +556,81 @@ pub async fn list_modules(
         .into_first_result()
         .await
         .map_err(|e| e.to_string())?;
+
+    // Targeted for SQL Server: query sys.parameters (parameter_id > 0 excludes scalar function return values)
+    // and sys.types to retrieve parameter names, lengths/precisions, output flags, and default flags.
+    let mut param_map: std::collections::HashMap<(String, String), Vec<Value>> =
+        std::collections::HashMap::new();
+    if let Ok(param_stream) = client
+        .query(
+            "SELECT s.name AS schemaName,
+              o.name AS moduleName,
+              p.name AS paramName,
+              t.name AS typeName,
+              p.max_length,
+              p.precision,
+              p.scale,
+              p.is_output,
+              p.has_default_value
+         FROM sys.parameters p
+         JOIN sys.objects o ON o.object_id = p.object_id
+         JOIN sys.schemas s ON s.schema_id = o.schema_id
+         JOIN sys.types t ON t.user_type_id = p.user_type_id
+        WHERE o.type IN ('P', 'FN', 'IF', 'TF')
+          AND o.is_ms_shipped = 0
+          AND p.parameter_id > 0
+        ORDER BY s.name, o.name, p.parameter_id",
+            &[],
+        )
+        .await
+    {
+        if let Ok(param_rows) = param_stream.into_first_result().await {
+            for prow in param_rows {
+                let p_schema: &str = prow.get(0).unwrap_or("");
+                let p_module: &str = prow.get(1).unwrap_or("");
+                let p_name: &str = prow.get(2).unwrap_or("");
+                let t_name: &str = prow.get(3).unwrap_or("");
+                let max_length: i16 = prow.get(4).unwrap_or(0);
+                let precision: u8 = prow.get(5).unwrap_or(0);
+                let scale: u8 = prow.get(6).unwrap_or(0);
+                let is_output: bool = prow.get(7).unwrap_or(false);
+                let has_default: bool = prow.get(8).unwrap_or(false);
+
+                let lower_type = t_name.to_lowercase();
+                let formatted_type = match lower_type.as_str() {
+                    "varchar" | "char" | "varbinary" | "binary" => {
+                        if max_length < 0 {
+                            format!("{}(MAX)", t_name.to_uppercase())
+                        } else {
+                            format!("{}({})", t_name.to_uppercase(), max_length)
+                        }
+                    }
+                    "nvarchar" | "nchar" => {
+                        if max_length < 0 {
+                            format!("{}(MAX)", t_name.to_uppercase())
+                        } else {
+                            format!("{}({})", t_name.to_uppercase(), max_length / 2)
+                        }
+                    }
+                    "decimal" | "numeric" => {
+                        format!("{}({}, {})", t_name.to_uppercase(), precision, scale)
+                    }
+                    _ => t_name.to_uppercase(),
+                };
+
+                param_map
+                    .entry((p_schema.to_lowercase(), p_module.to_lowercase()))
+                    .or_default()
+                    .push(json!({
+                      "name": p_name,
+                      "dataType": formatted_type,
+                      "isOutput": is_output,
+                      "hasDefault": has_default
+                    }));
+            }
+        }
+    }
+
     let mut modules = Vec::new();
 
     for row in rows {
@@ -567,11 +642,15 @@ pub async fn list_modules(
         } else {
             "procedure"
         };
+        let parameters = param_map
+            .remove(&(schema.to_lowercase(), name.to_lowercase()))
+            .unwrap_or_default();
 
         modules.push(json!({
           "schema": schema,
           "name": name,
-          "type": kind
+          "type": kind,
+          "parameters": parameters
         }));
     }
 

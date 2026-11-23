@@ -524,17 +524,56 @@ pub async fn list_modules(conn: &mut Conn, database: Option<&str>) -> Result<Val
     };
 
     let rows: Vec<Row> = conn.query(query).await.map_err(|e| e.to_string())?;
+
+    // Targeted for MySQL: query information_schema.PARAMETERS (ORDINAL_POSITION > 0 excludes
+    // function return types) to retrieve parameter names, modes, and formatted DTD_IDENTIFIER types.
+    let param_query = if db.is_empty() {
+        "SELECT SPECIFIC_SCHEMA, SPECIFIC_NAME, PARAMETER_NAME, DTD_IDENTIFIER, PARAMETER_MODE FROM information_schema.PARAMETERS WHERE ORDINAL_POSITION > 0 AND SPECIFIC_SCHEMA NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys') ORDER BY SPECIFIC_SCHEMA, SPECIFIC_NAME, ORDINAL_POSITION".to_string()
+    } else {
+        format!(
+            "SELECT SPECIFIC_SCHEMA, SPECIFIC_NAME, PARAMETER_NAME, DTD_IDENTIFIER, PARAMETER_MODE FROM information_schema.PARAMETERS WHERE ORDINAL_POSITION > 0 AND SPECIFIC_SCHEMA = '{}' ORDER BY SPECIFIC_NAME, ORDINAL_POSITION",
+            db.replace('\'', "''")
+        )
+    };
+
+    let mut param_map: std::collections::HashMap<(String, String), Vec<Value>> =
+        std::collections::HashMap::new();
+    if let Ok(param_rows) = conn.query::<Row, _>(param_query).await {
+        for prow in param_rows {
+            let p_schema: String = prow.get(0).unwrap_or_default();
+            let p_module: String = prow.get(1).unwrap_or_default();
+            let p_name: String = prow.get(2).unwrap_or_default();
+            let dtd_type: String = prow.get(3).unwrap_or_default();
+            let p_mode: String = prow.get(4).unwrap_or_default();
+
+            param_map
+                .entry((p_schema.to_lowercase(), p_module.to_lowercase()))
+                .or_default()
+                .push(json!({
+                  "name": p_name,
+                  "dataType": dtd_type.to_uppercase(),
+                  "mode": p_mode,
+                  "isOutput": p_mode.eq_ignore_ascii_case("OUT") || p_mode.eq_ignore_ascii_case("INOUT"),
+                  "hasDefault": false
+                }));
+        }
+    }
+
     let mut modules = Vec::new();
 
     for row in rows {
         let name: String = row.get(0).unwrap_or_default();
         let r#type: String = row.get(1).unwrap_or_default();
         let schema: String = row.get(2).unwrap_or_else(|| db.to_string());
+        let parameters = param_map
+            .remove(&(schema.to_lowercase(), name.to_lowercase()))
+            .unwrap_or_default();
 
         modules.push(json!({
           "schema": schema,
           "name": name,
-          "type": r#type.to_lowercase()
+          "type": r#type.to_lowercase(),
+          "parameters": parameters
         }));
     }
 

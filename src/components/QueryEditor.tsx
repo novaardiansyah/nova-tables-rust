@@ -28,7 +28,7 @@ const EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
   quickSuggestions: { other: true, strings: false, comments: false },
   suggestOnTriggerCharacters: true,
   wordBasedSuggestions: 'off',
-  parameterHints: { enabled: false },
+  parameterHints: { enabled: true },
   overviewRulerLanes: 0,
   hideCursorInOverviewRuler: true,
   renderWhitespace: 'none',
