@@ -1,4 +1,5 @@
 import React, { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import ConfirmDialog from '@/components/common/ConfirmDialog'
 import Icon, { Spinner } from '@/components/common/Icon'
 import { TableDesignerSkeleton } from '@/components/common/Skeletons'
 import ColumnEditor, { DragOverState } from '@/components/designer/ColumnEditor'
@@ -101,7 +102,6 @@ export interface TableDesignerProps {
   driverType?: string | null
   onDraftChange?: (draft: TableDesign | null) => void
   onRenameTable?: (nextName: string) => void
-  onGenerate: (sql: string, draft?: TableDesign) => void
   onApply: (sql: string, draft: TableDesign) => void
 }
 
@@ -117,7 +117,6 @@ export default function TableDesigner({
   driverType,
   onDraftChange,
   onRenameTable,
-  onGenerate,
   onApply,
 }: TableDesignerProps) {
   const [draft, setDraftState] = useState<TableDesign>(
@@ -139,10 +138,13 @@ export default function TableDesigner({
   const [notice, setNotice] = useState<string | null>(null)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverState, setDragOverState] = useState<DragOverState | null>(null)
-  const [recreateDialog, setRecreateDialog] = useState<{ open: boolean; action: 'generate' | 'apply' | null }>({
-    open: false,
-    action: null,
-  })
+  const [recreateDialogOpen, setRecreateDialogOpen] = useState(false)
+  const [deleteRowTarget, setDeleteRowTarget] = useState<{
+    kind: 'column' | 'unique' | 'foreign' | 'index'
+    index: number
+    title: string
+    message: string
+  } | null>(null)
   const originalRef = useRef<TableDesign | null>(design ?? null)
 
   useEffect(() => {
@@ -270,7 +272,7 @@ export default function TableDesigner({
     })
   }
 
-  const removeColumn = (index: number) =>
+  const performRemoveColumn = (index: number) =>
     setDraft((prev) => {
       const removed = prev.columns[index]
       return {
@@ -291,6 +293,17 @@ export default function TableDesigner({
           .filter((idx) => idx.columns.length > 0),
       }
     })
+
+  const removeColumn = (index: number) => {
+    const col = draft.columns[index]
+    const label = col?.name?.trim() || `#${index + 1}`
+    setDeleteRowTarget({
+      kind: 'column',
+      index,
+      title: 'Remove column',
+      message: `Remove column “${label}” from this table design?`,
+    })
+  }
 
   const columnOptions = draft.columns
     .filter((column) => column.name)
@@ -348,11 +361,22 @@ export default function TableDesigner({
       uniqueKeys: (prev.uniqueKeys || []).map((key, position) => (position === index ? { ...key, ...patch } : key)),
     }))
 
-  const removeUnique = (index: number) =>
+  const performRemoveUnique = (index: number) =>
     setDraft((prev) => ({
       ...prev,
       uniqueKeys: (prev.uniqueKeys || []).filter((_, position) => position !== index),
     }))
+
+  const removeUnique = (index: number) => {
+    const key = (draft.uniqueKeys || [])[index]
+    const label = key?.name?.trim() || `#${index + 1}`
+    setDeleteRowTarget({
+      kind: 'unique',
+      index,
+      title: 'Remove unique key',
+      message: `Remove unique key “${label}” from this table design?`,
+    })
+  }
 
   const addForeign = () =>
     setDraft((prev) => ({
@@ -400,11 +424,22 @@ export default function TableDesigner({
       ),
     }))
 
-  const removeForeign = (index: number) =>
+  const performRemoveForeign = (index: number) =>
     setDraft((prev) => ({
       ...prev,
       foreignKeys: (prev.foreignKeys || []).filter((_, position) => position !== index),
     }))
+
+  const removeForeign = (index: number) => {
+    const key = (draft.foreignKeys || [])[index]
+    const label = key?.name?.trim() || `#${index + 1}`
+    setDeleteRowTarget({
+      kind: 'foreign',
+      index,
+      title: 'Remove foreign key',
+      message: `Remove foreign key “${label}” from this table design?`,
+    })
+  }
 
   const addIndex = () =>
     setDraft((prev) => ({
@@ -421,11 +456,32 @@ export default function TableDesigner({
       indexes: (prev.indexes || []).map((item, position) => (position === index ? { ...item, ...patch } : item)),
     }))
 
-  const removeIndex = (index: number) =>
+  const performRemoveIndex = (index: number) =>
     setDraft((prev) => ({
       ...prev,
       indexes: (prev.indexes || []).filter((_, position) => position !== index),
     }))
+
+  const removeIndex = (index: number) => {
+    const item = (draft.indexes || [])[index]
+    const label = item?.name?.trim() || `#${index + 1}`
+    setDeleteRowTarget({
+      kind: 'index',
+      index,
+      title: 'Remove index',
+      message: `Remove index “${label}” from this table design?`,
+    })
+  }
+
+  const handleConfirmDeleteRow = () => {
+    if (!deleteRowTarget) return
+    const { kind, index } = deleteRowTarget
+    setDeleteRowTarget(null)
+    if (kind === 'column') performRemoveColumn(index)
+    else if (kind === 'unique') performRemoveUnique(index)
+    else if (kind === 'foreign') performRemoveForeign(index)
+    else if (kind === 'index') performRemoveIndex(index)
+  }
 
   const toggleIndexColumn = (index: number, column: string) =>
     setDraft((prev) => ({
@@ -461,18 +517,9 @@ export default function TableDesigner({
     }
   }
 
-  const handleGenerate = (forceMode?: 'recreate' | 'alter') => {
-    if (mode === 'edit' && !forceMode && checkRequiresRecreation(originalRef.current, draft)) {
-      setRecreateDialog({ open: true, action: 'generate' })
-      return
-    }
-    const text = preview(forceMode)
-    if (text) onGenerate(text, draft)
-  }
-
   const handleApply = (forceMode?: 'recreate' | 'alter') => {
     if (mode === 'edit' && !forceMode && checkRequiresRecreation(originalRef.current, draft)) {
-      setRecreateDialog({ open: true, action: 'apply' })
+      setRecreateDialogOpen(true)
       return
     }
     const text = preview(forceMode)
@@ -481,17 +528,13 @@ export default function TableDesigner({
   }
 
   const confirmRecreate = () => {
-    const action = recreateDialog.action
-    setRecreateDialog({ open: false, action: null })
-    if (action === 'generate') handleGenerate('recreate')
-    if (action === 'apply') handleApply('recreate')
+    setRecreateDialogOpen(false)
+    handleApply('recreate')
   }
 
   const confirmAlter = () => {
-    const action = recreateDialog.action
-    setRecreateDialog({ open: false, action: null })
-    if (action === 'generate') handleGenerate('alter')
-    if (action === 'apply') handleApply('alter')
+    setRecreateDialogOpen(false)
+    handleApply('alter')
   }
 
   const handleRename = () => {
@@ -521,14 +564,6 @@ export default function TableDesigner({
             disabled={busy}
           >
             Discard
-          </button>
-          <button
-            type="button"
-            className="btn-soft h-8 px-3 text-[length:var(--app-text-12)]"
-            onClick={() => handleGenerate()}
-            disabled={busy}
-          >
-            Generate SQL
           </button>
           <button
             type="button"
@@ -605,10 +640,20 @@ export default function TableDesigner({
       </div>
 
       <RecreateConfirmDialog
-        open={recreateDialog.open}
-        onCancel={() => setRecreateDialog({ open: false, action: null })}
+        open={recreateDialogOpen}
+        onCancel={() => setRecreateDialogOpen(false)}
         onConfirmRecreate={confirmRecreate}
         onConfirmAlter={confirmAlter}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteRowTarget)}
+        title={deleteRowTarget?.title ?? 'Remove item'}
+        message={deleteRowTarget?.message ?? ''}
+        confirmLabel="Remove"
+        danger
+        onCancel={() => setDeleteRowTarget(null)}
+        onConfirm={handleConfirmDeleteRow}
       />
     </div>
   )

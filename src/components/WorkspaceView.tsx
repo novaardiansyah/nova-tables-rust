@@ -110,8 +110,6 @@ export default function WorkspaceView({
     handleOpenStructure,
     handleGenerateErd,
     handleNewTable,
-    handleDesignGenerate,
-    handleDesignApply,
     handleDesignRename,
   } = tableBrowser
 
@@ -355,8 +353,11 @@ export default function WorkspaceView({
               onDraftChange={(draft) =>
                 sessionManager.updateTab(session.connectionId, activeTab.id, { designDraft: draft })
               }
-              onGenerate={handleDesignGenerate}
-              onApply={(sql, draft) => handleDesignApply(activeTab.id, sql, draft)}
+              onApply={(sql, draft) => {
+                updateTab(session.connectionId, activeTab.id, { designDraft: draft })
+                queryExecution.setEditConfirmTarget({ type: 'save', tabId: activeTab.id, sql })
+                queryExecution.setEditConfirmOpen(true)
+              }}
               onRenameTable={(nextName) =>
                 handleDesignRename(activeTab.id, activeTab.design!, nextName)
               }

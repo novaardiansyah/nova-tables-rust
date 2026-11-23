@@ -388,9 +388,12 @@ export default function App() {
     handleRun: queryExecution.handleRun,
     handleCancel: queryExecution.handleCancel,
     handleSaveQuery: () => {
-      if (activeTab && activeTab.kind === 'design' && isDesignDirty(activeTab, session?.connection?.driverType)) {
-        queryExecution.setEditConfirmTarget({ type: 'save', tabId: activeTab.id })
-        queryExecution.setEditConfirmOpen(true)
+      if (activeTab && activeTab.kind === 'design') {
+        if (isDesignDirty(activeTab, session?.connection?.driverType)) {
+          queryExecution.setEditConfirmTarget({ type: 'save', tabId: activeTab.id })
+          queryExecution.setEditConfirmOpen(true)
+        }
+        return
       } else if (
         activeTab &&
         (

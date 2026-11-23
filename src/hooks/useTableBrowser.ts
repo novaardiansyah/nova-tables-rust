@@ -562,50 +562,6 @@ export function useTableBrowser({
     [activeSession, openDesignTab, showBanner, updateTab],
   )
 
-  const handleDesignGenerate = useCallback(
-    (sql: string, draft: TableDesign) => {
-      const current = activeSession()
-      if (!current) return
-      // Persist the current draft into the design tab so switching back does not reset the form.
-      updateTab(current.connectionId, current.activeTabId, { designDraft: draft })
-      openTab(current.connectionId, 'Generated SQL', sql)
-    },
-    [activeSession, openTab, updateTab],
-  )
-
-  const handleDesignApply = useCallback(
-    async (tabId: string, sql: string, draft: TableDesign) => {
-      const current = activeSession()
-      if (!current) {
-        showBanner('warn', 'Open a connection before applying changes.')
-        return
-      }
-      if (!current.activeDatabase) {
-        showBanner('warn', 'Select a database before applying changes.')
-        return
-      }
-
-      updateTab(current.connectionId, tabId, { busy: true })
-      try {
-        await api.runQuery({
-          connectionId: current.connectionId,
-          historyConnectionId: current.connection?.id ?? null,
-          database: current.activeDatabase,
-          sql,
-        })
-        showBanner('success', 'Structure applied.')
-        await loadTables(current.connectionId, current.activeDatabase)
-        await loadColumns(current.connectionId, current.activeDatabase)
-        await reloadDesign(tabId, draft.schema, draft.table)
-      } catch (error: any) {
-        showBanner('error', error.message)
-      } finally {
-        updateTab(current.connectionId, tabId, { busy: false })
-      }
-    },
-    [activeSession, loadTables, loadColumns, reloadDesign, showBanner, updateTab],
-  )
-
   const handleDesignRename = useCallback(
     async (tabId: string, draft: TableDesign, nextName: string) => {
       const current = activeSession()
@@ -660,8 +616,6 @@ export function useTableBrowser({
     handleOpenStructure,
     handleGenerateErd,
     handleNewTable,
-    handleDesignGenerate,
-    handleDesignApply,
     handleDesignRename,
   }
 }

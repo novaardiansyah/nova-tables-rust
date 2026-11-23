@@ -165,7 +165,7 @@ export default function AppDialogs({
       activeTab
     if (!targetTab) return ''
     if (targetTab.kind === 'design') {
-      return getDesignSql(targetTab, session?.connection?.driverType)
+      return editConfirmTarget?.sql || getDesignSql(targetTab, session?.connection?.driverType)
     }
     try {
       return `${editSqlHeader(targetTab.editSource)}${buildUpdateStatements(targetTab.editSource, tabResultSet(targetTab), targetTab.edits || {}, targetTab.creatingRows || []).join('\n\n')}`

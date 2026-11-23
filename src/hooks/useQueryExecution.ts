@@ -710,7 +710,7 @@ export function useQueryExecution({
 
     if (tab.kind === 'design') {
       const driverType = current.connection?.driverType ?? null
-      const sql = getDesignSql(tab, driverType)
+      const sql = target?.sql || getDesignSql(tab, driverType)
       const ok = await handleRunUpdate(sql)
       if (!ok) return
       setEditConfirmOpen(false)
@@ -845,7 +845,7 @@ export function useQueryExecution({
     if (!tab) return
     if (tab.kind === 'design') {
       const driverType = current.connection?.driverType ?? null
-      const sql = getDesignSql(tab, driverType)
+      const sql = target?.sql || getDesignSql(tab, driverType)
       try {
         await api.copyText(sql)
         showBanner('success', 'Copied structure SQL to clipboard.')
