@@ -94,8 +94,33 @@ export default function App() {
   const [workspaceReloadKey, setWorkspaceReloadKey] = useState(0)
 
   const getPersistedTabs = useCallback(
-    (connectionId: string): PersistedSessionTabs | null =>
-      workspaceRef.current.connections[connectionId] ?? null,
+    (connectionId: string, database?: string | null): PersistedSessionTabs | null => {
+      if (database) {
+        return workspaceRef.current.databaseTabs[connectionId]?.[database] ?? null
+      }
+      return workspaceRef.current.connections[connectionId] ?? null
+    },
+    [],
+  )
+
+  const savePersistedTabs = useCallback(
+    (connectionId: string, database: string, tabs: PersistedSessionTabs | null) => {
+      if (!connectionId || !database) return
+      const nextDatabaseTabs = { ...workspaceRef.current.databaseTabs }
+      const connMap = { ...(nextDatabaseTabs[connectionId] || {}) }
+      if (tabs) {
+        connMap[database] = tabs
+        nextDatabaseTabs[connectionId] = connMap
+      } else {
+        delete connMap[database]
+        if (Object.keys(connMap).length > 0) nextDatabaseTabs[connectionId] = connMap
+        else delete nextDatabaseTabs[connectionId]
+      }
+      workspaceRef.current = {
+        ...workspaceRef.current,
+        databaseTabs: nextDatabaseTabs,
+      }
+    },
     [],
   )
 
@@ -106,6 +131,7 @@ export default function App() {
     setSettings,
     setSettingsOpen,
     getPersistedTabs,
+    savePersistedTabs,
     sqlRef,
   })
 
@@ -158,9 +184,16 @@ export default function App() {
     if (!workspaceLoaded) return undefined
 
     const connections: Record<string, PersistedSessionTabs> = { ...workspaceRef.current.connections }
+    const databaseTabs: Record<string, Record<string, PersistedSessionTabs>> = {}
     const known = new Set<string>(sessionManager.connections.map((connection: any) => String(connection.id)))
+
     Object.keys(connections).forEach((connectionId) => {
       if (known.size > 0 && !known.has(connectionId)) delete connections[connectionId]
+    })
+
+    Object.entries(workspaceRef.current.databaseTabs).forEach(([connectionId, dbMap]) => {
+      if (known.size > 0 && !known.has(connectionId)) return
+      databaseTabs[connectionId] = { ...dbMap }
     })
 
     Object.values(sessions).forEach((session) => {
@@ -169,7 +202,13 @@ export default function App() {
         session.connectionId === activeConnectionId ? sqlRef.current : null,
       )
       const savedConnectionId = session.connection?.id ?? null
-      if (persisted && savedConnectionId) connections[savedConnectionId] = persisted
+      const activeDb = session.activeDatabase ?? null
+      if (persisted && savedConnectionId && activeDb) {
+        databaseTabs[savedConnectionId] = {
+          ...(databaseTabs[savedConnectionId] || {}),
+          [activeDb]: persisted,
+        }
+      }
     })
 
     const snapshot: WorkspaceState = {
@@ -181,6 +220,7 @@ export default function App() {
       editorHeight: layout.editorHeight,
       activeConnectionId,
       connections,
+      databaseTabs,
     }
 
     workspaceRef.current = snapshot

@@ -18,6 +18,7 @@ import DeleteConfirmDialog from '@/components/results/DeleteConfirmDialog'
 import ConfirmDialog from '@/components/common/ConfirmDialog'
 import CreateDatabaseDialog from '@/components/dialogs/CreateDatabaseDialog'
 import DropDatabaseDialog from '@/components/dialogs/DropDatabaseDialog'
+import DatabaseSwitchDialog from '@/components/dialogs/DatabaseSwitchDialog'
 import DatabaseUsersDialog from '@/components/dialogs/DatabaseUsersDialog'
 import { Settings, normalizeSettings } from '@/settings'
 import { api } from '@/api'
@@ -82,6 +83,9 @@ export default function AppDialogs({
     setDatabaseDrop,
     databaseDropBusy,
     handleDropDatabaseConfirm,
+    databaseSwitch,
+    setDatabaseSwitch,
+    handleDatabaseSwitchConfirm,
     deleteTarget,
     setDeleteTarget,
     deleting,
@@ -528,6 +532,15 @@ export default function AppDialogs({
         busy={queryBusy}
         onCancel={() => setQueryDeleteTarget(null)}
         onConfirm={handleDeleteSavedQuery}
+      />
+
+      <DatabaseSwitchDialog
+        open={Boolean(databaseSwitch)}
+        fromDatabase={databaseSwitch?.fromDatabase ?? null}
+        toDatabase={databaseSwitch?.toDatabase ?? ''}
+        onCancel={() => setDatabaseSwitch(null)}
+        onCloseAllTabs={() => void handleDatabaseSwitchConfirm('close')}
+        onKeepOpenTabs={() => void handleDatabaseSwitchConfirm('keep')}
       />
     </>
   )

@@ -31,6 +31,7 @@ export interface WorkspaceState {
   editorHeight: number
   activeConnectionId: string | null
   connections: Record<string, PersistedSessionTabs>
+  databaseTabs: Record<string, Record<string, PersistedSessionTabs>>
 }
 
 export const DEFAULT_WORKSPACE_STATE: WorkspaceState = {
@@ -42,6 +43,7 @@ export const DEFAULT_WORKSPACE_STATE: WorkspaceState = {
   editorHeight: EDITOR_DEFAULT_HEIGHT,
   activeConnectionId: null,
   connections: {},
+  databaseTabs: {},
 }
 
 function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
@@ -80,11 +82,26 @@ function normalizeSessionTabs(input: unknown): PersistedSessionTabs | null {
 export function normalizeWorkspaceState(input: unknown): WorkspaceState {
   const source = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
   const connections: Record<string, PersistedSessionTabs> = {}
+  const databaseTabs: Record<string, Record<string, PersistedSessionTabs>> = {}
 
   if (source.connections && typeof source.connections === 'object') {
     Object.entries(source.connections as Record<string, unknown>).forEach(([connectionId, value]) => {
       const normalized = normalizeSessionTabs(value)
       if (connectionId && normalized) connections[connectionId] = normalized
+    })
+  }
+
+  if (source.databaseTabs && typeof source.databaseTabs === 'object') {
+    Object.entries(source.databaseTabs as Record<string, unknown>).forEach(([connectionId, dbMap]) => {
+      if (!connectionId || !dbMap || typeof dbMap !== 'object') return
+      const normalizedDbMap: Record<string, PersistedSessionTabs> = {}
+      Object.entries(dbMap as Record<string, unknown>).forEach(([databaseName, value]) => {
+        const normalized = normalizeSessionTabs(value)
+        if (databaseName && normalized) normalizedDbMap[databaseName] = normalized
+      })
+      if (Object.keys(normalizedDbMap).length > 0) {
+        databaseTabs[connectionId] = normalizedDbMap
+      }
     })
   }
 
@@ -115,6 +132,7 @@ export function normalizeWorkspaceState(input: unknown): WorkspaceState {
         ? source.activeConnectionId
         : null,
     connections,
+    databaseTabs,
   }
 }
 

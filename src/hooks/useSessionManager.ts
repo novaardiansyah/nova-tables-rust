@@ -3,7 +3,7 @@ import { api, DatabaseInfo, getAuthToken } from '@/api'
 import { SessionData, SessionTab, createTab, createSession, pickDatabase, starterSql, queryTitle, EMPTY_TABLES, EMPTY_COLUMNS, EMPTY_MODULES } from '@/utils/sessionHelpers'
 import { ConnectionDialogConnection, ConnectionDialogMode } from '@/components/connections/ConnectionDialog'
 import { Settings, applySettings } from '@/settings'
-import { PersistedSessionTabs, tabsFromPersisted } from '@/workspaceState'
+import { PersistedSessionTabs, tabsFromPersisted, workspaceTabsFromSession } from '@/workspaceState'
 
 export interface UseSessionManagerProps {
   showBanner: (type: 'info' | 'warn' | 'error' | 'success', message: string) => void
@@ -11,7 +11,8 @@ export interface UseSessionManagerProps {
   seedEditor: (sql: string, focus?: boolean) => void
   setSettings: React.Dispatch<React.SetStateAction<Settings>>
   setSettingsOpen: React.Dispatch<React.SetStateAction<boolean>>
-  getPersistedTabs?: (connectionId: string) => PersistedSessionTabs | null
+  getPersistedTabs?: (connectionId: string, database?: string | null) => PersistedSessionTabs | null
+  savePersistedTabs?: (connectionId: string, database: string, tabs: PersistedSessionTabs | null) => void
   sqlRef: MutableRefObject<string>
 }
 
@@ -22,6 +23,7 @@ export function useSessionManager({
   setSettings,
   setSettingsOpen,
   getPersistedTabs,
+  savePersistedTabs,
   sqlRef,
 }: UseSessionManagerProps) {
   const [connections, setConnections] = useState<any[]>([])
@@ -48,6 +50,12 @@ export function useSessionManager({
   const [databaseDropBusy, setDatabaseDropBusy] = useState(false)
   const [databaseCreate, setDatabaseCreate] = useState<{ error?: string | null } | null>(null)
   const [databaseCreateBusy, setDatabaseCreateBusy] = useState(false)
+  const [databaseSwitch, setDatabaseSwitch] = useState<{
+    connectionId: string
+    savedConnectionId: string | null
+    fromDatabase: string | null
+    toDatabase: string
+  } | null>(null)
   const [appVersion, setAppVersion] = useState('')
   const duplicateSaveInFlightRef = useRef(false)
   const sessionSeqRef = useRef(0)
@@ -346,7 +354,7 @@ export function useSessionManager({
         )
 
         tabIdRef.current += 1
-        const persisted = getPersistedTabs?.(connection.id) ?? null
+        const persisted = getPersistedTabs?.(connection.id, database) ?? null
         let tabs: SessionTab[]
         if (persisted) {
           tabs = tabsFromPersisted(persisted)
@@ -401,27 +409,134 @@ export function useSessionManager({
   )
 
   const handleSelectDatabase = useCallback(
-    async (database: string) => {
+    (database: string) => {
       const current = activeSession()
-      if (!current || !database) return
-      const savedId = current.connection?.id ?? null
-      patchSession(current.connectionId, { activeDatabase: database })
+      if (!current || !database || database === current.activeDatabase) return
+      setDatabaseSwitch({
+        connectionId: current.connectionId,
+        savedConnectionId: current.connection?.id ?? null,
+        fromDatabase: current.activeDatabase ?? null,
+        toDatabase: database,
+      })
+    },
+    [activeSession],
+  )
+
+  const handleDatabaseSwitchConfirm = useCallback(
+    async (mode: 'close' | 'keep') => {
+      const pending = databaseSwitch
+      if (!pending) return
+      setDatabaseSwitch(null)
+
+      const current = sessionsRef.current[pending.connectionId]
+      if (!current) return
+
+      const { connectionId, savedConnectionId, fromDatabase, toDatabase } = pending
+      const liveSql = sqlRef.current
+      const syncedTabs = current.tabs.map((tab) =>
+        tab.id === current.activeTabId ? { ...tab, sql: liveSql } : tab,
+      )
+
+      if (savedConnectionId && fromDatabase) {
+        const fromPersisted = workspaceTabsFromSession({ ...current, tabs: syncedTabs }, null)
+        savePersistedTabs?.(savedConnectionId, fromDatabase, fromPersisted)
+      }
+
+      const targetPersisted = savedConnectionId
+        ? getPersistedTabs?.(savedConnectionId, toDatabase) ?? null
+        : null
+      const restoredTargetTabs = targetPersisted ? tabsFromPersisted(targetPersisted) : []
+
+      restoredTargetTabs.forEach((tab) => {
+        const numeric = Number(tab.id.replace('tab-', ''))
+        if (Number.isFinite(numeric) && numeric > tabIdRef.current) {
+          tabIdRef.current = numeric
+        }
+      })
+
+      let nextTabs: SessionTab[]
+      let nextActiveTabId: string
+
+      if (mode === 'close') {
+        if (restoredTargetTabs.length > 0) {
+          nextTabs = restoredTargetTabs
+          nextActiveTabId =
+            targetPersisted && restoredTargetTabs.some((tab) => tab.id === targetPersisted.activeTabId)
+              ? targetPersisted.activeTabId
+              : restoredTargetTabs[0].id
+        } else {
+          tabIdRef.current += 1
+          const freshTab = createTab(
+            `tab-${tabIdRef.current}`,
+            queryTitle(1),
+            starterSql(current.connection?.driverType),
+          )
+          nextTabs = [freshTab]
+          nextActiveTabId = freshTab.id
+        }
+      } else {
+        const existingIds = new Set(syncedTabs.map((tab) => tab.id))
+        const mergedTargetTabs = restoredTargetTabs.map((tab) => {
+          if (!existingIds.has(tab.id)) {
+            existingIds.add(tab.id)
+            return tab
+          }
+          tabIdRef.current += 1
+          const nextId = `tab-${tabIdRef.current}`
+          existingIds.add(nextId)
+          return { ...tab, id: nextId }
+        })
+        nextTabs = [...syncedTabs, ...mergedTargetTabs]
+        nextActiveTabId = syncedTabs.some((tab) => tab.id === current.activeTabId)
+          ? current.activeTabId
+          : nextTabs[0].id
+
+        if (savedConnectionId) {
+          const toPersisted = workspaceTabsFromSession(
+            { ...current, tabs: nextTabs, activeTabId: nextActiveTabId },
+            null,
+          )
+          savePersistedTabs?.(savedConnectionId, toDatabase, toPersisted)
+        }
+      }
+
+      patchSession(connectionId, {
+        activeDatabase: toDatabase,
+        tabs: nextTabs,
+        activeTabId: nextActiveTabId,
+      })
+
+      const activeTab = nextTabs.find((tab) => tab.id === nextActiveTabId) || nextTabs[0]
+      if (activeTab) {
+        seedEditor(activeTab.sql, false)
+      }
+
       setConnections((prev) =>
         prev.map((c) =>
-          c.id === savedId
+          c.id === savedConnectionId
             ? {
                 ...c,
-                lastDatabaseUsed: database,
+                lastDatabaseUsed: toDatabase,
               }
             : c,
         ),
       )
-      if (savedId) void api.updateLastDatabase(savedId, database).catch(() => {})
-      await loadTables(current.connectionId, database)
-      await loadColumns(current.connectionId, database)
-      await loadModules(current.connectionId, database)
+      if (savedConnectionId) void api.updateLastDatabase(savedConnectionId, toDatabase).catch(() => {})
+      await loadTables(connectionId, toDatabase)
+      await loadColumns(connectionId, toDatabase)
+      await loadModules(connectionId, toDatabase)
     },
-    [activeSession, loadColumns, loadModules, loadTables, patchSession],
+    [
+      databaseSwitch,
+      getPersistedTabs,
+      loadColumns,
+      loadModules,
+      loadTables,
+      patchSession,
+      savePersistedTabs,
+      seedEditor,
+      sqlRef,
+    ],
   )
 
   const handleRefreshDatabases = useCallback(
@@ -874,6 +989,9 @@ export function useSessionManager({
     databaseCreate,
     setDatabaseCreate,
     databaseCreateBusy,
+    databaseSwitch,
+    setDatabaseSwitch,
+    handleDatabaseSwitchConfirm,
     appVersion,
     sessionsRef,
     activeIdRef,
