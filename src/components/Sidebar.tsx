@@ -498,11 +498,7 @@ export default function Sidebar({
               {renderGroup(item, 'modules')}
             </div>
           ) : null
-        ) : (
-          <p className="mt-0.5 truncate px-2 py-1 pl-4 text-[length:var(--app-text-10)] font-semibold uppercase tracking-wider text-text-faint">
-            {item.databases.length} {item.databases.length === 1 ? 'database' : 'databases'}
-          </p>
-        )}
+        ) : null}
       </div>
     )
   }
