@@ -184,7 +184,18 @@ export default function ResultGrid({
 
   useEffect(() => {
     const trackFocus = (event: MouseEvent) => {
-      gridFocusedRef.current = Boolean(containerRef.current?.contains(event.target as Node))
+      const target = event.target as HTMLElement | null
+      const insideGrid = Boolean(containerRef.current?.contains(target))
+      gridFocusedRef.current = insideGrid
+      if (
+        insideGrid &&
+        target?.tagName !== 'INPUT' &&
+        target?.tagName !== 'TEXTAREA' &&
+        target?.tagName !== 'SELECT' &&
+        !target?.isContentEditable
+      ) {
+        containerRef.current?.focus({ preventScroll: true })
+      }
     }
     window.addEventListener('mousedown', trackFocus, true)
     return () => window.removeEventListener('mousedown', trackFocus, true)
@@ -496,6 +507,15 @@ export default function ResultGrid({
       if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return
 
       const key = event.key.toLowerCase()
+      if (key === 'a' && !active && onSelectionChange && rows.length > 0 && columns.length > 0) {
+        event.preventDefault()
+        event.stopPropagation()
+        onSelectionChange({
+          anchor: { row: 0, col: 0 },
+          focus: { row: rows.length - 1, col: columns.length - 1 },
+        })
+        return
+      }
       if (key === 'n' && onNewRow) {
         event.preventDefault()
         event.stopPropagation()
@@ -512,7 +532,7 @@ export default function ResultGrid({
     }
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [active, bounds, onDeleteRows, onDuplicateRow, onNewRow, onStartEdit, rows.length])
+  }, [active, bounds, columns.length, onDeleteRows, onDuplicateRow, onNewRow, onSelectionChange, onStartEdit, rows.length])
 
   const commitEdit = (value: unknown) => {
     if (!active || !onCellChange) return
@@ -568,7 +588,8 @@ export default function ResultGrid({
   return (
     <div
       ref={containerRef}
-      className="h-full select-none overflow-auto"
+      tabIndex={-1}
+      className="h-full select-none overflow-auto outline-none"
       onContextMenu={(event) => {
         if (visibleRows.length === 0) {
           event.preventDefault()
