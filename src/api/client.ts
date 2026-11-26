@@ -258,8 +258,18 @@ export async function apiRequest<T = any>(
       message = `Request failed with status ${response.status}`
     }
 
-    const error = new Error(message) as Error & { status?: number; isUnauthorized?: boolean; retryAfter?: number }
+    const error = new Error(message) as Error & {
+      status?: number
+      code?: string
+      data?: unknown
+      isUnauthorized?: boolean
+      retryAfter?: number
+    }
     error.status = response.status
+    if (typeof data?.code === 'string') {
+      error.code = data.code
+    }
+    error.data = data
     if (response.status === 401) {
       error.isUnauthorized = true
     }

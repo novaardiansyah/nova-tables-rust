@@ -766,9 +766,11 @@ export const api = {
   },
 
   listSavedQueries: async (connectionId: string, database: string): Promise<SavedQueryItem[]> => {
-    const res = await apiRequest<{ ok: boolean; queries?: SavedQueryItem[] }>('/api/member/saved-queries', {
-      method: 'GET',
-    }).catch(() => null)
+    if (!connectionId || !database) return []
+    const res = await apiRequest<{ ok: boolean; queries?: SavedQueryItem[] }>(
+      `/api/member/saved-queries?connectionId=${encodeURIComponent(connectionId)}&database=${encodeURIComponent(database)}`,
+      { method: 'GET' },
+    )
     return res?.queries || []
   },
 
@@ -778,45 +780,57 @@ export const api = {
     databaseName?: string | null
     name: string
     sql: string
+    overwrite?: boolean
+    strictScope?: boolean
   }): Promise<SavedQueryItem | null> => {
-    const id = input.id || (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-      const r = (Math.random() * 16) | 0
-      const v = c === 'x' ? r : (r & 0x3f) | 0x80
-      return v.toString(16)
-    }))
-
-    const payload: { id: string; connectionId?: string | null; databaseName?: string | null; name: string; sql: string } = {
-      id,
-      connectionId: input.connectionId,
-      databaseName: input.databaseName,
+    const payload = {
+      id: input.id ?? null,
+      connectionId: input.connectionId ?? null,
+      databaseName: input.databaseName ?? null,
       name: input.name,
       sql: input.sql,
+      overwrite: Boolean(input.overwrite),
+      strictScope: input.strictScope !== false,
     }
 
-    await apiRequest('/api/member/saved-queries', {
+    const res = await apiRequest<{ ok: boolean; query?: SavedQueryItem }>('/api/member/saved-queries', {
       method: 'POST',
       body: JSON.stringify(payload),
-    }).catch(() => null)
+    })
 
-    return payload
+    return res?.query ?? null
   },
 
   renameSavedQuery: async (input: {
     id: string
     name: string
+    connectionId?: string | null
+    databaseName?: string | null
   }): Promise<SavedQueryItem | null> => {
-    await apiRequest('/api/member/saved-queries/rename', {
+    const res = await apiRequest<{ ok: boolean; query?: SavedQueryItem }>('/api/member/saved-queries/rename', {
       method: 'POST',
-      body: JSON.stringify({ id: input.id, name: input.name }),
-    }).catch(() => null)
+      body: JSON.stringify({
+        id: input.id,
+        name: input.name,
+        connectionId: input.connectionId ?? null,
+        databaseName: input.databaseName ?? null,
+      }),
+    })
 
-    return { id: input.id, name: input.name, sql: '' }
+    return res?.query ?? null
   },
 
-  deleteSavedQuery: async (id: string): Promise<unknown> => {
-    await apiRequest(`/api/member/saved-queries/${id}`, {
+  deleteSavedQuery: async (
+    id: string,
+    scope?: { connectionId?: string | null; database?: string | null },
+  ): Promise<unknown> => {
+    const params = new URLSearchParams()
+    if (scope?.connectionId) params.set('connectionId', scope.connectionId)
+    if (scope?.database) params.set('database', scope.database)
+    const suffix = params.toString() ? `?${params.toString()}` : ''
+    await apiRequest(`/api/member/saved-queries/${encodeURIComponent(id)}${suffix}`, {
       method: 'DELETE',
-    }).catch(() => null)
+    })
     return { ok: true }
   },
 }

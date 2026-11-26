@@ -475,7 +475,13 @@ export function useSessionManager({
           nextActiveTabId = freshTab.id
         }
       } else {
-        const existingIds = new Set(syncedTabs.map((tab) => tab.id))
+        const detachedTabs = syncedTabs.map((tab) => ({
+          ...tab,
+          savedQueryId: null,
+          savedQueryName: null,
+          savedQueryDatabase: null,
+        }))
+        const existingIds = new Set(detachedTabs.map((tab) => tab.id))
         const mergedTargetTabs = restoredTargetTabs.map((tab) => {
           if (!existingIds.has(tab.id)) {
             existingIds.add(tab.id)
@@ -486,8 +492,8 @@ export function useSessionManager({
           existingIds.add(nextId)
           return { ...tab, id: nextId }
         })
-        nextTabs = [...syncedTabs, ...mergedTargetTabs]
-        nextActiveTabId = syncedTabs.some((tab) => tab.id === current.activeTabId)
+        nextTabs = [...detachedTabs, ...mergedTargetTabs]
+        nextActiveTabId = detachedTabs.some((tab) => tab.id === current.activeTabId)
           ? current.activeTabId
           : nextTabs[0].id
 

@@ -60,6 +60,7 @@ export interface SessionTab {
   sql: string
   savedQueryId?: string | null
   savedQueryName?: string | null
+  savedQueryDatabase?: string | null
   state: ResultsPanelState
   activeSet: number
   relations: any[]
@@ -111,6 +112,7 @@ export function createTab(id: string, title: string, sql: string, editSource: Ed
     sql,
     savedQueryId: savedQuery?.id ?? null,
     savedQueryName: savedQuery?.name ?? null,
+    savedQueryDatabase: (savedQuery?.databaseName ?? savedQuery?.database) ?? null,
     state: IDLE_QUERY,
     activeSet: 0,
     relations: [],

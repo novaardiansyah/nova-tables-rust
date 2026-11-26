@@ -367,6 +367,7 @@ export default function AppDialogs({
         existingNames={saveQueryDialog?.existingNames ?? []}
         error={saveQueryDialog?.error ?? null}
         busy={queryBusy}
+        blocked={Boolean(savedQueries.overwriteQueryTarget)}
         onCancel={() => setSaveQueryDialog(null)}
         onSave={handleSaveQuerySubmit}
       />
@@ -506,7 +507,7 @@ export default function AppDialogs({
         title="Rename saved query"
         description={
           queryRenameTarget
-            ? `Rename “${queryRenameTarget.name}” in ${session?.name ?? ''} / ${queryRenameTarget.database}.`
+            ? `Rename “${queryRenameTarget.name}” in ${session?.name ?? ''} / ${queryRenameTarget.databaseName || queryRenameTarget.database || session?.activeDatabase || ''}.`
             : ''
         }
         label="Query name"
@@ -524,7 +525,7 @@ export default function AppDialogs({
         title="Delete saved query"
         message={
           queryDeleteTarget
-            ? `“${queryDeleteTarget.name}” will be removed from ${session?.name ?? ''} / ${queryDeleteTarget.database}. Open tabs keep their SQL.`
+            ? `“${queryDeleteTarget.name}” will be removed from ${session?.name ?? ''} / ${queryDeleteTarget.databaseName || queryDeleteTarget.database || session?.activeDatabase || ''}. Open tabs keep their SQL.`
             : ''
         }
         confirmLabel={queryBusy ? 'Deleting…' : 'Delete'}
@@ -532,6 +533,21 @@ export default function AppDialogs({
         busy={queryBusy}
         onCancel={() => setQueryDeleteTarget(null)}
         onConfirm={handleDeleteSavedQuery}
+      />
+
+      <ConfirmDialog
+        open={Boolean(savedQueries.overwriteQueryTarget)}
+        title="Overwrite saved query"
+        message={
+          savedQueries.overwriteQueryTarget
+            ? `A saved query named “${savedQueries.overwriteQueryTarget.name}” already exists in ${session?.name ?? ''} / ${savedQueries.overwriteQueryTarget.databaseName}. Do you want to overwrite it?`
+            : ''
+        }
+        confirmLabel={queryBusy ? 'Overwriting…' : 'Overwrite'}
+        danger
+        busy={queryBusy}
+        onCancel={() => savedQueries.setOverwriteQueryTarget(null)}
+        onConfirm={savedQueries.handleConfirmOverwriteQuery}
       />
 
       <DatabaseSwitchDialog

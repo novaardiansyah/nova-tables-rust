@@ -9,6 +9,7 @@ export interface SaveQueryDialogProps {
   existingNames?: string[]
   error?: string | null
   busy?: boolean
+  blocked?: boolean
   onCancel?: () => void
   onClose?: () => void
   onSave: (name: string) => void
@@ -22,6 +23,7 @@ export default function SaveQueryDialog({
   existingNames = [],
   error = null,
   busy = false,
+  blocked = false,
   onCancel,
   onClose,
   onSave,
@@ -34,13 +36,13 @@ export default function SaveQueryDialog({
   }, [open, initialName])
 
   useEffect(() => {
-    if (!open) return undefined
+    if (!open || blocked) return undefined
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !busy) handleCancel()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, busy, handleCancel])
+  }, [open, blocked, busy, handleCancel])
 
   if (!open) return null
 
@@ -106,7 +108,7 @@ export default function SaveQueryDialog({
               <p className="mt-2 flex items-start gap-1.5 text-[length:var(--app-text-11)] leading-[calc(var(--app-text-11)+5px)] text-warning">
                 <Icon name="alert-triangle" size={11} className="mt-px shrink-0" />
                 <span>
-                  A saved query named “{conflict}” already exists here. Saving replaces its SQL.
+                  A saved query named “{conflict}” already exists here. You will be asked to confirm before overwriting it.
                 </span>
               </p>
             ) : null}
@@ -126,7 +128,7 @@ export default function SaveQueryDialog({
             Cancel
           </button>
           <button type="submit" className="btn-primary" disabled={!trimmed || busy}>
-            {busy ? 'Saving…' : conflict ? 'Replace' : 'Save'}
+            {busy ? 'Saving…' : 'Save'}
           </button>
         </div>
       </form>

@@ -307,6 +307,8 @@ export default function App() {
     showBanner,
     openTab: tabManager.openTab,
     updateTab,
+    patchSession,
+    seedEditor,
     sqlRef,
   })
 
@@ -329,6 +331,7 @@ export default function App() {
     if (screen !== 'connections') return
     savedQueries.setSavedQueriesOpen(false)
     savedQueries.setSaveQueryDialog(null)
+    savedQueries.setOverwriteQueryTarget(null)
     savedQueries.setQueryRenameTarget(null)
     savedQueries.setQueryDeleteTarget(null)
     queryHistory.handleCloseHistory()
@@ -359,6 +362,7 @@ export default function App() {
     databaseUsers.databaseUsersOpen ||
     Boolean(queryExecution.runGuard) ||
     Boolean(savedQueries.saveQueryDialog) ||
+    Boolean(savedQueries.overwriteQueryTarget) ||
     Boolean(savedQueries.queryRenameTarget) ||
     Boolean(savedQueries.queryDeleteTarget) ||
     savedQueries.savedQueriesOpen ||

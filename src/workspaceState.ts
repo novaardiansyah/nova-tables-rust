@@ -15,6 +15,7 @@ export interface PersistedTab {
   sql: string
   savedQueryId: string | null
   savedQueryName: string | null
+  savedQueryDatabase: string | null
 }
 
 export interface PersistedSessionTabs {
@@ -63,6 +64,7 @@ function normalizeTab(input: unknown): PersistedTab | null {
     sql: typeof source.sql === 'string' ? source.sql : '',
     savedQueryId: typeof source.savedQueryId === 'string' ? source.savedQueryId : null,
     savedQueryName: typeof source.savedQueryName === 'string' ? source.savedQueryName : null,
+    savedQueryDatabase: typeof source.savedQueryDatabase === 'string' ? source.savedQueryDatabase : null,
   }
 }
 
@@ -148,6 +150,7 @@ export function workspaceTabsFromSession(
       sql: tab.id === session.activeTabId && liveSql !== null ? liveSql : tab.sql,
       savedQueryId: tab.savedQueryId ?? null,
       savedQueryName: tab.savedQueryName ?? null,
+      savedQueryDatabase: tab.savedQueryDatabase ?? session.activeDatabase ?? null,
     }))
 
   if (tabs.length === 0) return null
@@ -164,5 +167,6 @@ export function tabsFromPersisted(input: PersistedSessionTabs): SessionTab[] {
     ...createTab(tab.id, tab.title, tab.sql),
     savedQueryId: tab.savedQueryId,
     savedQueryName: tab.savedQueryName,
+    savedQueryDatabase: tab.savedQueryDatabase,
   }))
 }
