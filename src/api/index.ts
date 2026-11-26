@@ -1,6 +1,6 @@
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { AuthSession, AuthUser, ConnectionModel, FolderModel, QueryHistoryItem, SavedQueryItem, SystemInfo } from './types'
-import { apiRequest, getAuthToken, getRefreshToken, getStoredSession, setAuthToken, setRefreshToken, setStoredSession } from './client'
+import { apiRequest, getApiBaseUrl, getAuthToken, getRefreshToken, getStoredSession, setAuthToken, setRefreshToken, setStoredSession } from './client'
 import { exportAppConfig, exportConnections, importAppConfig, importConnections, selectImportFile } from './transfer'
 import { isCiphertext, encryptConnectionPassword, decryptConnectionPassword } from './crypto'
 import { callCommand, isTauri } from './ipc'
@@ -81,6 +81,29 @@ const databaseOps = createDatabaseOps({
 
 export const api = {
   ...databaseOps,
+  checkApiHealth: async (): Promise<{ ok: boolean; status?: number }> => {
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), 6000)
+    try {
+      const baseUrl = getApiBaseUrl()
+      const response = await fetch(`${baseUrl}/api/health`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+        signal: controller.signal,
+      })
+      if (!response.ok) {
+        return { ok: false, status: response.status }
+      }
+      return { ok: true, status: response.status }
+    } catch {
+      return { ok: false }
+    } finally {
+      window.clearTimeout(timeoutId)
+    }
+  },
   registerUser: async (email: string, password: string, name?: string): Promise<AuthUser & { retryAfter?: number }> => {
     const trimmedEmail = email.trim().toLowerCase()
     if (!trimmedEmail) {
@@ -361,10 +384,32 @@ export const api = {
         await openUrl(url)
         return
       } catch {
+        if (url.startsWith('mailto:')) {
+          const [addressPart, queryPart = ''] = url.replace(/^mailto:/i, '').split('?')
+          const params = new URLSearchParams(queryPart)
+          const gmailParams = new URLSearchParams({
+            view: 'cm',
+            to: addressPart,
+          })
+          const subject = params.get('subject')
+          const body = params.get('body')
+          if (subject) gmailParams.set('su', subject)
+          if (body) gmailParams.set('body', body)
+          const gmailUrl = `https://mail.google.com/mail/?${gmailParams.toString()}`
+          try {
+            await openUrl(gmailUrl)
+          } catch {
+          }
+        }
+        return
       }
     }
     if (typeof window !== 'undefined') {
-      window.open(url, '_blank', 'noopener,noreferrer')
+      if (url.startsWith('mailto:')) {
+        window.location.href = url
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer')
+      }
     }
   },
 

@@ -25,6 +25,7 @@ import ConnectionsScreen from '@/components/connections/ConnectionsScreen'
 import ConfirmDialog from '@/components/common/ConfirmDialog'
 import WorkspaceView from '@/components/WorkspaceView'
 import AppDialogs from '@/components/dialogs/AppDialogs'
+import MaintenanceDialog from '@/components/dialogs/MaintenanceDialog'
 import AuthScreen from '@/components/auth/AuthScreen'
 import { isDesignDirty } from '@/designSql'
 
@@ -43,6 +44,36 @@ export default function App() {
   const [configTransfer, setConfigTransfer] = useState<ConfigTransferMode | null>(null)
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
+  const [apiUnavailable, setApiUnavailable] = useState(false)
+  const [apiChecking, setApiChecking] = useState(false)
+  const [apiCheckFailedAt, setApiCheckFailedAt] = useState<string | null>(null)
+
+  const runApiHealthCheck = useCallback(async () => {
+    setApiChecking(true)
+    try {
+      const result = await api.checkApiHealth()
+      if (result.ok) {
+        setApiUnavailable(false)
+        setApiCheckFailedAt(null)
+      } else {
+        setApiUnavailable(true)
+        setApiCheckFailedAt(
+          new Date().toLocaleTimeString([], {
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          }),
+        )
+      }
+    } finally {
+      setApiChecking(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void runApiHealthCheck()
+  }, [runApiHealthCheck])
 
   const showBanner = useCallback((type: BannerType, message: string) => {
     if (
@@ -574,6 +605,15 @@ export default function App() {
     },
   ]
 
+  const maintenanceOverlay = (
+    <MaintenanceDialog
+      open={apiUnavailable}
+      checking={apiChecking}
+      lastFailedAt={apiCheckFailedAt}
+      onRetry={runApiHealthCheck}
+    />
+  )
+
   if (authChecking) {
     const hasToken = typeof window !== 'undefined' && Boolean(localStorage.getItem('nova_tables_sanctum_token'))
     if (hasToken) {
@@ -598,10 +638,11 @@ export default function App() {
             onMoveConnection={() => {}}
             onReorderTree={() => {}}
           />
+          {maintenanceOverlay}
         </div>
       )
     }
-    return null
+    return maintenanceOverlay
   }
 
   if (!currentUser) {
@@ -616,6 +657,7 @@ export default function App() {
             void sessionManager.handleReloadConnections()
           }}
         />
+        {maintenanceOverlay}
       </div>
     )
   }
@@ -704,6 +746,8 @@ export default function App() {
         onCancel={() => setLogoutConfirmOpen(false)}
         onConfirm={handleLogout}
       />
+
+      {maintenanceOverlay}
     </div>
   )
 }
