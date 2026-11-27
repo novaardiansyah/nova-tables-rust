@@ -46,6 +46,22 @@ export interface GridBounds {
 export interface GridSelection {
   anchor: { row: number; col: number }
   focus: { row: number; col: number }
+  rows?: number[]
+}
+
+function getSelectedRowList(selection: GridSelection | null, lastCol: number): number[] {
+  if (!selection) return []
+  if (selection.rows && selection.rows.length > 0) return selection.rows
+  const colStart = Math.min(selection.anchor.col, selection.focus.col)
+  const colEnd = Math.max(selection.anchor.col, selection.focus.col)
+  if (colStart !== 0 || colEnd !== lastCol) return []
+  const rowStart = Math.min(selection.anchor.row, selection.focus.row)
+  const rowEnd = Math.max(selection.anchor.row, selection.focus.row)
+  const list: number[] = []
+  for (let r = rowStart; r <= rowEnd; r += 1) {
+    list.push(r)
+  }
+  return list
 }
 
 export interface FrameDragData {
@@ -332,6 +348,20 @@ export default function ResultGrid({
 
   const bounds = useMemo<GridBounds | null>(() => {
     if (!selection) return null
+    if (selection.rows && selection.rows.length > 0) {
+      let rowStart = selection.rows[0]
+      let rowEnd = selection.rows[0]
+      for (let i = 1; i < selection.rows.length; i += 1) {
+        if (selection.rows[i] < rowStart) rowStart = selection.rows[i]
+        if (selection.rows[i] > rowEnd) rowEnd = selection.rows[i]
+      }
+      return {
+        rowStart,
+        rowEnd,
+        colStart: Math.min(selection.anchor.col, selection.focus.col),
+        colEnd: Math.max(selection.anchor.col, selection.focus.col),
+      }
+    }
     return {
       rowStart: Math.min(selection.anchor.row, selection.focus.row),
       rowEnd: Math.max(selection.anchor.row, selection.focus.row),
@@ -340,17 +370,35 @@ export default function ResultGrid({
     }
   }, [selection])
 
+  const selectedRowSet = useMemo(
+    () => (selection?.rows && selection.rows.length > 0 ? new Set(selection.rows) : null),
+    [selection?.rows],
+  )
+
+  const hasNonContiguousRows = Boolean(
+    selection?.rows &&
+      bounds &&
+      (selection.rows.length !== bounds.rowEnd - bounds.rowStart + 1 ||
+        selection.rows.some((row, idx) => row !== bounds.rowStart + idx)),
+  )
+
   const inSelection = (origIndex: number, colIndex: number) =>
     Boolean(
       bounds &&
-        origIndex >= bounds.rowStart &&
-        origIndex <= bounds.rowEnd &&
+        (selectedRowSet
+          ? selectedRowSet.has(origIndex)
+          : origIndex >= bounds.rowStart && origIndex <= bounds.rowEnd) &&
         colIndex >= bounds.colStart &&
         colIndex <= bounds.colEnd,
     )
 
   const rowSelected = (origIndex: number) =>
-    Boolean(bounds && origIndex >= bounds.rowStart && origIndex <= bounds.rowEnd)
+    Boolean(
+      bounds &&
+        (selectedRowSet
+          ? selectedRowSet.has(origIndex)
+          : origIndex >= bounds.rowStart && origIndex <= bounds.rowEnd),
+    )
 
   const handleCellDoubleClick = (event: React.MouseEvent, origIndex: number, columnIndex: number) => {
     if (draggedRef.current || event.shiftKey) return
@@ -414,8 +462,59 @@ export default function ResultGrid({
   const handleRowHeaderMouseDown = (event: React.MouseEvent, origIndex: number) => {
     if (event.button !== 0 || !onSelectionChange) return
     const last = Math.max(columns.length - 1, 0)
+
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault()
+      event.stopPropagation()
+      draggingRef.current = false
+      onActivate?.()
+
+      onSelectionChange((current) => {
+        const existingRows = getSelectedRowList(current, last)
+        if (event.shiftKey && current) {
+          const anchorRow = current.anchor.row
+          const start = Math.min(anchorRow, origIndex)
+          const end = Math.max(anchorRow, origIndex)
+          const merged = new Set(existingRows)
+          for (let r = start; r <= end; r += 1) {
+            merged.add(r)
+          }
+          const nextRows = Array.from(merged).sort((a, b) => a - b)
+          return {
+            anchor: { row: anchorRow, col: 0 },
+            focus: { row: origIndex, col: last },
+            rows: nextRows,
+          }
+        }
+
+        const exists = existingRows.includes(origIndex)
+        const nextRows = exists
+          ? existingRows.filter((r) => r !== origIndex)
+          : [...existingRows, origIndex].sort((a, b) => a - b)
+
+        if (nextRows.length === 0) return null
+
+        const nextAnchorRow = exists
+          ? current && current.anchor.row !== origIndex
+            ? current.anchor.row
+            : nextRows[nextRows.length - 1]
+          : origIndex
+
+        return {
+          anchor: { row: nextAnchorRow, col: 0 },
+          focus: { row: nextRows[nextRows.length - 1], col: last },
+          rows: nextRows,
+        }
+      })
+      return
+    }
+
     const cell = { row: origIndex, col: last }
-    beginDrag(event, event.shiftKey && selection ? selection.anchor : { row: origIndex, col: 0 }, cell)
+    beginDrag(
+      event,
+      event.shiftKey && selection ? { row: selection.anchor.row, col: 0 } : { row: origIndex, col: 0 },
+      cell,
+    )
   }
 
   const handleRowHeaderMouseEnter = (origIndex: number) => {
@@ -497,6 +596,10 @@ export default function ResultGrid({
       if (event.key === 'Delete') {
         if (!bounds || active || !onDeleteRows) return
         event.preventDefault()
+        if (selection?.rows && selection.rows.length > 0) {
+          onDeleteRows(selection.rows)
+          return
+        }
         const rowIndexes: number[] = []
         for (let r = bounds.rowStart; r <= bounds.rowEnd; r += 1) {
           rowIndexes.push(r)
@@ -533,7 +636,7 @@ export default function ResultGrid({
     }
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [active, bounds, columns.length, onDeleteRows, onDuplicateRow, onNewRow, onSelectionChange, onStartEdit, rows.length])
+  }, [active, bounds, columns.length, onDeleteRows, onDuplicateRow, onNewRow, onSelectionChange, onStartEdit, rows.length, selection?.rows])
 
   const commitEdit = (value: unknown) => {
     if (!active || !onCellChange) return
@@ -542,6 +645,7 @@ export default function ResultGrid({
     if (unchanged) return
     const range = editRange(active, bounds)
     for (let row = range.rowStart; row <= range.rowEnd; row += 1) {
+      if (selectedRowSet && !selectedRowSet.has(row)) continue
       for (let col = range.colStart; col <= range.colEnd; col += 1) {
         const column = columns[col]
         if (!column || !columnEditable(col)) continue
@@ -554,7 +658,7 @@ export default function ResultGrid({
 
   useLayoutEffect(() => {
     const measure = () => {
-      const next = frameRect(bounds, tableRef.current)
+      const next = hasNonContiguousRows ? null : frameRect(bounds, tableRef.current)
       setFrame((current) => {
         if (!next) return current === null ? current : null
         if (
@@ -576,7 +680,7 @@ export default function ResultGrid({
     const observer = new ResizeObserver(measure)
     observer.observe(table)
     return () => observer.disconnect()
-  }, [bounds, rows, sort, visibleRows])
+  }, [bounds, hasNonContiguousRows, rows, sort, visibleRows])
 
   if (rows.length === 0 && columns.length === 0) {
     return (

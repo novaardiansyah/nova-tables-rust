@@ -259,6 +259,20 @@ export default function ResultsPanel({
 
   const selectionBounds = useMemo(() => {
     if (!selection || !activeResultSet) return null
+    if (selection.rows && selection.rows.length > 0) {
+      let rowStart = selection.rows[0]
+      let rowEnd = selection.rows[0]
+      for (let i = 1; i < selection.rows.length; i += 1) {
+        if (selection.rows[i] < rowStart) rowStart = selection.rows[i]
+        if (selection.rows[i] > rowEnd) rowEnd = selection.rows[i]
+      }
+      return {
+        rowStart,
+        rowEnd,
+        colStart: Math.min(selection.anchor.col, selection.focus.col),
+        colEnd: Math.max(selection.anchor.col, selection.focus.col),
+      }
+    }
     return {
       rowStart: Math.min(selection.anchor.row, selection.focus.row),
       rowEnd: Math.max(selection.anchor.row, selection.focus.row),
@@ -267,10 +281,24 @@ export default function ResultsPanel({
     }
   }, [activeResultSet, selection])
 
+  const selectedRowIndices = useMemo(() => {
+    if (!selectionBounds || !activeResultSet) return []
+    if (selection?.rows && selection.rows.length > 0) {
+      return selection.rows.filter((row) => row >= 0 && row < activeResultSet.rows.length)
+    }
+    const indices: number[] = []
+    for (let row = selectionBounds.rowStart; row <= selectionBounds.rowEnd; row += 1) {
+      if (row >= 0 && row < activeResultSet.rows.length) {
+        indices.push(row)
+      }
+    }
+    return indices
+  }, [activeResultSet, selection?.rows, selectionBounds])
+
   const selectionCells = useMemo(() => {
     if (!selectionBounds || !activeResultSet) return []
     const cells: unknown[][] = []
-    for (let row = selectionBounds.rowStart; row <= selectionBounds.rowEnd; row += 1) {
+    for (const row of selectedRowIndices) {
       const values = activeResultSet.rows[row]
       if (!values) continue
       const cellsInRow: unknown[] = []
@@ -283,12 +311,12 @@ export default function ResultsPanel({
       cells.push(cellsInRow)
     }
     return cells
-  }, [activeResultSet, edits, selectionBounds])
+  }, [activeResultSet, edits, selectedRowIndices, selectionBounds])
 
   const selectionRows = useMemo(() => {
     if (!selectionBounds || !activeResultSet) return []
     const rows: unknown[][] = []
-    for (let row = selectionBounds.rowStart; row <= selectionBounds.rowEnd; row += 1) {
+    for (const row of selectedRowIndices) {
       const values = activeResultSet.rows[row]
       if (!values) continue
       rows.push(
@@ -299,7 +327,7 @@ export default function ResultsPanel({
       )
     }
     return rows
-  }, [activeResultSet, edits, selectionBounds])
+  }, [activeResultSet, edits, selectedRowIndices, selectionBounds])
 
   const selectedColumns = useMemo(
     () =>
@@ -336,19 +364,20 @@ export default function ResultsPanel({
   )
 
   useEffect(() => {
-    if (!activeResultSet || !selectionBounds) {
+    if (!activeResultSet || !selectionBounds || selectedRowIndices.length === 0) {
       onActiveDataChange?.(null)
       return
     }
-    const label =
-      selectionBounds.rowStart === selectionBounds.rowEnd
-        ? `Row ${selectionBounds.rowStart + 1}`
-        : `Rows ${selectionBounds.rowStart + 1}–${selectionBounds.rowEnd + 1}`
+    const isContiguous =
+      selectedRowIndices.length === selectionBounds.rowEnd - selectionBounds.rowStart + 1 &&
+      selectedRowIndices.every((row, idx) => row === selectionBounds.rowStart + idx)
 
-    const selectedRowIndexes: number[] = []
-    for (let r = selectionBounds.rowStart; r <= selectionBounds.rowEnd; r += 1) {
-      selectedRowIndexes.push(r)
-    }
+    const label =
+      selectedRowIndices.length === 1
+        ? `Row ${selectedRowIndices[0] + 1}`
+        : isContiguous
+          ? `Rows ${selectionBounds.rowStart + 1}–${selectionBounds.rowEnd + 1}`
+          : `${selectedRowIndices.length} rows`
 
     const columnTypes = (activeResultSet.columns ?? []).map((col) => (col.type ? String(col.type) : null))
 
@@ -356,10 +385,10 @@ export default function ResultsPanel({
       columnNames,
       rows: selectionRows,
       label,
-      rowIndexes: selectedRowIndexes,
+      rowIndexes: selectedRowIndices,
       columnTypes,
     })
-  }, [activeResultSet, columnNames, onActiveDataChange, selectionBounds, selectionRows])
+  }, [activeResultSet, columnNames, onActiveDataChange, selectedRowIndices, selectionBounds, selectionRows])
 
   const copy = useCallback(
     (payload: string, message?: string) => {
@@ -447,16 +476,12 @@ export default function ResultsPanel({
       },
     ]
 
-    if (deletable && onDeleteRows && selectionBounds) {
+    if (deletable && onDeleteRows && selectedRowIndices.length > 0) {
       items.push({
         id: 'delete-rows',
         label: 'Delete Row',
         onSelect: () => {
-          const rowIndexes: number[] = []
-          for (let r = selectionBounds.rowStart; r <= selectionBounds.rowEnd; r += 1) {
-            rowIndexes.push(r)
-          }
-          onDeleteRows(rowIndexes)
+          onDeleteRows(selectedRowIndices)
         },
       })
     }
@@ -532,6 +557,7 @@ export default function ResultsPanel({
     onDuplicateRow,
     onExport,
     onNewRow,
+    selectedRowIndices,
     selectionBounds,
     selectionColumnNames,
     selectionLabel,
