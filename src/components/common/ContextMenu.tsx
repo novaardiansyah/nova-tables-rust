@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 const EDGE = 8
 
@@ -21,9 +22,16 @@ export interface ContextMenuProps {
 
 export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
-  const [position, setPosition] = useState({ left: x, top: y })
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  const openedAtRef = useRef(performance.now())
+  const [position, setPosition] = useState(() => ({
+    left: Math.max(EDGE, Math.min(x, document.documentElement.clientWidth - 188 - EDGE)),
+    top: Math.max(EDGE, Math.min(y, document.documentElement.clientHeight - 40 - EDGE)),
+  }))
 
   useLayoutEffect(() => {
+    openedAtRef.current = performance.now()
     const menu = menuRef.current
     if (!menu) return
     const { width, height } = menu.getBoundingClientRect()
@@ -31,43 +39,71 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
       left: Math.max(EDGE, Math.min(x, document.documentElement.clientWidth - width - EDGE)),
       top: Math.max(EDGE, Math.min(y, document.documentElement.clientHeight - height - EDGE)),
     })
-  }, [x, y])
+  }, [x, y, items.length])
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) onClose()
+      if (menuRef.current?.contains(event.target as Node)) return
+      if (event.button === 2) return
+      onCloseRef.current()
+    }
+    const handleWindowContextMenu = (event: MouseEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return
+      if (performance.now() - openedAtRef.current < 32) return
+      onCloseRef.current()
     }
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') onCloseRef.current()
+    }
+    const handleResize = () => {
+      onCloseRef.current()
+    }
+    const handleBlur = (event: FocusEvent) => {
+      if (event.target !== window) return
+      if (document.hasFocus() && performance.now() - openedAtRef.current < 150) return
+      onCloseRef.current()
+    }
+    const handleScroll = (event: Event) => {
+      const target = event.target
+      if (target instanceof Node && menuRef.current?.contains(target)) return
+      if (performance.now() - openedAtRef.current < 120) return
+      onCloseRef.current()
     }
 
     window.addEventListener('pointerdown', handlePointerDown)
+    window.addEventListener('contextmenu', handleWindowContextMenu, true)
     window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('resize', onClose)
-    window.addEventListener('blur', onClose)
-    window.addEventListener('scroll', onClose, true)
+    window.addEventListener('resize', handleResize)
+    window.addEventListener('blur', handleBlur)
+    window.addEventListener('scroll', handleScroll, true)
 
     return () => {
       window.removeEventListener('pointerdown', handlePointerDown)
+      window.removeEventListener('contextmenu', handleWindowContextMenu, true)
       window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('resize', onClose)
-      window.removeEventListener('blur', onClose)
-      window.removeEventListener('scroll', onClose, true)
+      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('blur', handleBlur)
+      window.removeEventListener('scroll', handleScroll, true)
     }
-  }, [onClose])
+  }, [])
 
-  return (
+  return createPortal(
     <div
       ref={menuRef}
       role="menu"
       style={{ left: position.left, top: position.top }}
-      onContextMenu={(event) => event.preventDefault()}
+      onClick={(event) => event.stopPropagation()}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+      }}
       className="fixed z-50 min-w-[188px] rounded-lg border border-line-strong bg-elevated py-1 shadow-xl shadow-black/50"
     >
       {items.map((item) => (
-        <MenuItem key={item.id} item={item} onClose={onClose} />
+        <MenuItem key={item.id} item={item} onClose={() => onCloseRef.current()} />
       ))}
-    </div>
+    </div>,
+    document.body,
   )
 }
 

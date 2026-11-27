@@ -143,7 +143,7 @@ export default function JsonPanel({
             onCopyText={onCopyText}
           />
         ) : jsonText ? (
-          <JsonView text={jsonText} />
+          <JsonView text={jsonText} searchable />
         ) : (
           <p className="px-3 py-2 text-[length:var(--app-text-11)] text-text-faint">
             Select rows or cells to view JSON.

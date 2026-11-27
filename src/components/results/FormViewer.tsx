@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Icon from '@/components/common/Icon'
-import ContextMenu from '@/components/common/ContextMenu'
+import ContextMenu, { ContextMenuItem } from '@/components/common/ContextMenu'
 import { formatDateTime, isDateTimeString } from '@/resultFormats'
 import { specialValuesForDriver, SpecialValueOption } from '@/components/results/ResultGridCell'
 import { tokenize } from '@/components/results/JsonView'
@@ -98,29 +98,31 @@ function isNumericType(type: string): boolean {
   )
 }
 
-function FormField({
-  id,
-  label,
-  type,
-  value,
-  onChange,
-  onSpecial,
-  specialValues,
-  timezone,
-  systemTimezone,
-  onLabelContextMenu,
-}: {
+interface FormFieldProps {
+  rowIndex: number
   id: string
   label: string
   type: string
   value: unknown
-  onChange: (next: unknown) => void
-  onSpecial?: (special: unknown) => void
+  onFieldChange?: (rowIndex: number, columnName: string, nextValue: unknown, prevValue: unknown) => void
   specialValues: SpecialValueOption[]
   timezone?: string
   systemTimezone?: string
-  onLabelContextMenu?: (event: React.MouseEvent, label: string) => void
-}) {
+  onLabelContextMenu: (event: React.MouseEvent, label: string) => void
+}
+
+const FormField = React.memo(function FormField({
+  rowIndex,
+  id,
+  label,
+  type,
+  value,
+  onFieldChange,
+  specialValues,
+  timezone,
+  systemTimezone,
+  onLabelContextMenu,
+}: FormFieldProps) {
   const [draft, setDraft] = useState(() => toText(value, timezone, systemTimezone))
   const [menuOpen, setMenuOpen] = useState(false)
   const focused = useRef(false)
@@ -130,6 +132,10 @@ function FormField({
   const selectionRef = useRef<{ start: number; end: number } | null>(null)
   const userResizedRef = useRef(false)
   const prevHeightRef = useRef<number | null>(null)
+
+  const setFieldElement = useCallback((el: HTMLInputElement | HTMLTextAreaElement | null) => {
+    fieldRef.current = el
+  }, [])
 
   const useTextarea = isLongField(label, type, draft, value)
   const highlightJson = useTextarea && prettyJsonText(draft) !== null
@@ -141,18 +147,25 @@ function FormField({
   }, [value, timezone, systemTimezone])
 
   const adjustTextareaHeight = useCallback(() => {
-    const el = fieldRef.current as HTMLTextAreaElement | null
-    if (!el || el.tagName !== 'TEXTAREA') return
+    const el = fieldRef.current
+    if (!(el instanceof HTMLTextAreaElement)) return
     if (userResizedRef.current) return
+    const scrollParent = el.closest('[data-form-viewer-scroll]') as HTMLElement | null
+    const parentScrollTop = scrollParent ? scrollParent.scrollTop : null
     const prevScrollTop = el.scrollTop
     el.style.height = 'auto'
     const borderOffset = el.offsetHeight - el.clientHeight
     const nextHeight = Math.max(el.scrollHeight + borderOffset, 32)
     el.style.height = `${nextHeight}px`
-    el.scrollTop = prevScrollTop
+    if (el.scrollTop !== prevScrollTop) {
+      el.scrollTop = prevScrollTop
+    }
+    if (scrollParent && parentScrollTop !== null && scrollParent.scrollTop !== parentScrollTop) {
+      scrollParent.scrollTop = parentScrollTop
+    }
   }, [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (useTextarea) {
       adjustTextareaHeight()
     }
@@ -160,12 +173,12 @@ function FormField({
 
   useEffect(() => {
     if (focused.current && fieldRef.current && document.activeElement !== fieldRef.current) {
-      fieldRef.current.focus()
+      fieldRef.current.focus({ preventScroll: true })
       if (selectionRef.current) {
         fieldRef.current.setSelectionRange(selectionRef.current.start, selectionRef.current.end)
       }
     }
-  })
+  }, [useTextarea])
 
   useEffect(() => {
     if (!menuOpen) return undefined
@@ -208,7 +221,12 @@ function FormField({
         end: event.target.selectionEnd ?? nextVal.length,
       }
       setDraft(nextVal)
-      onChange(parseValue(nextVal, value, specialValues, timezone, systemTimezone))
+      onFieldChange?.(
+        rowIndex,
+        label,
+        parseValue(nextVal, value, specialValues, timezone, systemTimezone),
+        value,
+      )
     },
     style: { fontSize: 'var(--json-font-size)' },
     spellCheck: false,
@@ -216,22 +234,25 @@ function FormField({
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between gap-2">
+      <div
+        className="flex items-center justify-between gap-2 cursor-context-menu"
+        onContextMenu={(event) => onLabelContextMenu(event, label)}
+      >
         <label
           htmlFor={id}
-          className="select-text min-w-0 text-[length:var(--app-text-11)] font-medium text-text-soft truncate cursor-context-menu"
+          className="select-text flex-1 min-w-0 text-[length:var(--app-text-11)] font-medium text-text-soft truncate cursor-context-menu"
           title={label}
-          onContextMenu={(event) => onLabelContextMenu?.(event, label)}
         >
           {label}
         </label>
         <div className="relative flex shrink-0 items-center gap-1.5" ref={menuRef}>
           <span className="text-[length:var(--app-text-10)] font-mono text-text-faint">{type}</span>
-          {onSpecial ? (
+          {onFieldChange ? (
             <>
               <button
                 type="button"
                 onClick={() => setMenuOpen((open) => !open)}
+                onContextMenu={(event) => event.stopPropagation()}
                 className={`flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-tint/[0.08] hover:text-text ${
                   menuOpen ? 'bg-tint/[0.08] text-text-strong' : ''
                 }`}
@@ -240,14 +261,17 @@ function FormField({
                 <Icon name="more-horizontal" size={12} />
               </button>
               {menuOpen ? (
-                <div className="absolute right-0 top-full z-50 mt-1 flex w-44 flex-col rounded-md border border-line-strong bg-elevated p-1 shadow-2xl shadow-black/60">
+                <div
+                  onContextMenu={(event) => event.stopPropagation()}
+                  className="absolute right-0 top-full z-50 mt-1 flex w-44 flex-col rounded-md border border-line-strong bg-elevated p-1 shadow-2xl shadow-black/60"
+                >
                   {specialValues.map((option) => (
                     <button
                       key={option.label}
                       type="button"
                       onClick={() => {
                         setDraft(toText(option.value, timezone, systemTimezone))
-                        onSpecial(option.value)
+                        onFieldChange(rowIndex, label, option.value, value)
                         setMenuOpen(false)
                       }}
                       className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-[length:var(--app-text-11)] transition-colors hover:bg-tint/[0.05] ${
@@ -278,17 +302,7 @@ function FormField({
           ) : null}
           <textarea
             {...commonProps}
-            ref={(el) => {
-              fieldRef.current = el
-              if (el && !userResizedRef.current) {
-                const prevScrollTop = el.scrollTop
-                el.style.height = 'auto'
-                const borderOffset = el.offsetHeight - el.clientHeight
-                const nextHeight = Math.max(el.scrollHeight + borderOffset, 32)
-                el.style.height = `${nextHeight}px`
-                el.scrollTop = prevScrollTop
-              }
-            }}
+            ref={setFieldElement}
             onMouseDown={() => {
               const el = fieldRef.current
               if (el) prevHeightRef.current = el.offsetHeight
@@ -319,15 +333,13 @@ function FormField({
           {...commonProps}
           type="text"
           inputMode={isNumeric ? 'decimal' : 'text'}
-          ref={(el) => {
-            fieldRef.current = el
-          }}
+          ref={setFieldElement}
           className="w-full rounded border border-line-strong bg-base px-2 py-1 font-mono text-[length:var(--app-text-12)] text-text outline-none transition-colors select-text focus:border-accent/70"
         />
       )}
     </div>
   )
-}
+})
 
 export default function FormViewer({
   columns,
@@ -353,6 +365,24 @@ export default function FormViewer({
     })
   }, [])
 
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu(null)
+  }, [])
+
+  const specialValues = useMemo(() => specialValuesForDriver(driverType), [driverType])
+
+  const contextMenuItems = useMemo<ContextMenuItem[]>(() => {
+    if (!contextMenu) return []
+    return [
+      {
+        id: 'copy-object-name',
+        label: 'Copy Object Name',
+        onSelect: () =>
+          onCopyText?.(contextMenu.fieldName, `Copied column name ${contextMenu.fieldName}.`),
+      },
+    ]
+  }, [contextMenu, onCopyText])
+
   if (!columns.length) {
     return (
       <div className="flex flex-1 items-center justify-center p-4 text-[length:var(--app-text-11)] text-text-faint">
@@ -361,7 +391,6 @@ export default function FormViewer({
     )
   }
 
-  const specialValues = specialValuesForDriver(driverType)
   const displayedRows = rows.length ? rows : [[]]
   const normalizedFilter = filter.trim().toLowerCase()
 
@@ -396,7 +425,7 @@ export default function FormViewer({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-2">
+      <div data-form-viewer-scroll className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-2">
         {visibleColumnEntries.length === 0 ? (
           <p className="py-4 text-center text-[length:var(--app-text-11)] text-text-faint">
             No fields match &quot;{filter}&quot;
@@ -417,12 +446,12 @@ export default function FormViewer({
                   return (
                     <FormField
                       key={columnName}
+                      rowIndex={rowIndex}
                       id={`form-field-${rowIndex}-${columnName}`}
                       label={columnName}
                       type={columnTypes[colIdx] ?? (original === null ? 'null' : typeof original)}
                       value={original}
-                      onChange={(next) => onCellChange?.(rowIndex, columnName, next, original)}
-                      onSpecial={onCellChange ? (special) => onCellChange(rowIndex, columnName, special, original) : undefined}
+                      onFieldChange={onCellChange}
                       specialValues={specialValues}
                       timezone={timezone}
                       systemTimezone={systemTimezone}
@@ -440,15 +469,8 @@ export default function FormViewer({
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          items={[
-            {
-              id: 'copy-object-name',
-              label: 'Copy Object Name',
-              onSelect: () =>
-                onCopyText?.(contextMenu.fieldName, `Copied column name ${contextMenu.fieldName}.`),
-            },
-          ]}
-          onClose={() => setContextMenu(null)}
+          items={contextMenuItems}
+          onClose={handleCloseContextMenu}
         />
       ) : null}
     </div>
